@@ -36,10 +36,98 @@ class CartLine {
   double get lineTotal => unitPrice * quantity;
 }
 
+/// Cached pricing breakdown returned by `POST /api/orders/estimate`. Stored
+/// on the cart provider so navigating away and back to the cart screen does
+/// not immediately re-fetch.
+class CartEstimate {
+  final double subtotal;
+  final double deliveryFee;
+  final double total;
+  final double minOrder;
+  final bool minOrderMet;
+  final double? distanceKm;
+  final int? etaMinutes;
+  final double surgeFactor;
+  final String? surgeReason;
+  final String? zoneId;
+  final bool outOfZone;
+  final DateTime fetchedAt;
+
+  const CartEstimate({
+    required this.subtotal,
+    required this.deliveryFee,
+    required this.total,
+    required this.minOrder,
+    required this.minOrderMet,
+    this.distanceKm,
+    this.etaMinutes,
+    this.surgeFactor = 1.0,
+    this.surgeReason,
+    this.zoneId,
+    this.outOfZone = false,
+    required this.fetchedAt,
+  });
+
+  factory CartEstimate.fromJson(Map<String, dynamic> j) => CartEstimate(
+    subtotal: (j['subtotal'] as num?)?.toDouble() ?? 0,
+    deliveryFee: (j['deliveryFee'] as num?)?.toDouble() ?? 0,
+    total: (j['total'] as num?)?.toDouble() ?? 0,
+    minOrder: (j['minOrder'] as num?)?.toDouble() ?? 0,
+    minOrderMet: j['minOrderMet'] as bool? ?? true,
+    distanceKm: (j['distanceKm'] as num?)?.toDouble(),
+    etaMinutes: (j['etaMinutes'] as num?)?.toInt(),
+    surgeFactor: (j['surgeFactor'] as num?)?.toDouble() ?? 1.0,
+    surgeReason: j['surgeReason'] as String?,
+    zoneId: j['zoneId'] as String?,
+    outOfZone: j['outOfZone'] as bool? ?? false,
+    fetchedAt: DateTime.now(),
+  );
+
+  CartEstimate copyWith({bool? outOfZone}) => CartEstimate(
+    subtotal: subtotal,
+    deliveryFee: deliveryFee,
+    total: total,
+    minOrder: minOrder,
+    minOrderMet: minOrderMet,
+    distanceKm: distanceKm,
+    etaMinutes: etaMinutes,
+    surgeFactor: surgeFactor,
+    surgeReason: surgeReason,
+    zoneId: zoneId,
+    outOfZone: outOfZone ?? this.outOfZone,
+    fetchedAt: fetchedAt,
+  );
+}
+
 class CartProvider extends ChangeNotifier {
   /// Lines keyed by `productId|sortedOptionIds`.
   final Map<String, CartLine> _lines = {};
   String? _currentShopId;
+  CartEstimate? _lastEstimate;
+  String? _lastEstimateKey;
+
+  CartEstimate? get lastEstimate => _lastEstimate;
+
+  /// Build a fingerprint that changes whenever the estimate inputs change so
+  /// the cart screen can decide to skip a refetch.
+  String estimateKey({
+    required String shopId,
+    required String? addressKey,
+    String? promoCode,
+  }) {
+    final items = _lines.values.map((l) => '${l.product.id}:${l.quantity}')
+        .toList()
+      ..sort();
+    return '$shopId|${addressKey ?? ''}|${items.join(',')}|${promoCode ?? ''}';
+  }
+
+  void setEstimate(CartEstimate? est, {String? key}) {
+    _lastEstimate = est;
+    _lastEstimateKey = key;
+    notifyListeners();
+  }
+
+  String? get lastEstimateKey => _lastEstimateKey;
 
   // ─── Read API ────────────────────────────────────────────────────────────────
 
@@ -194,6 +282,8 @@ class CartProvider extends ChangeNotifier {
   void clearForNewShop() {
     _lines.clear();
     _currentShopId = null;
+    _lastEstimate = null;
+    _lastEstimateKey = null;
     notifyListeners();
   }
 

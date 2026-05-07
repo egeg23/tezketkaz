@@ -10,6 +10,7 @@ import 'theme/app_theme.dart';
 import 'models/models.dart';
 import 'providers/auth_provider.dart';
 import 'providers/cart_provider.dart';
+import 'providers/courier_state_provider.dart';
 import 'providers/order_provider.dart';
 
 import 'screens/auth/splash_screen.dart';
@@ -64,6 +65,7 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
   final _auth = AuthProvider();
   final _cart = CartProvider();
   final _orders = OrderProvider();
+  final _courier = CourierStateProvider();
   late final GoRouter _router = _buildRouter(_auth);
 
   @override
@@ -73,6 +75,7 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
         ChangeNotifierProvider.value(value: _auth),
         ChangeNotifierProvider.value(value: _cart),
         ChangeNotifierProvider.value(value: _orders),
+        ChangeNotifierProvider.value(value: _courier),
       ],
       child: MaterialApp.router(
         title: 'TezKetKaz',

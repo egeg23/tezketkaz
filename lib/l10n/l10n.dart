@@ -363,6 +363,107 @@ class L10n extends ChangeNotifier {
       'en': 'Pick a location',
     },
 
+    // Phase 2 — courier shift / dispatch
+    'courier.go_online': {
+      'uz': 'Smenani boshlash',
+      'ru': 'Я на смене',
+      'en': 'Go online',
+    },
+    'courier.go_offline': {
+      'uz': 'Smenani tugatish',
+      'ru': 'Off duty',
+      'en': 'Go offline',
+    },
+    'courier.shift_duration': {
+      'uz': 'Smena vaqti',
+      'ru': 'Длительность смены',
+      'en': 'Shift duration',
+    },
+    'courier.shift_earnings': {
+      'uz': 'Smena daromadi',
+      'ru': 'Заработок за смену',
+      'en': 'Shift earnings',
+    },
+    'courier.pending_offer': {
+      'uz': 'Yangi taklif',
+      'ru': 'Новое предложение',
+      'en': 'New offer',
+    },
+    'courier.accept': {
+      'uz': 'Qabul qilish',
+      'ru': 'Принять',
+      'en': 'Accept',
+    },
+    'courier.decline': {
+      'uz': 'Rad etish',
+      'ru': 'Отклонить',
+      'en': 'Decline',
+    },
+    'courier.no_offers': {
+      'uz': 'Buyurtmalar kutilmoqda',
+      'ru': 'Ожидаем заказы',
+      'en': 'Waiting for orders',
+    },
+
+    // Phase 2 — cart pricing breakdown
+    'cart.subtotal': {
+      'uz': 'Mahsulotlar',
+      'ru': 'Товары',
+      'en': 'Subtotal',
+    },
+    'cart.delivery': {
+      'uz': 'Yetkazib berish',
+      'ru': 'Доставка',
+      'en': 'Delivery',
+    },
+    'cart.total': {
+      'uz': 'Jami',
+      'ru': 'Итого',
+      'en': 'Total',
+    },
+    'cart.eta': {
+      'uz': 'Yetkazib berish: ~{minutes} daqiqa',
+      'ru': 'Доставка через ~{minutes} мин',
+      'en': 'Delivery in ~{minutes} min',
+    },
+    'cart.distance': {
+      'uz': '{km} km',
+      'ru': '{km} км',
+      'en': '{km} km',
+    },
+    'cart.surge_badge': {
+      'uz': 'Yuklama',
+      'ru': 'Повышенный спрос',
+      'en': 'Surge',
+    },
+    'cart.out_of_zone': {
+      'uz': "Adresga yetkazib bo'lmaydi",
+      'ru': 'Доставка не доступна',
+      'en': 'Address out of delivery zone',
+    },
+    'cart.min_order_warn': {
+      'uz': "Yana {amount} qo'shing",
+      'ru': 'Добавьте ещё {amount} до минимума',
+      'en': 'Add {amount} more to qualify',
+    },
+
+    // Phase 2 — dispatch lifecycle messages
+    'dispatch.timeout': {
+      'uz': "Taklif muddati tugadi",
+      'ru': 'Время предложения истекло',
+      'en': 'Offer timed out',
+    },
+    'dispatch.accepted': {
+      'uz': 'Buyurtma sizga biriktirildi',
+      'ru': 'Заказ закреплён за вами',
+      'en': 'Order assigned to you',
+    },
+    'dispatch.assigned_to_other': {
+      'uz': 'Buyurtmani boshqa kuryer oldi',
+      'ru': 'Заказ ушёл другому курьеру',
+      'en': 'Assigned to another courier',
+    },
+
     // Orders
     'order.status.pending': {
       'uz': 'Yangi',

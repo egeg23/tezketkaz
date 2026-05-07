@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -5,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/order_provider.dart';
+import '../../services/api_client.dart';
+import '../../services/dispatch_api.dart';
 import '../../theme/app_theme.dart';
 
 class CartScreen extends StatefulWidget {
@@ -21,6 +25,18 @@ class _CartScreenState extends State<CartScreen> {
   );
   final _commentCtrl = TextEditingController();
 
+  Timer? _estimateDebounce;
+  bool _estimateLoading = false;
+  String? _estimateError;
+  String? _lastRequestedKey;
+
+  // Stub coordinates — buyer flow Phase 1 chooses a saved address; if a
+  // selected location is later piped through this screen, plug it in here.
+  // Falls back to Tashkent centre so the estimate API still receives valid
+  // floats.
+  double get _lat => 41.2995;
+  double get _lng => 69.2401;
+
   static const _payments = [
     {'id': 'click',   'name': 'Click',     'emoji': '💳', 'hint': 'To\'lov kartasi'},
     {'id': 'payme',   'name': 'Payme',     'emoji': '💜', 'hint': '10M+ foydalanuvchi'},
@@ -28,9 +44,124 @@ class _CartScreenState extends State<CartScreen> {
     {'id': 'cash',    'name': 'Naqd pul',  'emoji': '💵', 'hint': 'Yetkazib berishda'},
   ];
 
+  CartProvider? _cartListening;
+
+  @override
+  void initState() {
+    super.initState();
+    _addressCtrl.addListener(_onInputsChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _cartListening = context.read<CartProvider>();
+      _cartListening!.addListener(_onInputsChanged);
+      _refreshEstimate(immediate: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _estimateDebounce?.cancel();
+    _addressCtrl.removeListener(_onInputsChanged);
+    _cartListening?.removeListener(_onInputsChanged);
+    _addressCtrl.dispose();
+    _commentCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onInputsChanged() {
+    // Listener fires for every cart mutation including our own
+    // `setEstimate(...)`. The fingerprint check inside `_refreshEstimate`
+    // dedupes redundant work, so a no-op refetch is just a fast string
+    // compare here.
+    _refreshEstimate();
+  }
+
   String _fmt(double v) => '${v.toInt()
       .toString()
       .replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ')} so\'m';
+
+  /// Debounced (500ms) call to `dispatchApi.estimate`. Caches the result on
+  /// `CartProvider.lastEstimate` so navigating away and back doesn't refetch
+  /// when the inputs haven't changed.
+  void _refreshEstimate({bool immediate = false}) {
+    _estimateDebounce?.cancel();
+    final cart = context.read<CartProvider>();
+    if (cart.isEmpty) return;
+    final shopId = cart.orderItems.first.product.shopId;
+    final key = cart.estimateKey(
+      shopId: shopId,
+      addressKey: '${_addressCtrl.text.trim()}|$_lat,$_lng',
+    );
+    // Skip when the cached estimate matches and is fresh.
+    if (cart.lastEstimateKey == key &&
+        cart.lastEstimate != null &&
+        DateTime.now().difference(cart.lastEstimate!.fetchedAt) <
+            const Duration(seconds: 30) &&
+        !immediate) {
+      return;
+    }
+    Future<void> run() async {
+      if (!mounted) return;
+      setState(() {
+        _estimateLoading = true;
+        _estimateError = null;
+        _lastRequestedKey = key;
+      });
+      try {
+        final res = await DispatchApi.instance.estimate(
+          shopId: shopId,
+          address: {
+            'lat': _lat,
+            'lng': _lng,
+            'fullAddress': _addressCtrl.text.trim(),
+          },
+          items: cart.toApiPayload(),
+        );
+        if (!mounted || _lastRequestedKey != key) return;
+        final est = CartEstimate.fromJson(res);
+        cart.setEstimate(est, key: key);
+        setState(() => _estimateLoading = false);
+      } on ApiException catch (e) {
+        if (!mounted || _lastRequestedKey != key) return;
+        // 400 + out_of_zone body → flag the cached estimate as out-of-zone.
+        final msg = e.message.toLowerCase();
+        if (e.statusCode == 400 && msg.contains('out_of_zone')) {
+          final stub = CartEstimate(
+            subtotal: cart.subtotal,
+            deliveryFee: 0,
+            total: cart.subtotal,
+            minOrder: 0,
+            minOrderMet: true,
+            outOfZone: true,
+            fetchedAt: DateTime.now(),
+          );
+          cart.setEstimate(stub, key: key);
+          setState(() {
+            _estimateLoading = false;
+            _estimateError = null;
+          });
+        } else {
+          setState(() {
+            _estimateLoading = false;
+            _estimateError = e.message;
+          });
+        }
+      } catch (e) {
+        if (!mounted || _lastRequestedKey != key) return;
+        setState(() {
+          _estimateLoading = false;
+          _estimateError = e.toString();
+        });
+      }
+    }
+
+    if (immediate) {
+      run();
+    } else {
+      _estimateDebounce =
+          Timer(const Duration(milliseconds: 500), run);
+    }
+  }
 
   Future<void> _placeOrder() async {
     final cart = context.read<CartProvider>();
@@ -173,79 +304,81 @@ class _CartScreenState extends State<CartScreen> {
           const SizedBox(height: 16),
           _SectionLabel('Hisob'),
           const SizedBox(height: 8),
-          _Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _SumRow('Mahsulotlar (${cart.itemCount})', _fmt(cart.subtotal)),
-                  const SizedBox(height: 10),
-                  _SumRow(
-                    'Yetkazib berish',
-                    cart.deliveryFee == 0 ? 'Bepul' : _fmt(cart.deliveryFee),
-                    accent: cart.deliveryFee == 0,
-                    sub: cart.deliveryFee > 0 ? "100 000 so'mdan bepul" : null,
-                  ),
-                  const SizedBox(height: 14),
-                  Container(height: 1, color: AppColors.borderLight),
-                  const SizedBox(height: 14),
-                  _SumRow('Jami', _fmt(cart.total), bold: true),
-                ],
-              ),
-            ),
+          _PricingBreakdown(
+            cart: cart,
+            estimate: cart.lastEstimate,
+            isLoading: _estimateLoading,
+            error: _estimateError,
+            fmtMoney: _fmt,
           ),
         ],
       ),
       bottomNavigationBar: SafeArea(
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(AppRadii.md),
-            boxShadow: AppShadows.button,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: _isPlacing ? null : _placeOrder,
+        child: Builder(builder: (_) {
+          final est = cart.lastEstimate;
+          final canCheckout = !_isPlacing &&
+              !(est?.outOfZone ?? false) &&
+              (est?.minOrderMet ?? true);
+          final total = est?.total ?? cart.total;
+          return Container(
+            margin: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            decoration: BoxDecoration(
+              color: canCheckout ? AppColors.primary : AppColors.border,
               borderRadius: BorderRadius.circular(AppRadii.md),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-                child: Row(
-                  children: [
-                    if (_isPlacing) ...[
-                      const SizedBox(
-                        width: 22, height: 22,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+              boxShadow: canCheckout ? AppShadows.button : null,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: canCheckout ? _placeOrder : null,
+                borderRadius: BorderRadius.circular(AppRadii.md),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                  child: Row(
+                    children: [
+                      if (_isPlacing) ...[
+                        const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2.5),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      Expanded(
+                        child: Text(
+                          _isPlacing
+                              ? 'Yuborilmoqda...'
+                              : 'Buyurtma berish · ${_fmt(total)}',
+                          style: TextStyle(
+                            color: canCheckout
+                                ? Colors.white
+                                : AppColors.textSecondary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
                       ),
-                      const SizedBox(width: 12),
+                      if (!_isPlacing && canCheckout)
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.22),
+                            borderRadius:
+                                BorderRadius.circular(AppRadii.pill),
+                          ),
+                          child: const Icon(Icons.arrow_forward_rounded,
+                              color: Colors.white, size: 18),
+                        ),
                     ],
-                    Expanded(
-                      child: Text(
-                        _isPlacing
-                            ? 'Yuborilmoqda...'
-                            : 'Buyurtma berish · ${_fmt(cart.total)}',
-                        style: const TextStyle(
-                          color: Colors.white, fontSize: 16,
-                          fontWeight: FontWeight.w800, letterSpacing: 0.1,
-                        ),
-                      ),
-                    ),
-                    if (!_isPlacing)
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.22),
-                          borderRadius: BorderRadius.circular(AppRadii.pill),
-                        ),
-                        child: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
-                      ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
+          );
+        }),
       ),
     );
   }
@@ -544,6 +677,198 @@ class _PaymentRow extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Pricing breakdown — wraps subtotal/delivery/total/ETA/distance plus the
+/// out-of-zone & min-order banners. Driven by the latest `CartEstimate`
+/// cached on `CartProvider`.
+class _PricingBreakdown extends StatelessWidget {
+  final CartProvider cart;
+  final CartEstimate? estimate;
+  final bool isLoading;
+  final String? error;
+  final String Function(double) fmtMoney;
+
+  const _PricingBreakdown({
+    required this.cart,
+    required this.estimate,
+    required this.isLoading,
+    required this.error,
+    required this.fmtMoney,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final est = estimate;
+
+    final subtotal = est?.subtotal ?? cart.subtotal;
+    final deliveryFee = est?.deliveryFee ?? cart.deliveryFee;
+    final total = est?.total ?? cart.total;
+
+    final children = <Widget>[];
+
+    if (est?.outOfZone == true) {
+      children.add(_Banner(
+        emoji: '⚠️',
+        bg: AppColors.errorLight,
+        fg: AppColors.error,
+        title: "Adresga yetkazib bo'lmaydi",
+        subtitle: 'Доставка не доступна',
+      ));
+    }
+
+    if (est != null && !est.minOrderMet) {
+      final missing = est.minOrder - est.subtotal;
+      children.add(_Banner(
+        emoji: '🛒',
+        bg: AppColors.warningLight,
+        fg: AppColors.warning,
+        title:
+            "Yana ${fmtMoney(missing < 0 ? 0 : missing)} qo'shing",
+        subtitle: "Minimal buyurtma ${fmtMoney(est.minOrder)}",
+      ));
+    }
+
+    children.add(_Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                    child: _SumRow('Mahsulotlar (${cart.itemCount})',
+                        fmtMoney(subtotal))),
+                if (isLoading)
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _SumRow(
+                    'Yetkazib berish',
+                    deliveryFee == 0 ? 'Bepul' : fmtMoney(deliveryFee),
+                    accent: deliveryFee == 0,
+                    sub: est?.surgeReason,
+                  ),
+                ),
+                if ((est?.surgeFactor ?? 1.0) > 1.0)
+                  Container(
+                    margin: const EdgeInsets.only(left: 8),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: AppColors.warningLight,
+                        borderRadius: BorderRadius.circular(8)),
+                    child: Text(
+                        '×${est!.surgeFactor.toStringAsFixed(1)} surge',
+                        style: const TextStyle(
+                            color: AppColors.warning,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700)),
+                  ),
+              ],
+            ),
+            if (est?.etaMinutes != null || est?.distanceKm != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  if (est?.etaMinutes != null) ...[
+                    const Icon(Icons.timer_outlined,
+                        size: 14, color: AppColors.textSecondary),
+                    const SizedBox(width: 4),
+                    Text('Доставка через ~${est!.etaMinutes} мин',
+                        style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary)),
+                  ],
+                  if (est?.distanceKm != null) ...[
+                    const SizedBox(width: 12),
+                    const Icon(Icons.place_outlined,
+                        size: 14, color: AppColors.textSecondary),
+                    const SizedBox(width: 4),
+                    Text('${est!.distanceKm!.toStringAsFixed(1)} км',
+                        style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary)),
+                  ],
+                ],
+              ),
+            ],
+            const SizedBox(height: 14),
+            Container(height: 1, color: AppColors.borderLight),
+            const SizedBox(height: 14),
+            _SumRow('Jami', fmtMoney(total), bold: true),
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              Text(error!,
+                  style: const TextStyle(
+                      color: AppColors.error, fontSize: 12)),
+            ],
+          ],
+        ),
+      ),
+    ));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          children[i],
+        ],
+      ],
+    );
+  }
+}
+
+class _Banner extends StatelessWidget {
+  final String emoji, title, subtitle;
+  final Color bg, fg;
+  const _Banner({
+    required this.emoji,
+    required this.title,
+    required this.subtitle,
+    required this.bg,
+    required this.fg,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(AppRadii.md),
+            border: Border.all(color: fg.withValues(alpha: 0.4))),
+        child: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 22)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          color: fg,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          color: AppColors.textSecondary, fontSize: 12)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class _SumRow extends StatelessWidget {

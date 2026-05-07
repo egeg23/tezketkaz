@@ -60,5 +60,22 @@ class SocketService {
     emit('order:unsubscribe', orderId);
   }
 
+  // ── Phase 2 dispatch helpers ─────────────────────────────────────────────
+  // The courier socket pushes `dispatch:offer`, `order:assigned`, and
+  // `order:updated`. Consumers (e.g. `CourierStateProvider`) call `on(event,
+  // handler)` directly; these helpers exist for typed convenience.
+
+  void onDispatchOffer(SocketHandler handler) => on('dispatch:offer', handler);
+  void offDispatchOffer([SocketHandler? handler]) =>
+      off('dispatch:offer', handler);
+
+  void onOrderAssigned(SocketHandler handler) => on('order:assigned', handler);
+  void offOrderAssigned([SocketHandler? handler]) =>
+      off('order:assigned', handler);
+
+  void onOrderUpdated(SocketHandler handler) => on('order:updated', handler);
+  void offOrderUpdated([SocketHandler? handler]) =>
+      off('order:updated', handler);
+
   bool get isConnected => _socket?.connected ?? false;
 }
