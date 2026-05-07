@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/api_config.dart';
+import 'sentry_service.dart';
 
 class ApiException implements Exception {
   final int? statusCode;
@@ -211,6 +212,13 @@ class ApiClient {
     final msg = e.response?.data is Map
         ? (e.response!.data['error'] ?? 'Server xatosi') as String
         : 'Server xatosi';
-    return ApiException(msg, code);
+    final exception = ApiException(msg, code);
+    // Report 5xx (server-side) failures to Sentry. 4xx are expected user
+    // errors (bad input, 401, 404, etc.) so we don't spam the dashboard.
+    if (code != null && code >= 500 && code < 600) {
+      // Fire-and-forget; capture errors are swallowed when Sentry is disabled.
+      SentryService.capture(exception, e.stackTrace);
+    }
+    return exception;
   }
 }

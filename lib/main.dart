@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
+import 'services/sentry_service.dart';
 import 'theme/app_theme.dart';
 import 'models/models.dart';
 import 'providers/auth_provider.dart';
@@ -43,20 +44,29 @@ import 'screens/shared/chat_screen.dart';
 import 'screens/shared/reviews_screen.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    debugPrint('Firebase init skipped: $e');
-  }
-  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.dark,
-  ));
-  runApp(const TezKetKazApp());
+  // SENTRY_DSN is optional. When omitted (local dev) SentryService.init becomes
+  // a pass-through and just runs the app directly.
+  const sentryDsn = String.fromEnvironment('SENTRY_DSN');
+
+  await SentryService.init(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      } catch (e) {
+        debugPrint('Firebase init skipped: $e');
+      }
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+      ));
+      runApp(const TezKetKazApp());
+    },
+    dsn: sentryDsn.isEmpty ? null : sentryDsn,
+  );
 }
 
 class TezKetKazApp extends StatefulWidget {
