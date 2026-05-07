@@ -1,0 +1,223 @@
+// Prisma schema for TezKetKaz
+// To use PostgreSQL in production, change `provider = "sqlite"` to `provider = "postgresql"`
+// and update DATABASE_URL in .env
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(uuid())
+  phone           String   @unique
+  name            String?
+  avatarUrl       String?
+
+  // Roles
+  isBuyer         Boolean  @default(true)
+  isCourier       Boolean  @default(false)
+  isShop          Boolean  @default(false)
+
+  // Courier verification
+  courierStatus   String   @default("none") // none | pending | approved | rejected
+  stir            String?  // ИНН Узбекистана (9 цифр)
+  passportSeries  String?
+  selfEmployedCert String?
+
+  // Shop linkage (one user can manage multiple shops via ShopMember)
+  shopMemberships ShopMember[]
+
+  // Relations
+  buyerOrders    Order[]    @relation("BuyerOrders")
+  courierOrders  Order[]    @relation("CourierOrders")
+  addresses      Address[]
+  notifications  Notification[]
+  otpCodes       OtpCode[]
+
+  // Courier stats
+  rating         Float    @default(5.0)
+  ordersCount    Int      @default(0)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  phone     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@index([phone])
+}
+
+model Address {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  label     String   // Уй, Иш и т.д.
+  fullAddress String
+  lat       Float?
+  lng       Float?
+  isDefault Boolean  @default(false)
+  comment   String?
+}
+
+model Shop {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  logoUrl     String?
+  address     String
+  lat         Float?
+  lng         Float?
+  phone       String?
+
+  isActive    Boolean  @default(true)
+  rating      Float    @default(5.0)
+
+  // Working hours
+  openTime    String   @default("09:00")
+  closeTime   String   @default("22:00")
+
+  members     ShopMember[]
+  products    Product[]
+  orders      Order[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ShopMember {
+  id     String @id @default(uuid())
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+  shop   Shop   @relation(fields: [shopId], references: [id])
+  shopId String
+  role   String @default("manager") // owner | manager | staff
+
+  @@unique([userId, shopId])
+}
+
+model Product {
+  id            String   @id @default(uuid())
+  shop          Shop     @relation(fields: [shopId], references: [id])
+  shopId        String
+  name          String
+  nameUz        String
+  description   String?
+  ingredients   String?  // Состав (для еды и косметики)
+  price         Float
+  discountPrice Float?
+  unit          String   // кг, шт, л
+  category      String   // produce, meat, dairy, bakery, drinks, grocery
+  imageUrl      String
+  isAvailable   Boolean  @default(true)
+  stock         Int      @default(100)
+
+  orderItems    OrderItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([shopId])
+  @@index([category])
+}
+
+model Order {
+  id              String   @id @default(uuid())
+
+  // Status flow:
+  // pending → confirmed → collecting → readyForPickup → courierAssigned →
+  // pickedUp → inDelivery → delivered  (or cancelled)
+  status          String   @default("pending")
+  orderNumber     String?  // e.g. K-247
+
+  // Buyer
+  buyer           User     @relation("BuyerOrders", fields: [buyerId], references: [id])
+  buyerId         String
+  customerName    String   // Snapshot
+  customerPhone   String
+
+  // Shop
+  shop            Shop     @relation(fields: [shopId], references: [id])
+  shopId          String
+
+  // Courier
+  courier         User?    @relation("CourierOrders", fields: [courierId], references: [id])
+  courierId       String?
+
+  // Delivery
+  deliveryAddress String
+  deliveryLat     Float?
+  deliveryLng     Float?
+  customerComment String?
+  deliveryFee     Float    @default(12000)
+
+  // Payment
+  paymentMethod   String   // click | payme | uzumpay | cash
+  isPaid          Boolean  @default(false)
+  paymentRef      String?  // Transaction ID from payment provider
+
+  // Pricing
+  subtotal        Float
+  total           Float
+  courierReward   Float    @default(12000)
+
+  // Items
+  items           OrderItem[]
+
+  // Timestamps for analytics
+  createdAt       DateTime @default(now())
+  acceptedAt      DateTime?
+  readyAt         DateTime?
+  pickedUpAt      DateTime?
+  deliveredAt     DateTime?
+  cancelledAt     DateTime?
+  cancelReason    String?
+
+  // Rating after delivery
+  buyerRating     Int?    // 1-5
+  buyerReview     String?
+  courierRating   Int?    // Курьер ставит оценку покупателю
+  shopRating      Int?    // Покупатель ставит оценку магазину
+
+  @@index([buyerId])
+  @@index([shopId])
+  @@index([courierId])
+  @@index([status])
+}
+
+model OrderItem {
+  id          String  @id @default(uuid())
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId     String
+  product     Product @relation(fields: [productId], references: [id])
+  productId   String
+  productName String  // Snapshot at time of order
+  quantity    Int
+  price       Float
+  total       Float
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  title     String
+  body      String
+  type      String   // order_update, promo, system
+  data      String?  // JSON payload
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+}

@@ -1,0 +1,36 @@
+version: '3.9'
+
+services:
+  api:
+    build: ./backend
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://tezketkaz:tezketkaz@db:5432/tezketkaz
+      NODE_ENV: development
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      USE_MOCK_SMS: "true"
+      USE_MOCK_PAYMENTS: "true"
+      USE_MOCK_TAX: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: tezketkaz
+      POSTGRES_PASSWORD: tezketkaz
+      POSTGRES_DB: tezketkaz
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tezketkaz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:

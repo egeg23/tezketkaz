@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(cp backend/.env.example backend/.env)",
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(node prisma/seed.js)",
+      "Bash(node src/index.js)",
+      "Bash(curl -s http://localhost:3000/health)",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/verify-otp -H \"Content-Type: application/json\" -d '{\"phone\":\"+998901234567\",\"code\":\"123456\"}')",
+      "Read(//tmp/**)",
+      "Bash(node -e \"console.log\\(JSON.parse\\(require\\('fs'\\).readFileSync\\('/tmp/login.json','utf8'\\)\\).token\\)\")",
+      "Bash(curl -s http://localhost:3000/api/shops)",
+      "Bash(curl -s http://localhost:3000/api/products)",
+      "Bash(node -e \"console.log\\(JSON.parse\\(require\\('fs'\\).readFileSync\\('buyer_login.json','utf8'\\)\\).token\\)\")",
+      "Bash(curl -s http://localhost:3000/api/auth/me -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(flutter --version)",
+      "PowerShell(Get-Command flutter -ErrorAction SilentlyContinue)",
+      "PowerShell(if \\(-not $?\\) { \"NO_FLUTTER\" })",
+      "Bash([ ! -f \"../lib/$f\" ])",
+      "Read(//c/Users/user/Desktop/**)",
+      "Bash(mkdir -p assets/images assets/icons)",
+      "Bash(touch assets/images/.gitkeep assets/icons/.gitkeep)",
+      "Bash(node test_sockets.js)",
+      "Bash(git clone *)",
+      "Bash(ls C:/Users/user/flutter 2>&1 | head -5; echo \"---\"; ls C:/Users/user/flutter/bin 2>&1 | head -10)",
+      "Bash(export PATH=\"/c/Users/user/flutter/bin:$PATH\")",
+      "Bash(flutter pub *)",
+      "Bash(flutter analyze *)",
+      "Bash(python3 -c ' *)",
+      "Bash(node -e ' *)",
+      "Bash(flutter doctor *)",
+      "Bash(flutter build *)",
+      "Bash(flutter create *)",
+      "Bash(ls -la C:/Users/user/android-sdk-tools.zip 2>&1)",
+      "PowerShell(Get-Job | Where-Object { $_.State -eq 'Running' } | Format-Table; Get-Item C:\\\\Users\\\\user\\\\android-sdk-tools.zip | Select-Object Length, LastWriteTime)"
+    ]
+  }
+}
