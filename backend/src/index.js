@@ -27,6 +27,10 @@ const modifierRoutes = require('./routes/modifiers');
 const zoneRoutes = require('./routes/zones');
 const pricingRuleRoutes = require('./routes/pricing-rules');
 const courierShiftRoutes = require('./routes/courier-shifts');
+const couponRoutes = require('./routes/coupons');
+const loyaltyRoutes = require('./routes/loyalty');
+const reviewRoutes = require('./routes/reviews');
+const chatRoutes = require('./routes/chat');
 const { setupSockets } = require('./sockets');
 
 const app = express();
@@ -149,6 +153,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/shops', shopRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/coupons', couponRoutes);
+app.use('/api/loyalty', loyaltyRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api', modifierRoutes); // modifier groups/options use absolute paths
 app.use('/api', zoneRoutes); // zones routes use absolute /api/shops/:id/zones, /api/zones/:id
@@ -160,6 +166,10 @@ app.use('/api', courierShiftRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/admin/pricing-rules', pricingRuleRoutes);
 app.use('/api/admin', adminRoutes);
+// Phase 3: reviews + chat. Both routers declare absolute paths under /api/orders
+// /:id/{reviews,chat} and /api/reviews/:id, so they mount at /api.
+app.use('/api', reviewRoutes);
+app.use('/api', chatRoutes);
 
 // ─── User-uploaded product images ────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
@@ -214,9 +224,12 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
     const { startWorkers } = require('./lib/queues');
     // eslint-disable-next-line global-require
     const dispatchJobs = require('./jobs/dispatch');
+    // eslint-disable-next-line global-require
+    const scheduledJobs = require('./jobs/scheduled');
     startWorkers({
       dispatch: dispatchJobs.dispatchHandler,
       autoCancel: dispatchJobs.autoCancelHandler,
+      scheduled: scheduledJobs.scheduledHandler,
     });
     logger.info('BullMQ workers started');
   } catch (err) {

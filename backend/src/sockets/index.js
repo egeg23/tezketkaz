@@ -95,6 +95,39 @@ function setupSockets(io) {
       if (typeof orderId === 'string' && orderId) socket.leave(`order:${orderId}`);
     });
 
+    // Phase 3: chat join — validate participant before subscribing.
+    socket.on('chat:join', async (payload = {}) => {
+      const orderId = typeof payload === 'string' ? payload : payload.orderId;
+      if (!orderId || typeof orderId !== 'string') return;
+      try {
+        const order = await prisma.order.findUnique({
+          where: { id: orderId },
+          select: { id: true, buyerId: true, courierId: true, shopId: true },
+        });
+        if (!order) return;
+        let allowed = order.buyerId === user.id || order.courierId === user.id;
+        if (!allowed) {
+          const m = await prisma.shopMember.findUnique({
+            where: { userId_shopId: { userId: user.id, shopId: order.shopId } },
+          }).catch(() => null);
+          allowed = !!m;
+        }
+        if (allowed) socket.join(`order:${orderId}`);
+      } catch (err) {
+        logger.warn({ err: err.message }, 'chat:join failed');
+      }
+    });
+
+    // Phase 3: chat typing indicator — relay to room.
+    socket.on('chat:typing', (payload = {}) => {
+      const orderId = typeof payload === 'string' ? payload : payload.orderId;
+      if (!orderId || typeof orderId !== 'string') return;
+      const isTyping = payload.isTyping !== false;
+      socket.to(`order:${orderId}`).emit('chat:typing', {
+        orderId, userId: user.id, isTyping,
+      });
+    });
+
     // Courier location updates → broadcast + presence
     socket.on('courier:location', async ({ orderId, lat, lng } = {}) => {
       // Reject from non-courier or unapproved-courier sockets

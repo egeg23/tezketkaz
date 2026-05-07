@@ -8,6 +8,27 @@ const { authMiddleware, requireRole } = require('../middleware/auth');
 const { audit } = require('../lib/audit');
 const logger = require('../lib/logger');
 const { queues } = require('../lib/queues');
+const { validateCoupon, computeDiscount } = require('../services/coupons');
+const loyalty = require('../services/loyalty');
+const scheduling = require('../services/scheduling');
+const notifications = require('../services/notifications');
+
+// Phase 3: fire DB Notification + FCM + socket emit for an order transition.
+// Best-effort; never throw out of a state-change handler.
+async function notifyOrder(req, order, type) {
+  if (!order || !type) return;
+  try {
+    const io = req.app.get('io');
+    await notifications.sendOrderEvent(prisma, io, {
+      userId: order.buyerId,
+      type,
+      orderId: order.id,
+      data: { status: order.status, shopId: order.shopId },
+    });
+  } catch (err) {
+    logger.warn({ err: err.message, orderId: order.id, type }, 'notifyOrder failed');
+  }
+}
 
 // Order status flow:
 // pending → confirmed → collecting → readyForPickup → courierAssigned →
@@ -176,7 +197,7 @@ async function priceItem(prismaClient, productId, modifierSelections) {
 // Buyer-facing checkout call; computes subtotal + delivery + ETA. NO DB write.
 router.post('/estimate', authMiddleware, async (req, res, next) => {
   try {
-    const { shopId, address, items } = req.body || {};
+    const { shopId, address, items, couponCode, loyaltyPoints } = req.body || {};
     if (!shopId) return res.status(400).json({ error: 'shopId required' });
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'items required' });
@@ -215,11 +236,51 @@ router.post('/estimate', authMiddleware, async (req, res, next) => {
     }
 
     const minOrderMet = subtotal >= delivery.minOrder;
-    const total = subtotal + delivery.deliveryFee;
+
+    // Phase 3 — preview coupon + loyalty discount.
+    let couponDiscount = 0;
+    let couponReason = null;
+    let couponInfo = null;
+    if (couponCode) {
+      const r = await validateCoupon(prisma, {
+        code: String(couponCode).trim().toUpperCase(),
+        userId: req.user.id,
+        vertical: shop.vertical,
+        shopId,
+        subtotal,
+        deliveryFee: delivery.deliveryFee,
+      });
+      if (!r.valid) {
+        couponReason = r.reason;
+      } else {
+        couponDiscount = r.discount;
+        couponInfo = { code: r.coupon.code, type: r.coupon.type, value: r.coupon.value };
+      }
+    }
+
+    let loyaltyDiscount = 0;
+    let loyaltyPointsApplied = 0;
+    if (loyaltyPoints) {
+      const requested = Math.max(0, Math.floor(Number(loyaltyPoints) || 0));
+      if (requested > 0) {
+        const account = await loyalty.getOrCreateAccount(prisma, req.user.id);
+        loyaltyPointsApplied = Math.min(requested, account.points);
+        loyaltyDiscount = loyaltyPointsApplied * loyalty.SPEND_VALUE_UZS;
+      }
+    }
+
+    const discount = couponDiscount + loyaltyDiscount;
+    const total = Math.max(0, subtotal + delivery.deliveryFee - discount);
 
     res.json({
       subtotal,
       deliveryFee: delivery.deliveryFee,
+      discount,
+      couponDiscount,
+      couponReason,
+      coupon: couponInfo,
+      loyaltyDiscount,
+      loyaltyPointsApplied,
       total,
       minOrder: delivery.minOrder,
       minOrderMet,
@@ -239,6 +300,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
     const {
       shopId, items, deliveryAddress, deliveryLat, deliveryLng,
       customerComment, paymentMethod,
+      couponCode, loyaltyPoints, scheduledFor,
     } = req.body || {};
 
     if (!shopId || !items?.length || !deliveryAddress || !paymentMethod) {
@@ -291,8 +353,57 @@ router.post('/', authMiddleware, async (req, res, next) => {
       deliveryFee = subtotal >= 100000 ? 0 : 12000;
     }
 
-    const total = subtotal + deliveryFee;
+    // Phase 3 — coupon validation (before save, no DB writes yet).
+    let couponDiscount = 0;
+    let validatedCoupon = null;
+    const normalizedCode = couponCode ? String(couponCode).trim().toUpperCase() : null;
+    if (normalizedCode) {
+      const r = await validateCoupon(prisma, {
+        code: normalizedCode,
+        userId: req.user.id,
+        vertical: shop.vertical,
+        shopId,
+        subtotal,
+        deliveryFee,
+      });
+      if (!r.valid) {
+        return res.status(400).json({ error: 'coupon_invalid', reason: r.reason });
+      }
+      couponDiscount = r.discount;
+      validatedCoupon = r.coupon;
+    }
+
+    // Phase 3 — loyalty points spend (validate balance before save).
+    const requestedPoints = Math.max(0, Math.floor(Number(loyaltyPoints) || 0));
+    let loyaltyDiscount = 0;
+    if (requestedPoints > 0) {
+      const account = await loyalty.getOrCreateAccount(prisma, req.user.id);
+      if (account.points < requestedPoints) {
+        return res.status(400).json({ error: 'insufficient_points' });
+      }
+      loyaltyDiscount = requestedPoints * loyalty.SPEND_VALUE_UZS;
+    }
+
+    const discount = couponDiscount + loyaltyDiscount;
+    const total = Math.max(0, subtotal + deliveryFee - discount);
     const isPaid = paymentMethod === 'cash' ? false : false; // online → wait for webhook
+
+    // Phase 3 — validate scheduledFor up front so we don't write a row we'll reject.
+    let scheduledAt = null;
+    if (scheduledFor) {
+      const when = new Date(scheduledFor);
+      if (Number.isNaN(when.getTime())) {
+        return res.status(400).json({ error: 'invalid_scheduled_for' });
+      }
+      const now = Date.now();
+      if (when.getTime() <= now) {
+        return res.status(400).json({ error: 'scheduled_in_past' });
+      }
+      if (when.getTime() > now + scheduling.MAX_SCHEDULE_DAYS * 24 * 60 * 60 * 1000) {
+        return res.status(400).json({ error: 'scheduled_too_far' });
+      }
+      scheduledAt = when;
+    }
 
     const order = await prisma.order.create({
       data: {
@@ -304,11 +415,44 @@ router.post('/', authMiddleware, async (req, res, next) => {
         customerComment,
         paymentMethod, isPaid,
         subtotal, deliveryFee, total,
+        couponCode: validatedCoupon ? validatedCoupon.code : null,
+        discount,
+        loyaltySpent: requestedPoints,
+        scheduledFor: scheduledAt,
         status: STATUS.PENDING,
         items: { create: orderItemsData },
       },
       include: { items: true, shop: true, courier: true },
     });
+
+    // Phase 3 — record coupon redemption + bump usage counter.
+    if (validatedCoupon) {
+      try {
+        await prisma.coupon.update({
+          where: { code: validatedCoupon.code },
+          data: { usedCount: { increment: 1 } },
+        });
+        await prisma.couponRedemption.create({
+          data: {
+            couponCode: validatedCoupon.code,
+            userId: req.user.id,
+            orderId: order.id,
+            discount: couponDiscount,
+          },
+        });
+      } catch (err) {
+        logger.warn({ err: err.message, orderId: order.id }, 'coupon redemption failed');
+      }
+    }
+
+    // Phase 3 — debit loyalty points (DB-only, balance already validated).
+    if (requestedPoints > 0) {
+      try {
+        await loyalty.spendPoints(prisma, req.user.id, requestedPoints, order.id);
+      } catch (err) {
+        logger.warn({ err: err.message, orderId: order.id }, 'loyalty spend failed');
+      }
+    }
 
     // Notify shop in real time
     emit(req, `shop:${shopId}`, 'order:new', order);
@@ -320,16 +464,25 @@ router.post('/', authMiddleware, async (req, res, next) => {
       logger.warn({ err: err.message }, 'shop push failed');
     }
 
-    // Phase 2: enqueue dispatch + auto-cancel (no-ops when Redis disabled).
-    try {
-      await queues().dispatch.add('startDispatch', { type: 'startDispatch', orderId: order.id });
-      await queues().autoCancel.add(
-        'autoCancel',
-        { orderId: order.id, expectedStatus: order.status },
-        { delay: 10 * 60 * 1000 },
-      );
-    } catch (err) {
-      logger.warn({ err: err.message, orderId: order.id }, 'dispatch enqueue failed');
+    // Phase 3 — scheduled vs immediate dispatch.
+    if (scheduledAt) {
+      try {
+        await scheduling.scheduleOrder(prisma, queues, { orderId: order.id, scheduledFor: scheduledAt });
+      } catch (err) {
+        logger.warn({ err: err.message, orderId: order.id }, 'scheduleOrder failed');
+      }
+    } else {
+      // Phase 2: enqueue dispatch + auto-cancel (no-ops when Redis disabled).
+      try {
+        await queues().dispatch.add('startDispatch', { type: 'startDispatch', orderId: order.id });
+        await queues().autoCancel.add(
+          'autoCancel',
+          { orderId: order.id, expectedStatus: order.status },
+          { delay: 10 * 60 * 1000 },
+        );
+      } catch (err) {
+        logger.warn({ err: err.message, orderId: order.id }, 'dispatch enqueue failed');
+      }
     }
 
     res.status(201).json({ order });
@@ -428,6 +581,7 @@ router.post('/:id/shop/accept', authMiddleware, async (req, res, next) => {
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
     notifyNearbyCouriers(req, updated).catch(() => {});
     push.notifyBuyerStatusUpdate(updated).catch(() => {});
+    notifyOrder(req, updated, 'order_confirmed').catch(() => {});
 
     res.json({ order: updated });
   } catch (err) { next(err); }
@@ -455,6 +609,7 @@ router.post('/:id/shop/ready', authMiddleware, async (req, res, next) => {
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
     if (!updated.courierId) notifyNearbyCouriers(req, updated).catch(() => {});
     push.notifyBuyerStatusUpdate(updated).catch(() => {});
+    notifyOrder(req, updated, 'order_confirmed').catch(() => {});
 
     res.json({ order: updated });
   } catch (err) { next(err); }
@@ -483,6 +638,7 @@ router.post('/:id/shop/cancel', authMiddleware, async (req, res, next) => {
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
     emit(req, `shop:${order.shopId}`, 'order:updated', updated);
     push.notifyBuyerStatusUpdate(updated).catch(() => {});
+    notifyOrder(req, updated, 'order_cancelled').catch(() => {});
     audit({ actorId: req.user.id, action: 'order.cancel_by_shop', targetType: 'Order', targetId: order.id, metadata: { reason } });
 
     res.json({ order: updated });
@@ -521,6 +677,7 @@ router.post('/:id/courier/accept', authMiddleware, requireRole('courier'), async
     emit(req, `shop:${order.shopId}`, 'order:updated', updated);
     emit(req, 'couriers', 'order:taken', { orderId: order.id });
     push.notifyBuyerStatusUpdate(updated).catch(() => {});
+    notifyOrder(req, updated, 'order_dispatched').catch(() => {});
 
     res.json({ order: updated });
   } catch (err) { next(err); }
@@ -549,6 +706,7 @@ router.post('/:id/courier/pickup', authMiddleware, requireRole('courier'), async
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
     emit(req, `shop:${order.shopId}`, 'order:updated', updated);
     push.notifyBuyerStatusUpdate(updated).catch(() => {});
+    notifyOrder(req, updated, 'order_picked_up').catch(() => {});
 
     res.json({ order: updated });
   } catch (err) { next(err); }
@@ -571,6 +729,7 @@ router.post('/:id/courier/start', authMiddleware, requireRole('courier'), async 
     emit(req, `order:${order.id}`, 'order:updated', updated);
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
     push.notifyBuyerStatusUpdate(updated).catch(() => {});
+    notifyOrder(req, updated, 'order_in_delivery').catch(() => {});
 
     res.json({ order: updated });
   } catch (err) { next(err); }
@@ -595,6 +754,7 @@ router.post('/:id/courier/arrived', authMiddleware, requireRole('courier'), asyn
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
     emit(req, `shop:${order.shopId}`, 'order:updated', updated);
     push.notifyBuyerStatusUpdate(updated).catch(() => {});
+    notifyOrder(req, updated, 'order_in_delivery').catch(() => {});
     res.json({ order: updated });
   } catch (err) { next(err); }
 });
@@ -618,10 +778,29 @@ router.post('/:id/courier/complete', authMiddleware, requireRole('courier'), asy
       data: { ordersCount: { increment: 1 } },
     });
 
+    // Phase 3: credit loyalty points + referral bonus on delivery.
+    try {
+      const credit = await loyalty.creditOrder(prisma, updated.buyerId, updated.id, updated.total);
+      if (credit && credit.pointsAdded) {
+        await prisma.order.update({
+          where: { id: updated.id },
+          data: { loyaltyEarned: credit.pointsAdded },
+        });
+      }
+    } catch (err) {
+      logger.warn({ err: err.message, orderId: updated.id }, 'loyalty credit failed');
+    }
+    try {
+      await loyalty.bonusReferral(prisma, updated.buyerId);
+    } catch (err) {
+      logger.warn({ err: err.message, orderId: updated.id }, 'referral bonus failed');
+    }
+
     emit(req, `order:${order.id}`, 'order:updated', updated);
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
     emit(req, `shop:${order.shopId}`, 'order:updated', updated);
     push.notifyBuyerStatusUpdate(updated).catch(() => {});
+    notifyOrder(req, updated, 'order_delivered').catch(() => {});
 
     res.json({ order: updated });
   } catch (err) { next(err); }
