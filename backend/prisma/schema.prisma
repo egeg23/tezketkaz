@@ -480,6 +480,12 @@ model Order {
   scheduledFor    DateTime?
   scheduledOrder  ScheduledOrder?
 
+  // Phase 4 — refunds + disputes
+  refundedAt      DateTime?
+  refundedAmount  Float    @default(0)
+  refundReason    String?
+  dispute         Dispute?
+
   // Items
   items           OrderItem[]
 
@@ -688,4 +694,71 @@ model ScheduledOrder {
   updatedAt       DateTime @updatedAt
 
   @@index([scheduledFor, status])
+}
+
+// ── Phase 4: payouts, disputes ──────────────────────────────────────────────
+
+// Weekly payout aggregate — one row per (recipient, weekStart). Generated
+// by the payouts BullMQ job; admin marks paid after manual transfer.
+model Payout {
+  id          String   @id @default(uuid())
+
+  // 'courier' | 'shop'
+  recipientType String
+  recipientId   String
+
+  // Inclusive Monday 00:00 UTC, exclusive next Monday.
+  periodStart   DateTime
+  periodEnd     DateTime
+
+  // Sum of Order.courierReward (couriers) or
+  //   sum(subtotal*(1-commission)) - refunds (shops).
+  grossAmount   Float
+  commission    Float    @default(0)
+  refundsTotal  Float    @default(0)
+  netAmount     Float
+
+  ordersCount   Int      @default(0)
+
+  // pending | paid | failed | cancelled
+  status        String   @default("pending")
+  paidAt        DateTime?
+  txnRef        String?
+  notes         String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([recipientType, recipientId, periodStart])
+  @@index([recipientType, status])
+  @@index([periodStart])
+}
+
+// Customer dispute over an order (missing items, wrong food, late, damaged).
+model Dispute {
+  id          String   @id @default(uuid())
+  order       Order    @relation(fields: [orderId], references: [id])
+  orderId     String   @unique
+
+  openedById  String
+  // 'missing_items' | 'wrong_items' | 'late' | 'damaged' | 'other'
+  reason      String
+  description String?
+  // JSON array of evidence URLs (photos/videos).
+  evidence    String?
+
+  // open | under_review | resolved | rejected
+  status      String   @default("open")
+
+  resolution  String?  // 'refund' | 'partial_refund' | 'replacement' | 'rejected' | 'no_action'
+  refundAmount Float   @default(0)
+  resolvedById String?
+  resolvedAt  DateTime?
+  resolutionNote String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@index([openedById])
 }
