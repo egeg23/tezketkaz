@@ -159,6 +159,9 @@ model Shop {
   lng         Float?
   phone       String?
 
+  // grocery | restaurant | pharmacy | electronics
+  vertical    String   @default("grocery")
+
   isActive    Boolean  @default(true)
   rating      Float    @default(5.0)
 
@@ -166,12 +169,54 @@ model Shop {
   openTime    String   @default("09:00")
   closeTime   String   @default("22:00")
 
+  // Delivery economics (override defaults from env)
+  deliveryBaseFee Float?
+  deliveryPerKm   Float?
+  freeDeliveryKm  Float?
+  minOrderAmount  Float?
+
   members     ShopMember[]
   products    Product[]
   orders      Order[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([vertical])
+  @@index([isActive])
+}
+
+// Hierarchical category tree. Categories can be global (shopId = null) or
+// shop-scoped. A product references at most one category.
+model Category {
+  id        String   @id @default(uuid())
+  parentId  String?
+  parent    Category? @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+
+  // grocery | restaurant | pharmacy | electronics
+  vertical  String
+
+  // Optional: when set, category belongs to a single shop's menu.
+  shopId    String?
+
+  slug      String
+  nameUz    String
+  nameRu    String
+  nameEn    String?
+  iconUrl   String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+
+  products  Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([slug, shopId])
+  @@index([vertical, isActive])
+  @@index([parentId])
+  @@index([shopId])
 }
 
 model ShopMember {
@@ -196,11 +241,24 @@ model Product {
   price         Float
   discountPrice Float?
   unit          String   // кг, шт, л
-  category      String   // produce, meat, dairy, bakery, drinks, grocery
+
+  // Legacy free-text label (produce, meat, dairy, bakery, drinks, grocery).
+  // Kept for backwards compatibility; new code uses categoryRef.
+  category      String
+
+  // Structured category (Phase 1). Optional for legacy rows.
+  categoryRef   Category? @relation(fields: [categoryId], references: [id])
+  categoryId    String?
+
   imageUrl      String
   isAvailable   Boolean  @default(true)
   stock         Int      @default(100)
 
+  // Quick lowercased copy of name+nameUz+description for LIKE-search on SQLite
+  // (and a tsvector-backed column on Postgres later).
+  searchText    String?
+
+  modifierGroups ProductModifierGroup[]
   orderItems    OrderItem[]
 
   createdAt     DateTime @default(now())
@@ -208,6 +266,49 @@ model Product {
 
   @@index([shopId])
   @@index([category])
+  @@index([categoryId])
+  @@index([isAvailable])
+}
+
+// Modifier groups attached to a product. E.g. "Size" with min=1 max=1 options
+// "Small/Medium/Large", or "Toppings" with min=0 max=5 options.
+model ProductModifierGroup {
+  id        String   @id @default(uuid())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+
+  nameUz    String
+  nameRu    String
+  nameEn    String?
+
+  // 0 = optional. Number of options the buyer must pick.
+  minSelect Int      @default(0)
+  maxSelect Int      @default(1)
+  sortOrder Int      @default(0)
+
+  options   ProductModifierOption[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+}
+
+model ProductModifierOption {
+  id        String   @id @default(uuid())
+  group     ProductModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId   String
+
+  nameUz    String
+  nameRu    String
+  nameEn    String?
+
+  // Added to the product price when this option is selected.
+  priceDelta  Float    @default(0)
+  isAvailable Boolean  @default(true)
+  sortOrder   Int      @default(0)
+
+  @@index([groupId])
 }
 
 model Order {
@@ -282,8 +383,13 @@ model OrderItem {
   productId   String
   productName String  // Snapshot at time of order
   quantity    Int
-  price       Float
+  price       Float   // Final unit price (base + modifiers) at order time
+  basePrice   Float?  // Snapshot of product price (without modifiers)
   total       Float
+
+  // JSON snapshot of selected modifiers at order time. Format:
+  // [{ groupId, groupName, optionId, optionName, priceDelta }, ...]
+  modifiers   String?
 }
 
 model Notification {

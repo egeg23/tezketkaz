@@ -73,6 +73,9 @@ node_modules/
 backend/.env
 backend/prisma/dev.db
 backend/prisma/dev.db-journal
+backend/prisma/test*.db
+backend/prisma/test*.db-journal
+backend/prisma/prisma/
 backend/firebase-admin.json
 backend/uploads/products/
 !backend/uploads/.gitkeep
