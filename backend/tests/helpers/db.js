@@ -57,6 +57,8 @@ async function setupTestDb(slug) {
   app.use('/api/products', require('../../src/routes/products'));
   app.use('/api/categories', require('../../src/routes/categories'));
   app.use('/api', require('../../src/routes/modifiers'));
+  app.use('/api', require('../../src/routes/zones'));
+  app.use('/api/admin/pricing-rules', require('../../src/routes/pricing-rules'));
   app.use('/api/orders', require('../../src/routes/orders'));
   // Stub the io getter — orders.js uses `req.app.get('io')`.
   const noopIo = { to: () => ({ emit: () => {} }), emit: () => {} };

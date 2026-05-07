@@ -3,9 +3,11 @@ const prisma = require('../db');
 const env = require('../config/env');
 const state = require('../services/redis-state');
 const push = require('../services/push');
+const { computeDelivery } = require('../services/pricing');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const { audit } = require('../lib/audit');
 const logger = require('../lib/logger');
+const { queues } = require('../lib/queues');
 
 // Order status flow:
 // pending → confirmed → collecting → readyForPickup → courierAssigned →
@@ -170,6 +172,67 @@ async function priceItem(prismaClient, productId, modifierSelections) {
   };
 }
 
+// ─── POST /api/orders/estimate — preview pricing without creating an order ──
+// Buyer-facing checkout call; computes subtotal + delivery + ETA. NO DB write.
+router.post('/estimate', authMiddleware, async (req, res, next) => {
+  try {
+    const { shopId, address, items } = req.body || {};
+    if (!shopId) return res.status(400).json({ error: 'shopId required' });
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items required' });
+    }
+    if (!address || !Number.isFinite(Number(address.lat)) || !Number.isFinite(Number(address.lng))) {
+      return res.status(400).json({ error: 'address.lat / address.lng required' });
+    }
+
+    const shop = await prisma.shop.findUnique({ where: { id: shopId } });
+    if (!shop) return res.status(404).json({ error: 'Shop not found' });
+
+    let subtotal = 0;
+    const itemsBreakdown = [];
+    for (const i of items) {
+      const qty = Math.max(1, Math.min(99, Number(i.quantity) || 1));
+      const { product, unitPrice } = await priceItem(prisma, i.productId, i.modifiers);
+      const total = unitPrice * qty;
+      subtotal += total;
+      itemsBreakdown.push({
+        productId: product.id,
+        productName: product.name,
+        quantity: qty,
+        unitPrice,
+        total,
+      });
+    }
+
+    const delivery = await computeDelivery(prisma, {
+      shopId,
+      destLat: Number(address.lat),
+      destLng: Number(address.lng),
+    });
+
+    if (delivery.outOfZone) {
+      return res.status(400).json({ error: 'out_of_zone' });
+    }
+
+    const minOrderMet = subtotal >= delivery.minOrder;
+    const total = subtotal + delivery.deliveryFee;
+
+    res.json({
+      subtotal,
+      deliveryFee: delivery.deliveryFee,
+      total,
+      minOrder: delivery.minOrder,
+      minOrderMet,
+      distanceKm: delivery.distanceKm,
+      etaMinutes: delivery.eta,
+      surgeFactor: delivery.surgeFactor,
+      surgeReason: delivery.surgeReason,
+      zoneId: delivery.zoneId,
+      items: itemsBreakdown,
+    });
+  } catch (err) { next(err); }
+});
+
 // ─── POST /api/orders — buyer places order ───────────────────────────────────
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
@@ -204,13 +267,32 @@ router.post('/', authMiddleware, async (req, res, next) => {
       });
     }
 
-    const deliveryFee = subtotal >= 100000 ? 0 : 12000;
-    const total = subtotal + deliveryFee;
-    const isPaid = paymentMethod === 'cash' ? false : false; // online → wait for webhook
-
     const shop = await prisma.shop.findUnique({ where: { id: shopId } });
     if (!shop) return res.status(404).json({ error: 'Shop not found' });
     if (!shop.isActive) return res.status(400).json({ error: 'Shop is not active' });
+
+    // Compute server-side delivery fee — never trust the client.
+    let deliveryFee = 0;
+    if (Number.isFinite(Number(deliveryLat)) && Number.isFinite(Number(deliveryLng))) {
+      const delivery = await computeDelivery(prisma, {
+        shopId,
+        destLat: Number(deliveryLat),
+        destLng: Number(deliveryLng),
+      });
+      if (delivery.outOfZone) {
+        return res.status(400).json({ error: 'out_of_zone' });
+      }
+      if (subtotal < delivery.minOrder) {
+        return res.status(400).json({ error: 'min_order_not_met', minOrder: delivery.minOrder });
+      }
+      deliveryFee = delivery.deliveryFee;
+    } else {
+      // Legacy fallback when client didn't send coords yet — keep old behaviour.
+      deliveryFee = subtotal >= 100000 ? 0 : 12000;
+    }
+
+    const total = subtotal + deliveryFee;
+    const isPaid = paymentMethod === 'cash' ? false : false; // online → wait for webhook
 
     const order = await prisma.order.create({
       data: {
@@ -236,6 +318,18 @@ router.post('/', authMiddleware, async (req, res, next) => {
       push.notifyShopNewOrder(order, members).catch(() => {});
     } catch (err) {
       logger.warn({ err: err.message }, 'shop push failed');
+    }
+
+    // Phase 2: enqueue dispatch + auto-cancel (no-ops when Redis disabled).
+    try {
+      await queues().dispatch.add('startDispatch', { type: 'startDispatch', orderId: order.id });
+      await queues().autoCancel.add(
+        'autoCancel',
+        { orderId: order.id, expectedStatus: order.status },
+        { delay: 10 * 60 * 1000 },
+      );
+    } catch (err) {
+      logger.warn({ err: err.message, orderId: order.id }, 'dispatch enqueue failed');
     }
 
     res.status(201).json({ order });

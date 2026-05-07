@@ -24,6 +24,9 @@ const courierRoutes = require('./routes/couriers');
 const paymentRoutes = require('./routes/payments');
 const adminRoutes = require('./routes/admin');
 const modifierRoutes = require('./routes/modifiers');
+const zoneRoutes = require('./routes/zones');
+const pricingRuleRoutes = require('./routes/pricing-rules');
+const courierShiftRoutes = require('./routes/courier-shifts');
 const { setupSockets } = require('./sockets');
 
 const app = express();
@@ -148,9 +151,14 @@ app.use('/api/shops', shopRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api', modifierRoutes); // modifier groups/options use absolute paths
+app.use('/api', zoneRoutes); // zones routes use absolute /api/shops/:id/zones, /api/zones/:id
 app.use('/api/orders', orderRoutes);
 app.use('/api/couriers', courierRoutes);
+// Phase 2 routes mounted at /api so they can declare absolute paths under
+// /couriers/me/... and /orders/:id/dispatch/...
+app.use('/api', courierShiftRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/admin/pricing-rules', pricingRuleRoutes);
 app.use('/api/admin', adminRoutes);
 
 // ─── User-uploaded product images ────────────────────────────────────────────
@@ -198,6 +206,23 @@ app.use((err, req, res, _next) => {
 setupSockets(io).catch((err) => {
   logger.error({ err }, 'sockets bootstrap failed');
 });
+
+// ─── BullMQ workers (Phase 2 dispatch / auto-cancel) ────────────────────────
+if (process.env.REDIS_URL || process.env.REDIS_HOST) {
+  try {
+    // eslint-disable-next-line global-require
+    const { startWorkers } = require('./lib/queues');
+    // eslint-disable-next-line global-require
+    const dispatchJobs = require('./jobs/dispatch');
+    startWorkers({
+      dispatch: dispatchJobs.dispatchHandler,
+      autoCancel: dispatchJobs.autoCancelHandler,
+    });
+    logger.info('BullMQ workers started');
+  } catch (err) {
+    logger.error({ err }, 'failed to start BullMQ workers');
+  }
+}
 
 // ─── Graceful shutdown ──────────────────────────────────────────────────────
 async function shutdown(signal) {
