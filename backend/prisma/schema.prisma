@@ -50,11 +50,22 @@ model User {
   rating         Float    @default(5.0)
   ordersCount    Int      @default(0)
 
+  // Courier real-time state (Phase 2). Persisted so it survives server
+  // restarts; live position is mirrored in Redis with TTL=15min.
+  isOnline       Boolean  @default(false)
+  lastSeenAt     DateTime?
+  activeOrderId  String?
+
+  // Phase 2 relations
+  shifts         CourierShift[]
+  dispatchOffers DispatchOffer[]
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@index([isAdmin])
   @@index([isCourier, courierStatus])
+  @@index([isOnline, courierStatus])
 }
 
 model OtpCode {
@@ -178,12 +189,106 @@ model Shop {
   members     ShopMember[]
   products    Product[]
   orders      Order[]
+  zones       DeliveryZone[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([vertical])
   @@index([isActive])
+}
+
+// Delivery zone polygon for a shop. Stored as JSON ring of [lat,lng] points
+// because we're on SQLite. Postgres+PostGIS migration replaces with
+// geometry(Polygon, 4326).
+model DeliveryZone {
+  id          String   @id @default(uuid())
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId      String
+  name        String
+
+  // JSON: [[lat1,lng1],[lat2,lng2],...]. Closed implicitly (last==first).
+  polygon     String
+
+  baseFee     Float    @default(12000)
+  perKmFee    Float    @default(2000)
+  freeKm      Float    @default(2)        // first N km included in baseFee
+  minOrder    Float    @default(0)
+
+  // Optional time-bounded availability (e.g. zone only active 8-22)
+  startsAt    String?  // "HH:MM"
+  endsAt      String?  // "HH:MM"
+
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([shopId, isActive])
+}
+
+// Courier shift (start/end of an availability session).
+model CourierShift {
+  id            String    @id @default(uuid())
+  courier       User      @relation(fields: [courierId], references: [id])
+  courierId     String
+
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+
+  // Optional zones the courier accepted to work in this shift.
+  // JSON: [zoneId1, zoneId2, ...]. Empty = any.
+  zoneIds       String?
+
+  totalEarned   Float     @default(0)
+  totalOrders   Int       @default(0)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([courierId, endedAt])
+}
+
+// Time-bounded surge / discount factor for a vertical or zone.
+model PricingRule {
+  id          String   @id @default(uuid())
+  vertical    String?  // null = global
+  zoneId      String?  // null = all zones in vertical
+
+  surgeFactor Float    @default(1.0)
+  reason      String   // "rain" | "peak_hours" | "low_supply" | "promo"
+
+  validFrom   DateTime
+  validUntil  DateTime
+
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([vertical, isActive, validFrom, validUntil])
+}
+
+// Dispatch offer ledger — every push to a courier is recorded so we can
+// retry, audit, and rank couriers by acceptance rate.
+model DispatchOffer {
+  id         String   @id @default(uuid())
+  orderId    String
+  courier    User     @relation(fields: [courierId], references: [id])
+  courierId  String
+
+  // pending | accepted | declined | timed_out | superseded
+  status     String   @default("pending")
+
+  score      Float    // composite ranking score at offer time
+  distanceKm Float?
+  expiresAt  DateTime
+
+  offeredAt  DateTime @default(now())
+  respondedAt DateTime?
+
+  @@unique([orderId, courierId])
+  @@index([orderId, status])
+  @@index([courierId, offeredAt])
 }
 
 // Hierarchical category tree. Categories can be global (shopId = null) or
