@@ -60,6 +60,20 @@ model User {
   shifts         CourierShift[]
   dispatchOffers DispatchOffer[]
 
+  // Phase 3 relations
+  loyalty            LoyaltyAccount?
+  loyaltyTransactions LoyaltyTransaction[]
+  couponRedemptions  CouponRedemption[]
+  reviewsAuthored    Review[]      @relation("Reviewer")
+  chatMessagesSent   ChatMessage[] @relation("ChatSender")
+  chatMessagesRecv   ChatMessage[] @relation("ChatReceiver")
+
+  // Referral (Phase 3 loyalty)
+  referralCode   String?  @unique
+  referredById   String?
+  referredBy     User?    @relation("Referrals", fields: [referredById], references: [id])
+  referrals      User[]   @relation("Referrals")
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -456,8 +470,22 @@ model Order {
   total           Float
   courierReward   Float    @default(12000)
 
+  // Phase 3 — promo + loyalty applied at checkout
+  couponCode      String?
+  discount        Float    @default(0)
+  loyaltyEarned   Int      @default(0)   // points credited on delivery
+  loyaltySpent    Int      @default(0)   // points debited at checkout
+
+  // Phase 3 — scheduled delivery (null = ASAP)
+  scheduledFor    DateTime?
+  scheduledOrder  ScheduledOrder?
+
   // Items
   items           OrderItem[]
+
+  // Phase 3 relations
+  reviews         Review[]
+  chatMessages    ChatMessage[]
 
   // Timestamps for analytics
   createdAt       DateTime @default(now())
@@ -468,7 +496,7 @@ model Order {
   cancelledAt     DateTime?
   cancelReason    String?
 
-  // Rating after delivery
+  // Rating after delivery (legacy quick-rating; richer reviews in Review model)
   buyerRating     Int?    // 1-5
   buyerReview     String?
   courierRating   Int?    // Курьер ставит оценку покупателю
@@ -478,6 +506,7 @@ model Order {
   @@index([shopId])
   @@index([courierId])
   @@index([status])
+  @@index([scheduledFor])
 }
 
 model OrderItem {
@@ -503,10 +532,160 @@ model Notification {
   userId    String
   title     String
   body      String
-  type      String   // order_update, promo, system
+  type      String   // order_update, promo, system, chat
   data      String?  // JSON payload
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@index([userId, isRead])
+}
+
+// ── Phase 3: promo, loyalty, reviews, chat, scheduled orders ────────────────
+
+// Promo codes. `code` is the human-readable identifier and primary key.
+model Coupon {
+  code         String   @id
+  // PERCENT (value is 1-100), FIXED (value is UZS amount), FREE_DELIVERY (value=0)
+  type         String
+  value        Float    @default(0)
+
+  minOrder     Float?
+  maxDiscount  Float?
+
+  validFrom    DateTime
+  validUntil   DateTime
+
+  // Total redemptions across all users; null = unlimited.
+  usageLimit   Int?
+  usagePerUser Int      @default(1)
+  usedCount    Int      @default(0)
+
+  // Optional scoping: if both null, applies globally.
+  vertical     String?
+  shopId       String?
+
+  // First-order-only flag (e.g. WELCOME20).
+  firstOrderOnly Boolean @default(false)
+
+  isActive     Boolean  @default(true)
+
+  redemptions  CouponRedemption[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive, validFrom, validUntil])
+  @@index([vertical])
+  @@index([shopId])
+}
+
+model CouponRedemption {
+  id         String   @id @default(uuid())
+  coupon     Coupon   @relation(fields: [couponCode], references: [code])
+  couponCode String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  orderId    String
+  discount   Float
+  redeemedAt DateTime @default(now())
+
+  @@unique([couponCode, orderId])
+  @@index([userId])
+  @@index([orderId])
+}
+
+// Per-user loyalty wallet. Tier upgrade rules live in src/services/loyalty.js.
+model LoyaltyAccount {
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String   @id
+
+  // bronze | silver | gold | platinum
+  tier         String   @default("bronze")
+  points       Int      @default(0)
+  cashback     Float    @default(0)
+
+  lifetimeSpent Float   @default(0)   // drives tier promotions
+
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+}
+
+model LoyaltyTransaction {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  // earn_order | spend_order | bonus_referral | refund | promo | adjustment
+  reason    String
+  delta     Int       // signed; positive earns, negative spends
+  orderId   String?
+  metadata  String?   // JSON
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([orderId])
+}
+
+// Polymorphic review: target may be a Shop, a Courier (User), or a Product.
+model Review {
+  id          String   @id @default(uuid())
+  order       Order    @relation(fields: [orderId], references: [id])
+  orderId     String
+  reviewer    User     @relation("Reviewer", fields: [reviewerId], references: [id])
+  reviewerId  String
+
+  // SHOP | COURIER | PRODUCT
+  targetType  String
+  targetId    String
+
+  rating      Int      // 1..5
+  text        String?
+  // JSON array of uploaded image URLs.
+  photos      String?
+  isVisible   Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([orderId, reviewerId, targetType, targetId])
+  @@index([targetType, targetId])
+  @@index([reviewerId])
+}
+
+// Chat messages between buyer and courier (or shop) within an order.
+model ChatMessage {
+  id          String   @id @default(uuid())
+  order       Order    @relation(fields: [orderId], references: [id])
+  orderId     String
+
+  sender      User     @relation("ChatSender", fields: [senderId], references: [id])
+  senderId    String
+  receiver    User     @relation("ChatReceiver", fields: [receiverId], references: [id])
+  receiverId  String
+
+  text        String?
+  imageUrl    String?
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+
+  createdAt   DateTime @default(now())
+
+  @@index([orderId, createdAt])
+  @@index([receiverId, isRead])
+}
+
+// Scheduled-for-later order. Dispatcher activation runs prep+ETA before the slot.
+model ScheduledOrder {
+  id              String   @id @default(uuid())
+  order           Order    @relation(fields: [orderId], references: [id])
+  orderId         String   @unique
+  scheduledFor    DateTime
+  reminderSentAt  DateTime?
+  activatedAt     DateTime?
+  // pending | activated | cancelled | completed
+  status          String   @default("pending")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([scheduledFor, status])
 }
