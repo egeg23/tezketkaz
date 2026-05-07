@@ -21,10 +21,45 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: 'backend/package-lock.json'
-      - run: npm ci
+      # Wrap install + prisma generate in a retry too — failed runs
+      # consistently die before the test step, suggesting transient
+      # network/registry issues during install.
+      - name: Install backend deps (with 1 retry)
         working-directory: backend
-      - run: npx prisma generate
+        run: |
+          set -e
+          for attempt in 1 2; do
+            echo "::group::npm ci — attempt $attempt"
+            if npm ci --prefer-offline --no-audit --no-fund; then
+              echo "::endgroup::"
+              break
+            fi
+            echo "::endgroup::"
+            if [ $attempt -eq 2 ]; then
+              echo "npm ci failed twice; aborting."
+              exit 1
+            fi
+            echo "Retrying after 5s..."
+            sleep 5
+          done
+      - name: Prisma generate (with 1 retry)
         working-directory: backend
+        run: |
+          set -e
+          for attempt in 1 2; do
+            echo "::group::prisma generate — attempt $attempt"
+            if npx prisma generate; then
+              echo "::endgroup::"
+              break
+            fi
+            echo "::endgroup::"
+            if [ $attempt -eq 2 ]; then
+              echo "prisma generate failed twice; aborting."
+              exit 1
+            fi
+            echo "Retrying after 5s..."
+            sleep 5
+          done
       # --runInBand serialises tests so concurrent `npx prisma migrate deploy`
       # calls don't race on shared filesystem state. Slower but stable.
       # Wrapped in a retry loop because we've observed sporadic CI flakes
