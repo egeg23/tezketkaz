@@ -82,6 +82,28 @@ router.patch('/addresses/:id', authMiddleware, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── POST /api/users/addresses/:id/default ───────────────────────────────────
+// Mark this address as the user's default. Unsets every other address atomically.
+router.post('/addresses/:id/default', authMiddleware, async (req, res, next) => {
+  try {
+    const existing = await prisma.address.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.userId !== req.user.id) {
+      return res.status(404).json({ error: 'Address not found' });
+    }
+    const [, address] = await prisma.$transaction([
+      prisma.address.updateMany({
+        where: { userId: req.user.id, id: { not: req.params.id } },
+        data: { isDefault: false },
+      }),
+      prisma.address.update({
+        where: { id: req.params.id },
+        data: { isDefault: true },
+      }),
+    ]);
+    res.json({ address });
+  } catch (err) { next(err); }
+});
+
 // ─── DELETE /api/users/addresses/:id ─────────────────────────────────────────
 router.delete('/addresses/:id', authMiddleware, async (req, res, next) => {
   try {

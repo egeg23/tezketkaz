@@ -1,13 +1,63 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
+// ─── Phase-1 categories (idempotent via upsert on (slug, shopId) unique) ────
+const SEED_CATEGORIES = [
+  // grocery
+  { vertical: 'grocery', slug: 'produce', nameUz: 'Sabzavot va mevalar', nameRu: 'Овощи и фрукты', sortOrder: 10 },
+  { vertical: 'grocery', slug: 'meat-poultry', nameUz: "Go'sht/parranda", nameRu: 'Мясо/птица', sortOrder: 20 },
+  { vertical: 'grocery', slug: 'dairy', nameUz: 'Sutli mahsulotlar', nameRu: 'Молочные продукты', sortOrder: 30 },
+  // restaurant
+  { vertical: 'restaurant', slug: 'pizza', nameUz: 'Pitsa', nameRu: 'Пицца', sortOrder: 10 },
+  { vertical: 'restaurant', slug: 'burgers', nameUz: 'Burgerlar', nameRu: 'Бургеры', sortOrder: 20 },
+  { vertical: 'restaurant', slug: 'sushi', nameUz: 'Sushi', nameRu: 'Суши', sortOrder: 30 },
+  // pharmacy
+  { vertical: 'pharmacy', slug: 'otc', nameUz: 'Retseptsiz', nameRu: 'Безрецептурные', sortOrder: 10 },
+  { vertical: 'pharmacy', slug: 'vitamins', nameUz: 'Vitaminlar', nameRu: 'Витамины', sortOrder: 20 },
+  { vertical: 'pharmacy', slug: 'hygiene', nameUz: 'Gigiyena', nameRu: 'Гигиена', sortOrder: 30 },
+  // electronics
+  { vertical: 'electronics', slug: 'accessories', nameUz: 'Aksessuarlar', nameRu: 'Аксессуары', sortOrder: 10 },
+  { vertical: 'electronics', slug: 'chargers', nameUz: 'Quvvatlagichlar', nameRu: 'Зарядки', sortOrder: 20 },
+  { vertical: 'electronics', slug: 'headphones', nameUz: 'Quloqchinlar', nameRu: 'Наушники', sortOrder: 30 },
+];
+
+async function seedCategories() {
+  for (const c of SEED_CATEGORIES) {
+    // (slug, shopId) is the unique. shopId=null for global categories — Prisma
+    // can't put null inside a compound unique selector on SQLite, so we
+    // emulate upsert with findFirst + create.
+    const existing = await prisma.category.findFirst({
+      where: { slug: c.slug, shopId: null },
+    });
+    if (existing) {
+      await prisma.category.update({
+        where: { id: existing.id },
+        data: {
+          vertical: c.vertical,
+          nameUz: c.nameUz,
+          nameRu: c.nameRu,
+          sortOrder: c.sortOrder,
+          isActive: true,
+        },
+      });
+    } else {
+      await prisma.category.create({ data: { ...c, shopId: null } });
+    }
+  }
+}
+
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // Idempotent — skip if seed users already exist (won't wipe production data).
+  // Categories are seeded every run (idempotent upsert) so the four-vertical
+  // tree is always present even if user/shop seed was already applied.
+  await seedCategories();
+  console.log(`  ✓ ${SEED_CATEGORIES.length} categories upserted`);
+
+  // Idempotent — skip rest of seed if seed users already exist.
   const existing = await prisma.user.findUnique({ where: { phone: '+998901234567' } });
   if (existing) {
-    console.log('  ✓ Already seeded — skipping');
+    console.log('  ✓ Already seeded — skipping users/shop/orders');
     return;
   }
 

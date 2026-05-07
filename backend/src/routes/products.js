@@ -45,6 +45,7 @@ const ALLOWED_FIELDS = [
   'name', 'nameUz', 'description', 'ingredients',
   'price', 'discountPrice', 'unit', 'category',
   'imageUrl', 'isAvailable', 'stock',
+  'categoryId',
 ];
 
 function pickProductFields(input) {
@@ -58,7 +59,28 @@ function pickProductFields(input) {
   else if (out.discountPrice !== undefined) out.discountPrice = Number(out.discountPrice);
   if (out.stock !== undefined) out.stock = parseInt(out.stock, 10) || 0;
   if (out.isAvailable !== undefined) out.isAvailable = Boolean(out.isAvailable);
+  if (out.categoryId === '' || out.categoryId === null) out.categoryId = null;
   return out;
+}
+
+// Lower-cased composite of name + nameUz + description for LIKE-search.
+function buildSearchText(p) {
+  const parts = [p.name, p.nameUz, p.description].filter(Boolean).map((s) => String(s));
+  return parts.join(' ').toLowerCase();
+}
+
+// Decode a base64url-ish JSON cursor; returns null on any failure.
+function decodeCursor(cursor) {
+  if (!cursor) return null;
+  try {
+    const json = Buffer.from(String(cursor), 'base64').toString('utf8');
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+function encodeCursor(obj) {
+  return Buffer.from(JSON.stringify(obj), 'utf8').toString('base64');
 }
 
 function validateProduct(p) {
@@ -73,21 +95,126 @@ function validateProduct(p) {
 }
 
 // ─── GET /api/products ──────────────────────────────────────────────────────
-// Public catalogue (only available items)
+// Public catalogue. Supports filtering, search, sort, cursor pagination.
+//   q          — full-text on `searchText` (lowercased LIKE)
+//   shopId     — single shop
+//   categoryId — structured category (Phase 1)
+//   category   — legacy free-text category (back-compat)
+//   vertical   — joins Shop.vertical
+//   priceMin/priceMax
+//   isAvailable — default true
+//   sort       — new (default) | price_asc | price_desc | rating
+//   cursor     — base64({createdAt, id}) for "new"; base64({offset}) otherwise
+//   limit      — default 20, max 100
 router.get('/', async (req, res, next) => {
   try {
-    const { shopId, category, search } = req.query;
-    const where = { isAvailable: true };
+    const {
+      q, shopId, categoryId, category, vertical,
+      priceMin, priceMax, sort, cursor,
+    } = req.query;
+
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+
+    const where = {};
+    if (req.query.isAvailable === undefined) {
+      where.isAvailable = true;
+    } else {
+      where.isAvailable = req.query.isAvailable === 'true' || req.query.isAvailable === '1';
+    }
     if (shopId) where.shopId = shopId;
+    if (categoryId) where.categoryId = categoryId;
     if (category && category !== 'all') where.category = category;
-    if (search) {
+    if (vertical) where.shop = { vertical };
+
+    if (priceMin !== undefined || priceMax !== undefined) {
+      where.price = {};
+      if (priceMin !== undefined && priceMin !== '') where.price.gte = Number(priceMin);
+      if (priceMax !== undefined && priceMax !== '') where.price.lte = Number(priceMax);
+    }
+
+    if (q && String(q).trim()) {
+      const needle = String(q).toLowerCase();
+      // Prefer searchText, but fall back to name/nameUz so legacy rows still match.
       where.OR = [
-        { name: { contains: search } },
-        { nameUz: { contains: search } },
+        { searchText: { contains: needle } },
+        { name: { contains: needle } },
+        { nameUz: { contains: needle } },
       ];
     }
-    const products = await prisma.product.findMany({ where, orderBy: { name: 'asc' } });
-    res.json({ products });
+
+    const sortKey = sort || 'new';
+    const include = {
+      categoryRef: { select: { id: true, nameRu: true, nameUz: true } },
+    };
+    if (sortKey === 'rating') include.shop = { select: { rating: true } };
+
+    let items = [];
+    let nextCursor = null;
+
+    if (sortKey === 'new') {
+      // Cursor on (createdAt desc, id desc).
+      const c = decodeCursor(cursor);
+      const cursorWhere = (c && c.createdAt && c.id)
+        ? {
+            OR: [
+              { createdAt: { lt: new Date(c.createdAt) } },
+              {
+                AND: [
+                  { createdAt: new Date(c.createdAt) },
+                  { id: { lt: c.id } },
+                ],
+              },
+            ],
+          }
+        : null;
+
+      const finalWhere = cursorWhere ? { AND: [where, cursorWhere] } : where;
+
+      items = await prisma.product.findMany({
+        where: finalWhere,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+        include,
+      });
+      if (items.length > limit) {
+        const last = items[limit - 1];
+        items = items.slice(0, limit);
+        nextCursor = encodeCursor({ createdAt: last.createdAt.toISOString(), id: last.id });
+      }
+    } else {
+      // Offset-based fallback. SQLite can't easily order by relation field,
+      // so for "rating" we fetch a broader set and sort/page in JS.
+      const c = decodeCursor(cursor);
+      const offset = (c && Number.isFinite(c.offset)) ? Math.max(0, c.offset) : 0;
+
+      let orderBy;
+      let postSort = null;
+      if (sortKey === 'price_asc') orderBy = [{ price: 'asc' }, { id: 'asc' }];
+      else if (sortKey === 'price_desc') orderBy = [{ price: 'desc' }, { id: 'desc' }];
+      else if (sortKey === 'rating') {
+        // Stable secondary order; final sort done in JS.
+        orderBy = [{ createdAt: 'desc' }];
+        postSort = (a, b) => (b.shop?.rating || 0) - (a.shop?.rating || 0);
+      } else {
+        orderBy = [{ createdAt: 'desc' }];
+      }
+
+      const fetched = await prisma.product.findMany({
+        where,
+        orderBy,
+        skip: offset,
+        take: limit + 1,
+        include,
+      });
+      items = fetched;
+      if (postSort) items.sort(postSort);
+      if (items.length > limit) {
+        items = items.slice(0, limit);
+        nextCursor = encodeCursor({ offset: offset + limit });
+      }
+    }
+
+    res.json({ items, products: items, nextCursor });
   } catch (err) { next(err); }
 });
 
@@ -162,6 +289,13 @@ router.post('/', authMiddleware, async (req, res, next) => {
     const errors = validateProduct(data);
     if (errors.length) return res.status(400).json({ error: errors.join('; ') });
 
+    if (data.categoryId) {
+      const cat = await prisma.category.findUnique({ where: { id: data.categoryId } });
+      if (!cat) return res.status(400).json({ error: 'categoryId does not exist' });
+    }
+
+    data.searchText = buildSearchText(data);
+
     const product = await prisma.product.create({
       data: { ...data, shopId },
     });
@@ -178,6 +312,21 @@ router.patch('/:id', authMiddleware, async (req, res, next) => {
       return res.status(403).json({ error: 'Not a shop member' });
     }
     const data = pickProductFields(req.body);
+
+    if (data.categoryId) {
+      const cat = await prisma.category.findUnique({ where: { id: data.categoryId } });
+      if (!cat) return res.status(400).json({ error: 'categoryId does not exist' });
+    }
+
+    // Re-build searchText if any of its source fields were touched.
+    if (data.name !== undefined || data.nameUz !== undefined || data.description !== undefined) {
+      data.searchText = buildSearchText({
+        name: data.name ?? product.name,
+        nameUz: data.nameUz ?? product.nameUz,
+        description: data.description ?? product.description,
+      });
+    }
+
     const updated = await prisma.product.update({
       where: { id: req.params.id },
       data,
@@ -231,6 +380,7 @@ router.post('/bulk', authMiddleware, async (req, res, next) => {
         continue;
       }
       try {
+        data.searchText = buildSearchText(data);
         await prisma.product.create({ data: { ...data, shopId } });
         results.created++;
       } catch (e) {
@@ -276,6 +426,7 @@ router.post('/import', authMiddleware, uploadSheet.single('file'), async (req, r
         continue;
       }
       try {
+        data.searchText = buildSearchText(data);
         await prisma.product.create({ data: { ...data, shopId } });
         results.created++;
       } catch (e) {

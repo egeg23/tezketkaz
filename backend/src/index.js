@@ -17,11 +17,13 @@ const redisLib = require('./lib/redis');
 const authRoutes = require('./routes/auth');
 const shopRoutes = require('./routes/shops');
 const productRoutes = require('./routes/products');
+const categoryRoutes = require('./routes/categories');
 const orderRoutes = require('./routes/orders');
 const userRoutes = require('./routes/users');
 const courierRoutes = require('./routes/couriers');
 const paymentRoutes = require('./routes/payments');
 const adminRoutes = require('./routes/admin');
+const modifierRoutes = require('./routes/modifiers');
 const { setupSockets } = require('./sockets');
 
 const app = express();
@@ -144,6 +146,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/shops', shopRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api', modifierRoutes); // modifier groups/options use absolute paths
 app.use('/api/orders', orderRoutes);
 app.use('/api/couriers', courierRoutes);
 app.use('/api/payments', paymentRoutes);

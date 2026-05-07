@@ -77,6 +77,99 @@ async function nextOrderNumber(shopId) {
   return `K-${num}`;
 }
 
+// Compute per-unit price for an item with modifiers.
+// Validates min/max selections per group; throws { status: 400 } on violation.
+//
+// Returns { basePrice, unitPrice, modifiersSnapshot }.
+async function priceItem(prismaClient, productId, modifierSelections) {
+  const product = await prismaClient.product.findUnique({
+    where: { id: productId },
+    include: { modifierGroups: { include: { options: true } } },
+  });
+  if (!product) {
+    throw Object.assign(new Error(`Product ${productId} not found`), { status: 400 });
+  }
+  if (!product.isAvailable) {
+    throw Object.assign(new Error(`${product.name} is not available`), { status: 400 });
+  }
+
+  const basePrice = product.discountPrice ?? product.price;
+
+  // Backwards compat: no groups → no modifiers.
+  if (!product.modifierGroups || product.modifierGroups.length === 0) {
+    return { product, basePrice, unitPrice: basePrice, modifiersSnapshot: [] };
+  }
+
+  const selections = Array.isArray(modifierSelections) ? modifierSelections : [];
+  const selectionsByGroup = new Map();
+  for (const sel of selections) {
+    if (!sel || !sel.groupId) continue;
+    selectionsByGroup.set(sel.groupId, Array.isArray(sel.optionIds) ? sel.optionIds : []);
+  }
+
+  // Validate every selection refers to a real group on this product, and that
+  // optionIds are unique + belong to that group.
+  const groupById = new Map(product.modifierGroups.map((g) => [g.id, g]));
+  for (const [gid, optIds] of selectionsByGroup) {
+    const group = groupById.get(gid);
+    if (!group) {
+      throw Object.assign(new Error(`Modifier group ${gid} does not belong to product`), { status: 400 });
+    }
+    const uniq = new Set(optIds);
+    if (uniq.size !== optIds.length) {
+      throw Object.assign(new Error(`Duplicate options in group ${group.nameRu}`), { status: 400 });
+    }
+    if (uniq.size < group.minSelect) {
+      throw Object.assign(new Error(`Group "${group.nameRu}" requires at least ${group.minSelect} option(s)`), { status: 400 });
+    }
+    if (uniq.size > group.maxSelect) {
+      throw Object.assign(new Error(`Group "${group.nameRu}" allows at most ${group.maxSelect} option(s)`), { status: 400 });
+    }
+    const validIds = new Set(group.options.map((o) => o.id));
+    for (const oid of optIds) {
+      if (!validIds.has(oid)) {
+        throw Object.assign(new Error(`Option ${oid} not in group ${group.nameRu}`), { status: 400 });
+      }
+      const opt = group.options.find((o) => o.id === oid);
+      if (!opt.isAvailable) {
+        throw Object.assign(new Error(`Option "${opt.nameRu}" is not available`), { status: 400 });
+      }
+    }
+  }
+
+  // Reject if any required group (minSelect > 0) wasn't selected.
+  for (const group of product.modifierGroups) {
+    if (group.minSelect > 0 && !selectionsByGroup.has(group.id)) {
+      throw Object.assign(new Error(`Group "${group.nameRu}" is required`), { status: 400 });
+    }
+  }
+
+  // Build snapshot + sum deltas.
+  let delta = 0;
+  const modifiersSnapshot = [];
+  for (const group of product.modifierGroups) {
+    const optIds = selectionsByGroup.get(group.id) || [];
+    for (const oid of optIds) {
+      const opt = group.options.find((o) => o.id === oid);
+      delta += opt.priceDelta || 0;
+      modifiersSnapshot.push({
+        groupId: group.id,
+        groupName: group.nameRu,
+        optionId: opt.id,
+        optionName: opt.nameRu,
+        priceDelta: opt.priceDelta || 0,
+      });
+    }
+  }
+
+  return {
+    product,
+    basePrice,
+    unitPrice: basePrice + delta,
+    modifiersSnapshot,
+  };
+}
+
 // ─── POST /api/orders — buyer places order ───────────────────────────────────
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
@@ -92,21 +185,24 @@ router.post('/', authMiddleware, async (req, res, next) => {
       return res.status(400).json({ error: 'Invalid payment method' });
     }
 
-    const productIds = items.map((i) => i.productId);
-    const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
-    const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
-
     let subtotal = 0;
-    const orderItemsData = items.map((i) => {
-      const p = productMap[i.productId];
-      if (!p) throw Object.assign(new Error(`Product ${i.productId} not found`), { status: 400 });
-      if (!p.isAvailable) throw Object.assign(new Error(`${p.name} is not available`), { status: 400 });
+    const orderItemsData = [];
+    for (const i of items) {
       const qty = Math.max(1, Math.min(99, Number(i.quantity) || 1));
-      const price = p.discountPrice || p.price;
-      const total = price * qty;
+      const { product, basePrice, unitPrice, modifiersSnapshot } =
+        await priceItem(prisma, i.productId, i.modifiers);
+      const total = unitPrice * qty;
       subtotal += total;
-      return { productId: p.id, productName: p.name, quantity: qty, price, total };
-    });
+      orderItemsData.push({
+        productId: product.id,
+        productName: product.name,
+        quantity: qty,
+        price: unitPrice,
+        basePrice,
+        total,
+        modifiers: modifiersSnapshot.length ? JSON.stringify(modifiersSnapshot) : null,
+      });
+    }
 
     const deliveryFee = subtotal >= 100000 ? 0 : 12000;
     const total = subtotal + deliveryFee;
@@ -482,3 +578,4 @@ router.post('/:id/rate', authMiddleware, async (req, res, next) => {
 });
 
 module.exports = router;
+module.exports.priceItem = priceItem;
