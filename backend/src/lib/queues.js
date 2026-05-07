@@ -26,6 +26,7 @@ function noopQueues() {
     dispatch: makeNoopQueue('dispatch'),
     autoCancel: makeNoopQueue('autoCancel'),
     scheduled: makeNoopQueue('scheduled'),
+    payouts: makeNoopQueue('payouts'),
   };
 }
 
@@ -47,6 +48,7 @@ function queues() {
     dispatch: new Queue('dispatch', { connection }),
     autoCancel: new Queue('autoCancel', { connection }),
     scheduled: new Queue('scheduled', { connection }),
+    payouts: new Queue('payouts', { connection }),
   };
   return _queues;
 }
@@ -65,6 +67,9 @@ function startWorkers(handlers) {
   ];
   if (handlers.scheduled) {
     _workers.push(new Worker('scheduled', handlers.scheduled, { connection, concurrency: 2 }));
+  }
+  if (handlers.payouts) {
+    _workers.push(new Worker('payouts', handlers.payouts, { connection, concurrency: 1 }));
   }
   for (const w of _workers) {
     w.on('failed', (job, err) => logger.error({ queue: w.name, jobId: job?.id, err }, 'worker job failed'));

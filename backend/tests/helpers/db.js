@@ -63,6 +63,9 @@ async function setupTestDb(slug) {
   // Phase 3 routes (reviews, chat) — routers declare absolute paths.
   try { app.use('/api', require('../../src/routes/reviews')); } catch { /* missing in unrelated tests */ }
   try { app.use('/api', require('../../src/routes/chat')); } catch { /* missing in unrelated tests */ }
+  // Phase 4 — admin + buyer disputes.
+  try { app.use('/api/admin', require('../../src/routes/admin')); } catch { /* noop */ }
+  try { app.use('/api', require('../../src/routes/buyer-disputes')); } catch { /* noop */ }
   // Stub the io getter — orders.js uses `req.app.get('io')`.
   const noopIo = { to: () => ({ emit: () => {} }), emit: () => {} };
   app.set('io', noopIo);
