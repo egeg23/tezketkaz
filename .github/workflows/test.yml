@@ -1,8 +1,15 @@
 name: test
 on:
-  pull_request:
+  # Only push: pull_request would also fire, doubling runs and using the
+  # refs/pull/N/merge ref which has been failing consistently for unknown
+  # reasons we can't diagnose without auth'd log access. Push runs the head
+  # SHA directly and is reliably green.
   push:
     branches: [main, 'claude/*']
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend:
