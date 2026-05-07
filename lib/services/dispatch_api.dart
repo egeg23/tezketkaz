@@ -23,12 +23,18 @@ class DispatchApi {
     required Map<String, dynamic> address,
     required List<Map<String, dynamic>> items,
     String? promoCode,
+    String? couponCode,
+    int? loyaltyPoints,
   }) async {
+    final code = couponCode ?? promoCode;
     final res = await _api.post('/api/orders/estimate', {
       'shopId': shopId,
       'address': address,
       'items': items,
-      if (promoCode != null && promoCode.isNotEmpty) 'promoCode': promoCode,
+      if (code != null && code.isNotEmpty) 'couponCode': code,
+      if (code != null && code.isNotEmpty) 'promoCode': code,
+      if (loyaltyPoints != null && loyaltyPoints > 0)
+        'loyaltyPoints': loyaltyPoints,
     });
     final data = res.data;
     if (data is Map<String, dynamic>) return data;

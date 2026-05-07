@@ -26,6 +26,8 @@ import 'screens/buyer/tracking_screen.dart';
 import 'screens/buyer/profile_screen.dart';
 import 'screens/buyer/shops_screen.dart';
 import 'screens/buyer/address_book_screen.dart';
+import 'screens/buyer/promo_screen.dart';
+import 'screens/buyer/loyalty_screen.dart';
 import 'screens/courier/courier_shell.dart';
 import 'screens/courier/courier_home_screen.dart';
 import 'screens/courier/active_order_screen.dart';
@@ -37,6 +39,8 @@ import 'screens/shop/shop_other_screens.dart';
 import 'screens/shop/shop_products_screen.dart';
 import 'screens/shared/role_switcher_screen.dart';
 import 'screens/shared/courier_verification_screen.dart';
+import 'screens/shared/chat_screen.dart';
+import 'screens/shared/reviews_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -107,6 +111,41 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       GoRoute(path: '/auth/name', builder: (_, __) => const NameScreen()),
       GoRoute(path: '/switch-role', builder: (_, __) => const RoleSwitcherScreen()),
       GoRoute(path: '/courier-verification', builder: (_, __) => const CourierVerificationScreen()),
+
+      // Phase 3 — chat / reviews / loyalty / promo (modal screens, no shell).
+      GoRoute(
+        path: '/order/:orderId/chat',
+        builder: (_, s) => ChatScreen(
+          orderId: s.pathParameters['orderId'] ?? '',
+          receiverName: s.extra is Map
+              ? (s.extra as Map)['receiverName'] as String?
+              : null,
+        ),
+      ),
+      GoRoute(
+        path: '/reviews/:targetType/:targetId',
+        builder: (_, s) => ReviewsScreen(
+          targetType: s.pathParameters['targetType'] ?? 'shop',
+          targetId: s.pathParameters['targetId'] ?? '',
+          title: s.extra is String ? s.extra as String : null,
+        ),
+      ),
+      GoRoute(
+        path: '/buyer/promo',
+        builder: (_, s) {
+          final extra = s.extra is Map<String, dynamic>
+              ? s.extra as Map<String, dynamic>
+              : const <String, dynamic>{};
+          return PromoScreen(
+            shopId: extra['shopId'] as String?,
+            subtotal: extra['subtotal'] as num?,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/buyer/loyalty',
+        builder: (_, __) => const LoyaltyScreen(),
+      ),
 
       ShellRoute(
         builder: (_, __, child) => BuyerShell(child: child),

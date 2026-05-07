@@ -130,6 +130,23 @@ class ProfileScreen extends StatelessWidget {
 
           const SizedBox(height: 10),
 
+          // ── Loyalty / promo ────────────────────────────────────────────────
+          _Card(children: [
+            _Tile(
+              icon: '⭐',
+              title: 'Bonuslar va daraja',
+              subtitle: 'Cashback · ballar · referal',
+              onTap: () => context.push('/buyer/loyalty'),
+            ),
+            _Tile(
+              icon: '🎟️',
+              title: 'Promo kodlar',
+              onTap: () => context.push('/buyer/promo'),
+            ),
+          ]),
+
+          const SizedBox(height: 10),
+
           _Card(children: [
             _Tile(icon: '🔔', title: 'Bildirishnomalar', onTap: () {}),
             _Tile(icon: '🌐', title: 'Til', subtitle: 'O\'zbek / Русский', onTap: () {}),

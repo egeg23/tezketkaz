@@ -213,6 +213,8 @@ class _ShopCard extends StatelessWidget {
             extra: {'shopId': shop.id, 'shopName': shop.name},
           );
         },
+        onLongPress: () =>
+            context.push('/reviews/shop/${shop.id}', extra: shop.name),
         borderRadius: BorderRadius.circular(AppRadii.lg),
         child: Container(
           padding: const EdgeInsets.all(14),

@@ -77,5 +77,26 @@ class SocketService {
   void offOrderUpdated([SocketHandler? handler]) =>
       off('order:updated', handler);
 
+  // ── Phase 3 chat helpers ─────────────────────────────────────────────────
+  // Server emits `chat:message` with the full ChatMessage payload, plus
+  // a generic `notification` channel used for global toasts (new chat
+  // message arrived while user is on another screen, etc).
+
+  void joinOrderChat(String orderId) {
+    emit('chat:join', {'orderId': orderId});
+  }
+
+  void leaveOrderChat(String orderId) {
+    emit('chat:leave', {'orderId': orderId});
+  }
+
+  void onChatMessage(SocketHandler handler) => on('chat:message', handler);
+  void offChatMessage([SocketHandler? handler]) =>
+      off('chat:message', handler);
+
+  void onNotification(SocketHandler handler) => on('notification', handler);
+  void offNotification([SocketHandler? handler]) =>
+      off('notification', handler);
+
   bool get isConnected => _socket?.connected ?? false;
 }

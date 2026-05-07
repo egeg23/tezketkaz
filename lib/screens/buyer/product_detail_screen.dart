@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../l10n/l10n.dart';
 import '../../models/models.dart';
@@ -205,6 +206,39 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             )),
                       ],
                     ],
+                  ),
+                ),
+                // Reviews tile — opens the public reviews screen for this
+                // product. Phase 3 wiring; the screen handles its own load.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                  child: InkWell(
+                    onTap: () => context
+                        .push('/reviews/product/${p.id}', extra: p.name),
+                    borderRadius: BorderRadius.circular(AppRadii.md),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(AppRadii.md),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Row(
+                        children: const [
+                          Icon(Icons.star_rounded,
+                              color: AppColors.warning, size: 20),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text('Sharhlar',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14)),
+                          ),
+                          Icon(Icons.chevron_right_rounded,
+                              color: AppColors.textHint),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
                 if (_error != null)

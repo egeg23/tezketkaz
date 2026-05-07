@@ -51,6 +51,10 @@ class CartEstimate {
   final String? surgeReason;
   final String? zoneId;
   final bool outOfZone;
+  // Phase 3 — coupon + loyalty deductions surfaced separately so the cart
+  // breakdown can render them as individual rows.
+  final double couponDiscount;
+  final double loyaltyDiscount;
   final DateTime fetchedAt;
 
   const CartEstimate({
@@ -65,6 +69,8 @@ class CartEstimate {
     this.surgeReason,
     this.zoneId,
     this.outOfZone = false,
+    this.couponDiscount = 0,
+    this.loyaltyDiscount = 0,
     required this.fetchedAt,
   });
 
@@ -80,6 +86,9 @@ class CartEstimate {
     surgeReason: j['surgeReason'] as String?,
     zoneId: j['zoneId'] as String?,
     outOfZone: j['outOfZone'] as bool? ?? false,
+    couponDiscount: (j['couponDiscount'] as num?)?.toDouble() ??
+        (j['discount'] as num?)?.toDouble() ?? 0,
+    loyaltyDiscount: (j['loyaltyDiscount'] as num?)?.toDouble() ?? 0,
     fetchedAt: DateTime.now(),
   );
 
@@ -95,6 +104,8 @@ class CartEstimate {
     surgeReason: surgeReason,
     zoneId: zoneId,
     outOfZone: outOfZone ?? this.outOfZone,
+    couponDiscount: couponDiscount,
+    loyaltyDiscount: loyaltyDiscount,
     fetchedAt: fetchedAt,
   );
 }
@@ -106,19 +117,48 @@ class CartProvider extends ChangeNotifier {
   CartEstimate? _lastEstimate;
   String? _lastEstimateKey;
 
+  // ── Phase 3 — promo / loyalty / scheduling fields ─────────────────────────
+  String? _couponCode;
+  int _loyaltyPoints = 0;
+  DateTime? _scheduledFor;
+
+  String? get couponCode => _couponCode;
+  int get loyaltyPoints => _loyaltyPoints;
+  DateTime? get scheduledFor => _scheduledFor;
+
+  void setCouponCode(String? code) {
+    _couponCode = (code == null || code.isEmpty) ? null : code;
+    notifyListeners();
+  }
+
+  void setLoyaltyPoints(int points) {
+    _loyaltyPoints = points < 0 ? 0 : points;
+    notifyListeners();
+  }
+
+  void setScheduledFor(DateTime? when) {
+    _scheduledFor = when;
+    notifyListeners();
+  }
+
   CartEstimate? get lastEstimate => _lastEstimate;
 
   /// Build a fingerprint that changes whenever the estimate inputs change so
-  /// the cart screen can decide to skip a refetch.
+  /// the cart screen can decide to skip a refetch. `promoCode` defaults to
+  /// the cart's persisted coupon and `loyaltyPoints` to the slider value so
+  /// callers don't have to thread state through manually.
   String estimateKey({
     required String shopId,
     required String? addressKey,
     String? promoCode,
+    int? loyaltyPoints,
   }) {
     final items = _lines.values.map((l) => '${l.product.id}:${l.quantity}')
         .toList()
       ..sort();
-    return '$shopId|${addressKey ?? ''}|${items.join(',')}|${promoCode ?? ''}';
+    final pc = promoCode ?? _couponCode ?? '';
+    final lp = loyaltyPoints ?? _loyaltyPoints;
+    return '$shopId|${addressKey ?? ''}|${items.join(',')}|$pc|$lp';
   }
 
   void setEstimate(CartEstimate? est, {String? key}) {
@@ -284,6 +324,9 @@ class CartProvider extends ChangeNotifier {
     _currentShopId = null;
     _lastEstimate = null;
     _lastEstimateKey = null;
+    _couponCode = null;
+    _loyaltyPoints = 0;
+    _scheduledFor = null;
     notifyListeners();
   }
 

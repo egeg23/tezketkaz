@@ -72,6 +72,10 @@ class OrderApi {
     /// Optional Phase 1 payload — when provided, replaces the items array.
     /// Used by `CartProvider.toApiPayload()` so modifier selections survive.
     List<Map<String, dynamic>>? itemsPayload,
+    // Phase 3 extensions
+    String? couponCode,
+    int? loyaltyPoints,
+    DateTime? scheduledFor,
   }) async {
     final itemsJson = itemsPayload ??
         items.map((i) => {
@@ -86,6 +90,11 @@ class OrderApi {
       'deliveryLng': lng,
       'customerComment': customerComment,
       'paymentMethod': paymentMethod,
+      if (couponCode != null && couponCode.isNotEmpty) 'couponCode': couponCode,
+      if (loyaltyPoints != null && loyaltyPoints > 0)
+        'loyaltyPoints': loyaltyPoints,
+      if (scheduledFor != null)
+        'scheduledFor': scheduledFor.toUtc().toIso8601String(),
     });
     return _parseOrder(res.data['order']);
   }

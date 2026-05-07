@@ -5,11 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/l10n.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../services/api_client.dart';
 import '../../services/dispatch_api.dart';
+import '../../services/promo_api.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/time_slot_picker.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -24,11 +27,17 @@ class _CartScreenState extends State<CartScreen> {
     text: 'Toshkent, Yunusobod, 13-mavze, 28-uy',
   );
   final _commentCtrl = TextEditingController();
+  final _promoCtrl = TextEditingController();
 
   Timer? _estimateDebounce;
   bool _estimateLoading = false;
   String? _estimateError;
   String? _lastRequestedKey;
+  bool _promoValidating = false;
+  String? _promoError;
+  bool _isScheduled = false;
+  num _userLoyaltyPoints = 0;
+  bool _loyaltyLoaded = false;
 
   // Stub coordinates — buyer flow Phase 1 chooses a saved address; if a
   // selected location is later piped through this screen, plug it in here.
@@ -54,7 +63,10 @@ class _CartScreenState extends State<CartScreen> {
       if (!mounted) return;
       _cartListening = context.read<CartProvider>();
       _cartListening!.addListener(_onInputsChanged);
+      _promoCtrl.text = _cartListening!.couponCode ?? '';
+      _isScheduled = _cartListening!.scheduledFor != null;
       _refreshEstimate(immediate: true);
+      _loadLoyalty();
     });
   }
 
@@ -65,7 +77,21 @@ class _CartScreenState extends State<CartScreen> {
     _cartListening?.removeListener(_onInputsChanged);
     _addressCtrl.dispose();
     _commentCtrl.dispose();
+    _promoCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadLoyalty() async {
+    try {
+      final acc = await LoyaltyApi.instance.me();
+      if (!mounted) return;
+      setState(() {
+        _userLoyaltyPoints = acc.points;
+        _loyaltyLoaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loyaltyLoaded = true);
+    }
   }
 
   void _onInputsChanged() {
@@ -91,6 +117,8 @@ class _CartScreenState extends State<CartScreen> {
     final key = cart.estimateKey(
       shopId: shopId,
       addressKey: '${_addressCtrl.text.trim()}|$_lat,$_lng',
+      promoCode: cart.couponCode,
+      loyaltyPoints: cart.loyaltyPoints,
     );
     // Skip when the cached estimate matches and is fresh.
     if (cart.lastEstimateKey == key &&
@@ -116,6 +144,8 @@ class _CartScreenState extends State<CartScreen> {
             'fullAddress': _addressCtrl.text.trim(),
           },
           items: cart.toApiPayload(),
+          couponCode: cart.couponCode,
+          loyaltyPoints: cart.loyaltyPoints > 0 ? cart.loyaltyPoints : null,
         );
         if (!mounted || _lastRequestedKey != key) return;
         final est = CartEstimate.fromJson(res);
@@ -163,6 +193,68 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
+  Future<void> _applyPromo() async {
+    final cart = context.read<CartProvider>();
+    if (cart.couponCode != null) {
+      // Tap acts as cancel when a code is already applied.
+      cart.setCouponCode(null);
+      _promoCtrl.clear();
+      setState(() => _promoError = null);
+      return;
+    }
+    final code = _promoCtrl.text.trim();
+    if (code.isEmpty) return;
+    if (cart.isEmpty) return;
+    final shopId = cart.orderItems.first.product.shopId;
+    final subtotal = cart.lastEstimate?.subtotal ?? cart.subtotal;
+    setState(() {
+      _promoValidating = true;
+      _promoError = null;
+    });
+    try {
+      final result = await PromoApi.instance.validate(
+        code: code,
+        shopId: shopId,
+        subtotal: subtotal,
+      );
+      if (!mounted) return;
+      if (result.valid) {
+        cart.setCouponCode(code);
+        setState(() => _promoError = null);
+        HapticFeedback.lightImpact();
+      } else {
+        setState(() => _promoError = result.reason ?? 'Promo kod yaroqsiz');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _promoError = e.toString());
+    } finally {
+      if (mounted) setState(() => _promoValidating = false);
+    }
+  }
+
+  Future<void> _openPromoList() async {
+    final cart = context.read<CartProvider>();
+    if (cart.isEmpty) return;
+    final shopId = cart.orderItems.first.product.shopId;
+    final subtotal = cart.lastEstimate?.subtotal ?? cart.subtotal;
+    final code = await context.push<String>(
+      '/buyer/promo',
+      extra: {'shopId': shopId, 'subtotal': subtotal},
+    );
+    if (!mounted || code == null || code.isEmpty) return;
+    _promoCtrl.text = code;
+    await _applyPromo();
+  }
+
+  String _fmtSlot(DateTime dt) {
+    final today = DateTime.now();
+    final isTomorrow = dt.day != today.day;
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    return isTomorrow ? 'Ertaga $hh:$mm' : 'Bugun $hh:$mm';
+  }
+
   Future<void> _placeOrder() async {
     final cart = context.read<CartProvider>();
     final orders = context.read<OrderProvider>();
@@ -179,6 +271,9 @@ class _CartScreenState extends State<CartScreen> {
         deliveryAddress: _addressCtrl.text.trim(),
         customerComment: _commentCtrl.text.trim().isEmpty ? null : _commentCtrl.text.trim(),
         paymentMethod: _paymentMethod,
+        couponCode: cart.couponCode,
+        loyaltyPoints: cart.loyaltyPoints > 0 ? cart.loyaltyPoints : null,
+        scheduledFor: cart.scheduledFor,
       );
       cart.clear();
       if (mounted) {
@@ -295,6 +390,148 @@ class _CartScreenState extends State<CartScreen> {
                     const Padding(
                       padding: EdgeInsets.only(left: 60),
                       child: Divider(height: 1),
+                    ),
+                ],
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+          _SectionLabel(t(context, 'cart.promo_code')),
+          const SizedBox(height: 8),
+          _Card(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.local_offer_outlined,
+                          color: AppColors.primary, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _promoCtrl,
+                          textCapitalization: TextCapitalization.characters,
+                          decoration: InputDecoration(
+                            hintText: t(context, 'cart.promo_hint'),
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _promoValidating ? null : _applyPromo,
+                        child: _promoValidating
+                            ? const SizedBox(
+                                width: 16, height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2))
+                            : Text(cart.couponCode == null
+                                ? t(context, 'promo.apply')
+                                : t(context, 'common.cancel')),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.list_rounded,
+                            color: AppColors.textSecondary),
+                        tooltip: t(context, 'promo.title'),
+                        onPressed: _openPromoList,
+                      ),
+                    ],
+                  ),
+                ),
+                if (_promoError != null)
+                  Padding(
+                    padding:
+                        const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                    child: Text(_promoError!,
+                        style: const TextStyle(
+                            color: AppColors.error, fontSize: 12)),
+                  )
+                else if (cart.couponCode != null)
+                  Padding(
+                    padding:
+                        const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                    child: Text(
+                      '${t(context, 'cart.promo_applied')}: ${cart.couponCode}',
+                      style: const TextStyle(
+                          color: AppColors.success, fontSize: 12,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          if (_loyaltyLoaded && _userLoyaltyPoints > 0) ...[
+            const SizedBox(height: 16),
+            _SectionLabel(t(context, 'cart.loyalty_points')),
+            const SizedBox(height: 8),
+            _LoyaltyPointsCard(
+              available: _userLoyaltyPoints.toInt(),
+              currentSubtotal:
+                  cart.lastEstimate?.subtotal ?? cart.subtotal,
+              selected: cart.loyaltyPoints,
+              onChanged: (v) {
+                cart.setLoyaltyPoints(v);
+              },
+            ),
+          ],
+
+          const SizedBox(height: 16),
+          _SectionLabel(t(context, 'cart.plan_delivery')),
+          const SizedBox(height: 8),
+          _Card(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _PlanToggleButton(
+                          label: t(context, 'cart.plan_asap'),
+                          icon: Icons.flash_on_rounded,
+                          selected: !_isScheduled,
+                          onTap: () {
+                            setState(() => _isScheduled = false);
+                            cart.setScheduledFor(null);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _PlanToggleButton(
+                          label: t(context, 'cart.plan_schedule'),
+                          icon: Icons.schedule_rounded,
+                          selected: _isScheduled,
+                          onTap: () =>
+                              setState(() => _isScheduled = true),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_isScheduled) ...[
+                  const Divider(height: 16),
+                  TimeSlotPicker(
+                    selected: cart.scheduledFor,
+                    onSelected: (when) {
+                      cart.setScheduledFor(when);
+                    },
+                  ),
+                  if (cart.scheduledFor != null)
+                    Padding(
+                      padding:
+                          const EdgeInsets.fromLTRB(14, 4, 14, 12),
+                      child: Text(
+                        '${t(context, 'cart.scheduled_for')}: '
+                        '${_fmtSlot(cart.scheduledFor!)}',
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                 ],
               ],
@@ -801,6 +1038,18 @@ class _PricingBreakdown extends StatelessWidget {
                 ],
               ),
             ],
+            if ((est?.couponDiscount ?? 0) > 0) ...[
+              const SizedBox(height: 10),
+              _SumRow('Promo',
+                  '−${fmtMoney(est!.couponDiscount)}',
+                  accent: true),
+            ],
+            if ((est?.loyaltyDiscount ?? 0) > 0) ...[
+              const SizedBox(height: 10),
+              _SumRow('Bonuslar',
+                  '−${fmtMoney(est!.loyaltyDiscount)}',
+                  accent: true),
+            ],
             const SizedBox(height: 14),
             Container(height: 1, color: AppColors.borderLight),
             const SizedBox(height: 14),
@@ -905,4 +1154,129 @@ class _SumRow extends StatelessWidget {
       ],
     ],
   );
+}
+
+/// Phase 3 — slider for spending loyalty points.
+///
+/// Cap at min(available points, floor(subtotal / 100)) so we never let the
+/// buyer drop below 0 — backend re-validates anyway.
+class _LoyaltyPointsCard extends StatelessWidget {
+  final int available;
+  final double currentSubtotal;
+  final int selected;
+  final ValueChanged<int> onChanged;
+
+  const _LoyaltyPointsCard({
+    required this.available,
+    required this.currentSubtotal,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cap = (currentSubtotal / 100).floor();
+    final maxPts = cap < available ? cap : available;
+    final clamped = selected > maxPts ? maxPts : selected;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+        boxShadow: AppShadows.card,
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.workspace_premium_rounded,
+                  color: AppColors.warning, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${t(context, 'cart.points_available')}: $available',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+              ),
+              Text('-$clamped',
+                  style: const TextStyle(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16)),
+            ],
+          ),
+          if (maxPts == 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                t(context, 'cart.points_too_small'),
+                style: const TextStyle(
+                    color: AppColors.textHint, fontSize: 12),
+              ),
+            )
+          else
+            Slider(
+              value: clamped.toDouble(),
+              min: 0,
+              max: maxPts.toDouble(),
+              divisions: maxPts > 0 ? maxPts : 1,
+              label: '$clamped',
+              onChanged: (v) => onChanged(v.round()),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tab-style toggle for ASAP vs Schedule planning.
+class _PlanToggleButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+  const _PlanToggleButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.primary : Colors.transparent,
+      borderRadius: BorderRadius.circular(AppRadii.md),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadii.md),
+            border: Border.all(
+              color: selected ? AppColors.primary : AppColors.border,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon,
+                  size: 18,
+                  color: selected ? Colors.white : AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Text(label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: selected ? Colors.white : AppColors.textPrimary,
+                  )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

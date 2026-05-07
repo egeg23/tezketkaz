@@ -216,6 +216,10 @@ class OrderProvider extends ChangeNotifier {
     double? lng,
     /// Phase 1 — pre-built items payload from `CartProvider.toApiPayload()`.
     List<Map<String, dynamic>>? itemsPayload,
+    // Phase 3 extensions
+    String? couponCode,
+    int? loyaltyPoints,
+    DateTime? scheduledFor,
   }) async {
     final order = await OrderApi.instance.placeOrder(
       shopId: shopId,
@@ -226,6 +230,9 @@ class OrderProvider extends ChangeNotifier {
       paymentMethod: paymentMethod,
       lat: lat,
       lng: lng,
+      couponCode: couponCode,
+      loyaltyPoints: loyaltyPoints,
+      scheduledFor: scheduledFor,
     );
     _orders.insert(0, order);
     SocketService.instance.subscribeToOrder(order.id);

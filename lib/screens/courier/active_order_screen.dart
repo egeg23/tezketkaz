@@ -132,7 +132,11 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
       body: SafeArea(
         child: Column(
           children: [
-            _TopBar(step: _step, onCancel: () => _showCancelSheet(context, order)),
+            _TopBar(
+              step: _step,
+              onCancel: () => _showCancelSheet(context, order),
+              onChat: () => context.push('/order/${order.id}/chat'),
+            ),
             Expanded(
               flex: 5,
               child: Stack(
@@ -237,7 +241,8 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
 class _TopBar extends StatelessWidget {
   final DeliveryStep step;
   final VoidCallback onCancel;
-  const _TopBar({required this.step, required this.onCancel});
+  final VoidCallback? onChat;
+  const _TopBar({required this.step, required this.onCancel, this.onChat});
 
   @override
   Widget build(BuildContext context) {
@@ -268,6 +273,18 @@ class _TopBar extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(child: Text(labels[step] ?? '', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
+          if (onChat != null)
+            IconButton(
+              onPressed: onChat,
+              icon: const Icon(Icons.chat_bubble_outline_rounded,
+                  color: AppColors.courier),
+              style: IconButton.styleFrom(
+                backgroundColor: AppColors.courierLight,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          const SizedBox(width: 4),
           IconButton(
             onPressed: onCancel,
             icon: const Icon(Icons.close, color: AppColors.textSecondary),
