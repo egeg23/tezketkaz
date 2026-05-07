@@ -212,13 +212,20 @@ class OrderProvider extends ChangeNotifier {
     required String deliveryAddress,
     String? customerComment,
     required String paymentMethod,
+    double? lat,
+    double? lng,
+    /// Phase 1 — pre-built items payload from `CartProvider.toApiPayload()`.
+    List<Map<String, dynamic>>? itemsPayload,
   }) async {
     final order = await OrderApi.instance.placeOrder(
       shopId: shopId,
       items: items,
+      itemsPayload: itemsPayload,
       deliveryAddress: deliveryAddress,
       customerComment: customerComment,
       paymentMethod: paymentMethod,
+      lat: lat,
+      lng: lng,
     );
     _orders.insert(0, order);
     SocketService.instance.subscribeToOrder(order.id);

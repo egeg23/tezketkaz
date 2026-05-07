@@ -23,6 +23,8 @@ import 'screens/buyer/cart_screen.dart';
 import 'screens/buyer/orders_screen.dart';
 import 'screens/buyer/tracking_screen.dart';
 import 'screens/buyer/profile_screen.dart';
+import 'screens/buyer/shops_screen.dart';
+import 'screens/buyer/address_book_screen.dart';
 import 'screens/courier/courier_shell.dart';
 import 'screens/courier/courier_home_screen.dart';
 import 'screens/courier/active_order_screen.dart';
@@ -107,11 +109,25 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
         builder: (_, __, child) => BuyerShell(child: child),
         routes: [
           GoRoute(path: '/buyer', builder: (_, __) => const HomeScreen()),
-          GoRoute(path: '/buyer/catalog/:category', builder: (_, s) => CatalogScreen(category: s.pathParameters['category'] ?? 'all')),
+          GoRoute(path: '/buyer/shops', builder: (_, __) => const ShopsScreen()),
+          GoRoute(
+            path: '/buyer/catalog/:category',
+            builder: (_, s) {
+              final extra = s.extra is Map<String, dynamic>
+                  ? s.extra as Map<String, dynamic>
+                  : const <String, dynamic>{};
+              return CatalogScreen(
+                category: s.pathParameters['category'] ?? 'all',
+                shopId: extra['shopId'] as String?,
+                shopName: extra['shopName'] as String?,
+              );
+            },
+          ),
           GoRoute(path: '/buyer/cart', builder: (_, __) => const CartScreen()),
           GoRoute(path: '/buyer/orders', builder: (_, __) => const BuyerOrdersScreen()),
           GoRoute(path: '/buyer/tracking/:orderId', builder: (_, s) => TrackingScreen(orderId: s.pathParameters['orderId'] ?? '')),
           GoRoute(path: '/buyer/profile', builder: (_, __) => const ProfileScreen()),
+          GoRoute(path: '/buyer/address-book', builder: (_, __) => const AddressBookScreen()),
         ],
       ),
 

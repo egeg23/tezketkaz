@@ -201,6 +201,168 @@ class L10n extends ChangeNotifier {
       'en': 'Language',
     },
 
+    // Verticals
+    'vertical_grocery': {
+      'uz': 'Mahsulotlar',
+      'ru': 'Продукты',
+      'en': 'Grocery',
+    },
+    'vertical_restaurant': {
+      'uz': 'Ovqat',
+      'ru': 'Еда',
+      'en': 'Food',
+    },
+    'vertical_pharmacy': {
+      'uz': 'Dorixona',
+      'ru': 'Аптека',
+      'en': 'Pharmacy',
+    },
+    'vertical_electronics': {
+      'uz': 'Texnika',
+      'ru': 'Техника',
+      'en': 'Electronics',
+    },
+
+    // Search
+    'recent_searches': {
+      'uz': "So'nggi qidiruvlar",
+      'ru': 'Недавние запросы',
+      'en': 'Recent searches',
+    },
+
+    // Shops list
+    'shops.title': {
+      'uz': "Do'konlar",
+      'ru': 'Магазины',
+      'en': 'Shops',
+    },
+    'shops.search_hint': {
+      'uz': "Do'kon qidirish...",
+      'ru': 'Поиск магазинов...',
+      'en': 'Search shops...',
+    },
+    'shops.empty_title': {
+      'uz': "Do'konlar topilmadi",
+      'ru': 'Магазины не найдены',
+      'en': 'No shops found',
+    },
+    'shops.empty_desc': {
+      'uz': 'Boshqa kategoriya yoki radiusni sinab ko\'ring',
+      'ru': 'Попробуйте другую категорию или радиус',
+      'en': 'Try a different vertical or radius',
+    },
+
+    // Product detail / modifiers
+    'select_modifiers': {
+      'uz': 'Variantni tanlang',
+      'ru': 'Выберите варианты',
+      'en': 'Select options',
+    },
+    'min_select_violation': {
+      'uz': 'Majburiy guruh',
+      'ru': 'Не выбраны обязательные опции',
+      'en': 'Required options missing',
+    },
+    'product.add_to_cart': {
+      'uz': "Savatga qo'shish",
+      'ru': 'В корзину',
+      'en': 'Add to cart',
+    },
+    'product.added_to_cart': {
+      'uz': "Savatga qo'shildi",
+      'ru': 'Добавлено в корзину',
+      'en': 'Added to cart',
+    },
+
+    // Address book
+    'address.book_title': {
+      'uz': 'Manzillarim',
+      'ru': 'Мои адреса',
+      'en': 'My addresses',
+    },
+    'address.add': {
+      'uz': "Manzil qo'shish",
+      'ru': 'Добавить адрес',
+      'en': 'Add address',
+    },
+    'address.edit': {
+      'uz': 'Manzilni tahrirlash',
+      'ru': 'Редактировать адрес',
+      'en': 'Edit address',
+    },
+    'address.delete': {
+      'uz': "O'chirish",
+      'ru': 'Удалить',
+      'en': 'Delete',
+    },
+    'address.confirm_delete': {
+      'uz': "Manzilni o'chirilsinmi?",
+      'ru': 'Удалить адрес?',
+      'en': 'Delete this address?',
+    },
+    'address.empty_title': {
+      'uz': "Manzillaringiz yo'q",
+      'ru': 'У вас нет сохранённых адресов',
+      'en': 'No saved addresses',
+    },
+    'address.empty_desc': {
+      'uz': "Tezroq buyurtma berish uchun manzil qo'shing",
+      'ru': 'Добавьте адрес, чтобы быстрее оформлять заказы',
+      'en': 'Add an address to check out faster',
+    },
+    'address.label_hint': {
+      'uz': 'Nomi (Uy / Ish)',
+      'ru': 'Метка (Дом / Работа)',
+      'en': 'Label (Home / Work)',
+    },
+    'address.default_badge': {
+      'uz': 'Asosiy',
+      'ru': 'По умолчанию',
+      'en': 'Default',
+    },
+    'address.default_set': {
+      'uz': 'Asosiy manzil yangilandi',
+      'ru': 'Адрес по умолчанию обновлён',
+      'en': 'Default address updated',
+    },
+    'make_default_address': {
+      'uz': 'Asosiy qilish',
+      'ru': 'Сделать основным',
+      'en': 'Make default',
+    },
+    'address_entrance': {
+      'uz': "Pod'ezd",
+      'ru': 'Подъезд',
+      'en': 'Entrance',
+    },
+    'address_floor': {
+      'uz': 'Qavat',
+      'ru': 'Этаж',
+      'en': 'Floor',
+    },
+    'address_apartment': {
+      'uz': 'Xonadon',
+      'ru': 'Квартира',
+      'en': 'Apartment',
+    },
+    'address_intercom': {
+      'uz': 'Domofon',
+      'ru': 'Домофон',
+      'en': 'Intercom',
+    },
+    'address_instructions': {
+      'uz': "Kuryer uchun izoh",
+      'ru': 'Комментарий курьеру',
+      'en': 'Courier notes',
+    },
+
+    // Map
+    'map_pick_location': {
+      'uz': 'Joylashuvni tanlang',
+      'ru': 'Выберите местоположение',
+      'en': 'Pick a location',
+    },
+
     // Orders
     'order.status.pending': {
       'uz': 'Yangi',

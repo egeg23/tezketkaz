@@ -69,13 +69,18 @@ class OrderApi {
     required String paymentMethod,
     double? lat,
     double? lng,
+    /// Optional Phase 1 payload — when provided, replaces the items array.
+    /// Used by `CartProvider.toApiPayload()` so modifier selections survive.
+    List<Map<String, dynamic>>? itemsPayload,
   }) async {
+    final itemsJson = itemsPayload ??
+        items.map((i) => {
+          'productId': i.product.id,
+          'quantity': i.quantity,
+        }).toList();
     final res = await _api.post('/api/orders', {
       'shopId': shopId,
-      'items': items.map((i) => {
-        'productId': i.product.id,
-        'quantity': i.quantity,
-      }).toList(),
+      'items': itemsJson,
       'deliveryAddress': deliveryAddress,
       'deliveryLat': lat,
       'deliveryLng': lng,

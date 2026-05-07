@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../../models/models.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../theme/app_theme.dart';
@@ -45,6 +44,7 @@ class _CartScreenState extends State<CartScreen> {
       final order = await orders.placeOrder(
         shopId: shopId,
         items: cart.orderItems,
+        itemsPayload: cart.toApiPayload(),
         deliveryAddress: _addressCtrl.text.trim(),
         customerComment: _commentCtrl.text.trim().isEmpty ? null : _commentCtrl.text.trim(),
         paymentMethod: _paymentMethod,
@@ -106,9 +106,9 @@ class _CartScreenState extends State<CartScreen> {
             ),
             child: Column(
               children: [
-                for (var i = 0; i < cart.orderItems.length; i++) ...[
-                  _ItemRow(item: cart.orderItems[i]),
-                  if (i < cart.orderItems.length - 1)
+                for (var i = 0; i < cart.lines.length; i++) ...[
+                  _ItemRow(line: cart.lines[i]),
+                  if (i < cart.lines.length - 1)
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 12),
                       child: Divider(height: 1),
@@ -298,8 +298,8 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _ItemRow extends StatelessWidget {
-  final OrderItem item;
-  const _ItemRow({required this.item});
+  final CartLine line;
+  const _ItemRow({required this.line});
 
   String _fmt(double v) => '${v.toInt()
       .toString()
@@ -308,6 +308,11 @@ class _ItemRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cart = context.read<CartProvider>();
+    final modifierText = line.snapshot.isEmpty
+        ? null
+        : line.snapshot
+            .expand((s) => s.options.map((o) => o.name))
+            .join(' · ');
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Row(
@@ -316,9 +321,9 @@ class _ItemRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppRadii.sm),
             child: SizedBox(
               width: 64, height: 64,
-              child: item.product.imageUrl.isNotEmpty
+              child: line.product.imageUrl.isNotEmpty
                   ? CachedNetworkImage(
-                      imageUrl: item.product.imageUrl, fit: BoxFit.cover,
+                      imageUrl: line.product.imageUrl, fit: BoxFit.cover,
                       placeholder: (_, __) => Container(color: AppColors.surfaceMuted),
                       errorWidget: (_, __, ___) => Container(
                         color: AppColors.surfaceMuted,
@@ -336,10 +341,16 @@ class _ItemRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.product.name,
+                Text(line.product.name,
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                if (modifierText != null) ...[
+                  const SizedBox(height: 2),
+                  Text(modifierText,
+                      style: const TextStyle(
+                          color: AppColors.textSecondary, fontSize: 12)),
+                ],
                 const SizedBox(height: 4),
-                Text(_fmt(item.product.effectivePrice),
+                Text(_fmt(line.unitPrice),
                     style: const TextStyle(color: AppColors.textHint, fontSize: 12)),
               ],
             ),
@@ -355,16 +366,30 @@ class _ItemRow extends StatelessWidget {
               children: [
                 _CartStep(
                   icon: Icons.remove_rounded,
-                  onTap: () => cart.remove(item.product.id),
+                  onTap: () => cart.removeLine(line.key),
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text('${item.quantity}',
+                  child: Text('${line.quantity}',
                       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                 ),
                 _CartStep(
                   icon: Icons.add_rounded,
-                  onTap: () => cart.add(item.product),
+                  // Re-add with the same modifier set so quantity grows on
+                  // the existing line rather than spawning a new one.
+                  onTap: () {
+                    if (line.modifiers.isEmpty) {
+                      cart.add(line.product);
+                    } else {
+                      cart.addWithModifiers(
+                        line.product,
+                        1,
+                        line.modifiers,
+                        line.unitPrice,
+                        snapshot: line.snapshot,
+                      );
+                    }
+                  },
                 ),
               ],
             ),
