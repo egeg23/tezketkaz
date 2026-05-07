@@ -1,0 +1,36 @@
+# Render blueprint — one-click deploy for the backend (which also serves
+# the prebuilt Flutter web bundle from build/web).
+#
+# To use: connect this repo on https://dashboard.render.com/blueprints
+services:
+  - type: web
+    name: tezketkaz
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        value: "file:./prod.db"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 30d
+      - key: USE_MOCK_SMS
+        value: "true"
+      - key: USE_MOCK_PAYMENTS
+        value: "true"
+      - key: USE_MOCK_TAX
+        value: "true"
+      - key: COURIER_RADIUS_KM
+        value: "5"
+    disk:
+      name: data
+      mountPath: /app
+      sizeGB: 1

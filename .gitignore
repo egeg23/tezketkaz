@@ -6,6 +6,10 @@
 .pub-cache/
 .pub/
 build/
+# But keep the prebuilt web bundle so the backend can serve it without
+# requiring Flutter on the deploy host. CI rebuilds this on every push.
+!build/web/
+!build/web/**
 .idea/
 .vscode/
 *.iml

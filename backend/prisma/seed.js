@@ -4,16 +4,12 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // Clear existing data
-  await prisma.orderItem.deleteMany();
-  await prisma.order.deleteMany();
-  await prisma.product.deleteMany();
-  await prisma.shopMember.deleteMany();
-  await prisma.shop.deleteMany();
-  await prisma.notification.deleteMany();
-  await prisma.address.deleteMany();
-  await prisma.otpCode.deleteMany();
-  await prisma.user.deleteMany();
+  // Idempotent — skip if seed users already exist (won't wipe production data).
+  const existing = await prisma.user.findUnique({ where: { phone: '+998901234567' } });
+  if (existing) {
+    console.log('  ✓ Already seeded — skipping');
+    return;
+  }
 
   // ─── Users ────────────────────────────────────────────────────────────────
   const buyer = await prisma.user.create({
