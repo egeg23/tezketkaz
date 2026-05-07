@@ -31,6 +31,7 @@ const couponRoutes = require('./routes/coupons');
 const loyaltyRoutes = require('./routes/loyalty');
 const reviewRoutes = require('./routes/reviews');
 const chatRoutes = require('./routes/chat');
+const buyerDisputeRoutes = require('./routes/buyer-disputes');
 const { setupSockets } = require('./sockets');
 
 const app = express();
@@ -38,6 +39,12 @@ app.set('trust proxy', 1);                    // we sit behind Render/Railway/Cl
 app.disable('x-powered-by');
 
 const server = http.createServer(app);
+
+// ─── Sentry (must be FIRST middleware so it captures everything) ────────────
+const sentry = require('./lib/sentry')(app, server);
+app.use(sentry.requestHandler);
+app.use(sentry.tracingHandler);
+app.set('sentry', sentry);
 
 // ─── Security headers ───────────────────────────────────────────────────────
 app.use(helmet({
@@ -83,11 +90,21 @@ app.use(pinoHttp({
     if (res.statusCode >= 400) return 'warn';
     return 'info';
   },
+  customReceivedMessage: (req) => `→ ${req.method} ${req.url}`,
+  customSuccessMessage: (req, res) => `← ${req.method} ${req.url} ${res.statusCode}`,
+  customErrorMessage: (req, res) => `✗ ${req.method} ${req.url} ${res.statusCode}`,
+  customProps: (req) => ({
+    requestId: req.id,
+    userId: req.user?.id,
+  }),
   serializers: {
     req: (req) => ({ id: req.id, method: req.method, url: req.url, ip: req.remoteAddress }),
     res: (res) => ({ statusCode: res.statusCode }),
   },
 }));
+
+// ─── Health / readiness / version (mount BEFORE rate-limit + auth) ─────────
+app.use('/', require('./routes/health'));
 
 // ─── Rate limiting ──────────────────────────────────────────────────────────
 const globalLimiter = rateLimit({
@@ -130,24 +147,6 @@ const io = new Server(server, {
 });
 app.set('io', io);
 
-// ─── Health ─────────────────────────────────────────────────────────────────
-app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
-app.get('/ready', async (req, res) => {
-  const checks = { db: 'unknown', redis: 'unknown' };
-  try {
-    const prisma = require('./db');
-    await prisma.$queryRaw`SELECT 1`;
-    checks.db = 'ok';
-  } catch (err) { checks.db = `error: ${err.message}`; }
-  try {
-    const r = redisLib.getRedis();
-    if (!r) checks.redis = 'disabled';
-    else { await r.ping(); checks.redis = 'ok'; }
-  } catch (err) { checks.redis = `error: ${err.message}`; }
-  const ok = checks.db === 'ok' && checks.redis !== 'error';
-  res.status(ok ? 200 : 503).json({ ok, checks });
-});
-
 // ─── API Routes ─────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -170,6 +169,8 @@ app.use('/api/admin', adminRoutes);
 // /:id/{reviews,chat} and /api/reviews/:id, so they mount at /api.
 app.use('/api', reviewRoutes);
 app.use('/api', chatRoutes);
+// Phase 4 — buyer-facing dispute endpoints.
+app.use('/api', buyerDisputeRoutes);
 
 // ─── User-uploaded product images ────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
@@ -199,12 +200,16 @@ app.get(/^\/(?!api|admin|uploads).*/, (req, res, next) => {
 // ─── 404 ────────────────────────────────────────────────────────────────────
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
+// ─── Sentry error handler (BEFORE app's 500 handler so it can capture) ─────
+app.use(sentry.errorHandler);
+
 // ─── Error handler ──────────────────────────────────────────────────────────
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, _next) => {
   const status = err.status || err.statusCode || 500;
   if (status >= 500) {
     logger.error({ err, reqId: req.id, url: req.url }, 'unhandled');
+    try { sentry.captureException(err); } catch { /* noop */ }
   } else {
     logger.warn({ err: err.message, reqId: req.id, url: req.url }, 'request error');
   }
@@ -221,16 +226,28 @@ setupSockets(io).catch((err) => {
 if (process.env.REDIS_URL || process.env.REDIS_HOST) {
   try {
     // eslint-disable-next-line global-require
-    const { startWorkers } = require('./lib/queues');
+    const { startWorkers, queues } = require('./lib/queues');
     // eslint-disable-next-line global-require
     const dispatchJobs = require('./jobs/dispatch');
     // eslint-disable-next-line global-require
     const scheduledJobs = require('./jobs/scheduled');
+    // eslint-disable-next-line global-require
+    const payoutJobs = require('./jobs/payouts');
     startWorkers({
       dispatch: dispatchJobs.dispatchHandler,
       autoCancel: dispatchJobs.autoCancelHandler,
       scheduled: scheduledJobs.scheduledHandler,
+      payouts: payoutJobs.payoutsHandler,
     });
+    // Schedule weekly payouts: Mondays at 03:00 UTC.
+    try {
+      queues().payouts.add('weekly', {}, {
+        repeat: { cron: '0 3 * * 1' },
+        jobId: 'weekly-payouts-cron',
+      });
+    } catch (err) {
+      logger.warn({ err: err.message }, 'failed to schedule weekly payouts cron');
+    }
     logger.info('BullMQ workers started');
   } catch (err) {
     logger.error({ err }, 'failed to start BullMQ workers');
