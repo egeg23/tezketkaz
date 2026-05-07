@@ -18,7 +18,9 @@ jobs:
         working-directory: backend
       - run: npx prisma generate
         working-directory: backend
-      - run: npm test -- --ci --coverage --maxWorkers=2
+      # --runInBand serialises tests so concurrent `npx prisma migrate deploy`
+      # calls don't race on shared filesystem state. Slower but stable.
+      - run: npm test -- --ci --coverage --runInBand
         working-directory: backend
         env:
           DATABASE_URL: file:./test.db
