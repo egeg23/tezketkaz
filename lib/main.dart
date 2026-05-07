@@ -1,8 +1,11 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'models/models.dart';
 import 'providers/auth_provider.dart';
@@ -32,8 +35,15 @@ import 'screens/shop/shop_products_screen.dart';
 import 'screens/shared/role_switcher_screen.dart';
 import 'screens/shared/courier_verification_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase init skipped: $e');
+  }
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,

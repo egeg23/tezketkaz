@@ -21,6 +21,11 @@ model User {
   isBuyer         Boolean  @default(true)
   isCourier       Boolean  @default(false)
   isShop          Boolean  @default(false)
+  isAdmin         Boolean  @default(false)
+
+  // Localization & preferences
+  locale          String   @default("uz") // uz | ru | en
+  notificationPrefs String? // JSON: { promo: bool, orderUpdates: bool, sound: bool }
 
   // Courier verification
   courierStatus   String   @default("none") // none | pending | approved | rejected
@@ -37,6 +42,9 @@ model User {
   addresses      Address[]
   notifications  Notification[]
   otpCodes       OtpCode[]
+  fcmTokens      FcmToken[]
+  refreshTokens  RefreshToken[]
+  auditLogs      AuditLog[]
 
   // Courier stats
   rating         Float    @default(5.0)
@@ -44,6 +52,9 @@ model User {
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  @@index([isAdmin])
+  @@index([isCourier, courierStatus])
 }
 
 model OtpCode {
@@ -52,11 +63,71 @@ model OtpCode {
   code      String
   expiresAt DateTime
   used      Boolean  @default(false)
+  attempts  Int      @default(0)
   user      User?    @relation(fields: [userId], references: [id])
   userId    String?
   createdAt DateTime @default(now())
 
   @@index([phone])
+}
+
+model FcmToken {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  token     String   @unique
+  platform  String   // android | ios | web
+  lastSeenAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model RefreshToken {
+  id            String   @id @default(uuid())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  jti           String   @unique // unique JWT id
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  replacedById  String?  // chain: rotated tokens point to next
+  userAgent     String?
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actor      User?    @relation(fields: [actorId], references: [id])
+  actorId    String?
+  action     String   // e.g. "courier.approve", "order.refund"
+  targetType String?  // "User" | "Order" | "Shop" | etc.
+  targetId   String?
+  metadata   String?  // JSON
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
+// Idempotency table for payment webhooks — prevents double-processing
+// the same callback if a provider retries.
+model ProcessedWebhook {
+  id          String   @id @default(uuid())
+  provider    String   // "click" | "payme" | "uzum"
+  externalId  String   // provider's transaction id
+  orderId     String?
+  payload     String   // JSON snapshot of body
+  result      String   // JSON snapshot of our response
+  createdAt   DateTime @default(now())
+
+  @@unique([provider, externalId])
+  @@index([orderId])
 }
 
 model Address {
@@ -69,6 +140,13 @@ model Address {
   lng       Float?
   isDefault Boolean  @default(false)
   comment   String?
+
+  // Detailed delivery instructions (entrance, floor, apt, intercom)
+  entrance     String?
+  floor        String?
+  apartment    String?
+  intercom     String?
+  instructions String?
 }
 
 model Shop {

@@ -1,9 +1,15 @@
 const router = require('express').Router();
 const prisma = require('../db');
-const state = require('../state');
+const env = require('../config/env');
+const state = require('../services/redis-state');
+const push = require('../services/push');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { audit } = require('../lib/audit');
+const logger = require('../lib/logger');
 
-// Order status flow
+// Order status flow:
+// pending → confirmed → collecting → readyForPickup → courierAssigned →
+// pickedUp → inDelivery → arrivedAtCustomer → delivered → confirmedByBuyer
 const STATUS = {
   PENDING: 'pending',
   CONFIRMED: 'confirmed',
@@ -18,24 +24,43 @@ const STATUS = {
   CANCELLED: 'cancelled',
 };
 
-const COURIER_RADIUS_KM = Number(process.env.COURIER_RADIUS_KM || 5);
+const COURIER_RADIUS_KM = env.COURIER_RADIUS_KM;
 
-// Notify nearby online couriers (within radius of the shop) about an available order
-function notifyNearbyCouriers(req, order) {
+// ─── Authorization helpers ──────────────────────────────────────────────────
+
+async function isShopMember(userId, shopId) {
+  if (!userId || !shopId) return false;
+  const m = await prisma.shopMember.findUnique({
+    where: { userId_shopId: { userId, shopId } },
+  });
+  return !!m;
+}
+
+async function canViewOrder(user, order) {
+  if (!user || !order) return false;
+  if (order.buyerId === user.id) return true;
+  if (order.courierId === user.id) return true;
+  if (user.isAdmin) return true;
+  return isShopMember(user.id, order.shopId);
+}
+
+// Notify nearby online couriers about an available order
+async function notifyNearbyCouriers(req, order) {
   const io = req.app.get('io');
   const shopPoint = (order.shop?.lat != null && order.shop?.lng != null)
     ? { lat: order.shop.lat, lng: order.shop.lng }
     : null;
-  const ids = state.nearbyCourierIds(shopPoint, COURIER_RADIUS_KM);
+  const ids = await state.nearbyCourierIds(shopPoint, COURIER_RADIUS_KM);
   if (ids.length === 0) {
     // Fallback to broadcast — keep flow working in dev / when no GPS yet
     io.to('couriers').emit('order:available', order);
+    push.notifyCouriersNewOrder(order, []).catch(() => {});
     return;
   }
   ids.forEach((uid) => io.to(`courier:${uid}`).emit('order:available', order));
+  push.notifyCouriersNewOrder(order, ids).catch(() => {});
 }
 
-// Helper: get io from app and emit
 function emit(req, room, event, data) {
   const io = req.app.get('io');
   io.to(room).emit(event, data);
@@ -48,7 +73,7 @@ async function nextOrderNumber(shopId) {
     orderBy: { createdAt: 'desc' },
   });
   if (!last?.orderNumber) return 'K-100';
-  const num = parseInt(last.orderNumber.split('-')[1] || '99') + 1;
+  const num = parseInt(last.orderNumber.split('-')[1] || '99', 10) + 1;
   return `K-${num}`;
 }
 
@@ -56,48 +81,40 @@ async function nextOrderNumber(shopId) {
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
     const {
-      shopId,
-      items, // [{ productId, quantity }]
-      deliveryAddress,
-      deliveryLat,
-      deliveryLng,
-      customerComment,
-      paymentMethod,
-    } = req.body;
+      shopId, items, deliveryAddress, deliveryLat, deliveryLng,
+      customerComment, paymentMethod,
+    } = req.body || {};
 
     if (!shopId || !items?.length || !deliveryAddress || !paymentMethod) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
+    if (!['click', 'payme', 'uzumpay', 'cash'].includes(paymentMethod)) {
+      return res.status(400).json({ error: 'Invalid payment method' });
+    }
 
-    // Fetch product data
-    const productIds = items.map(i => i.productId);
-    const products = await prisma.product.findMany({
-      where: { id: { in: productIds } },
-    });
-    const productMap = Object.fromEntries(products.map(p => [p.id, p]));
+    const productIds = items.map((i) => i.productId);
+    const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+    const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
 
     let subtotal = 0;
-    const orderItemsData = items.map(i => {
+    const orderItemsData = items.map((i) => {
       const p = productMap[i.productId];
-      if (!p) throw new Error(`Product ${i.productId} not found`);
+      if (!p) throw Object.assign(new Error(`Product ${i.productId} not found`), { status: 400 });
+      if (!p.isAvailable) throw Object.assign(new Error(`${p.name} is not available`), { status: 400 });
+      const qty = Math.max(1, Math.min(99, Number(i.quantity) || 1));
       const price = p.discountPrice || p.price;
-      const total = price * i.quantity;
+      const total = price * qty;
       subtotal += total;
-      return {
-        productId: p.id,
-        productName: p.name,
-        quantity: i.quantity,
-        price,
-        total,
-      };
+      return { productId: p.id, productName: p.name, quantity: qty, price, total };
     });
 
     const deliveryFee = subtotal >= 100000 ? 0 : 12000;
     const total = subtotal + deliveryFee;
-    const isPaid = paymentMethod !== 'cash';
+    const isPaid = paymentMethod === 'cash' ? false : false; // online → wait for webhook
 
     const shop = await prisma.shop.findUnique({ where: { id: shopId } });
     if (!shop) return res.status(404).json({ error: 'Shop not found' });
+    if (!shop.isActive) return res.status(400).json({ error: 'Shop is not active' });
 
     const order = await prisma.order.create({
       data: {
@@ -117,6 +134,13 @@ router.post('/', authMiddleware, async (req, res, next) => {
 
     // Notify shop in real time
     emit(req, `shop:${shopId}`, 'order:new', order);
+    // Push to shop members
+    try {
+      const members = await prisma.shopMember.findMany({ where: { shopId } });
+      push.notifyShopNewOrder(order, members).catch(() => {});
+    } catch (err) {
+      logger.warn({ err: err.message }, 'shop push failed');
+    }
 
     res.status(201).json({ order });
   } catch (err) { next(err); }
@@ -128,6 +152,7 @@ router.get('/mine', authMiddleware, async (req, res, next) => {
     const orders = await prisma.order.findMany({
       where: { buyerId: req.user.id },
       orderBy: { createdAt: 'desc' },
+      take: 100,
       include: { items: true, shop: true, courier: { select: { id: true, name: true, phone: true, rating: true } } },
     });
     res.json({ orders });
@@ -142,6 +167,9 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
       include: { items: true, shop: true, courier: { select: { id: true, name: true, phone: true, rating: true } } },
     });
     if (!order) return res.status(404).json({ error: 'Not found' });
+    if (!(await canViewOrder(req.user, order))) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     res.json({ order });
   } catch (err) { next(err); }
 });
@@ -149,12 +177,9 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
 // ─── GET /api/orders/shop/:shopId ────────────────────────────────────────────
 router.get('/shop/:shopId', authMiddleware, async (req, res, next) => {
   try {
-    // Check membership
-    const isMember = await prisma.shopMember.findUnique({
-      where: { userId_shopId: { userId: req.user.id, shopId: req.params.shopId } },
-    });
-    if (!isMember) return res.status(403).json({ error: 'Not a shop member' });
-
+    if (!(await isShopMember(req.user.id, req.params.shopId)) && !req.user.isAdmin) {
+      return res.status(403).json({ error: 'Not a shop member' });
+    }
     const orders = await prisma.order.findMany({
       where: { shopId: req.params.shopId },
       orderBy: { createdAt: 'desc' },
@@ -184,7 +209,7 @@ router.get('/courier/active', authMiddleware, requireRole('courier'), async (req
     const order = await prisma.order.findFirst({
       where: {
         courierId: req.user.id,
-        status: { in: [STATUS.COURIER_ASSIGNED, STATUS.PICKED_UP, STATUS.IN_DELIVERY] },
+        status: { in: [STATUS.COURIER_ASSIGNED, STATUS.PICKED_UP, STATUS.IN_DELIVERY, STATUS.ARRIVED_AT_CUSTOMER] },
       },
       include: { items: true, shop: true },
     });
@@ -197,31 +222,22 @@ router.post('/:id/shop/accept', authMiddleware, async (req, res, next) => {
   try {
     const order = await prisma.order.findUnique({ where: { id: req.params.id } });
     if (!order) return res.status(404).json({ error: 'Not found' });
-    if (order.status !== STATUS.PENDING) {
-      return res.status(400).json({ error: 'Order is not pending' });
+    if (order.status !== STATUS.PENDING) return res.status(400).json({ error: 'Order is not pending' });
+    if (!(await isShopMember(req.user.id, order.shopId))) {
+      return res.status(403).json({ error: 'Not a shop member' });
     }
-
-    // Check shop membership
-    const isMember = await prisma.shopMember.findUnique({
-      where: { userId_shopId: { userId: req.user.id, shopId: order.shopId } },
-    });
-    if (!isMember) return res.status(403).json({ error: 'Not a shop member' });
 
     const orderNumber = await nextOrderNumber(order.shopId);
     const updated = await prisma.order.update({
       where: { id: order.id },
-      data: {
-        status: STATUS.COLLECTING,
-        orderNumber,
-        acceptedAt: new Date(),
-      },
+      data: { status: STATUS.COLLECTING, orderNumber, acceptedAt: new Date() },
       include: { items: true, shop: true, courier: true },
     });
 
     emit(req, `order:${order.id}`, 'order:updated', updated);
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
-    // Pre-dispatch — let nearby couriers grab it while shop is collecting
-    notifyNearbyCouriers(req, updated);
+    notifyNearbyCouriers(req, updated).catch(() => {});
+    push.notifyBuyerStatusUpdate(updated).catch(() => {});
 
     res.json({ order: updated });
   } catch (err) { next(err); }
@@ -235,11 +251,9 @@ router.post('/:id/shop/ready', authMiddleware, async (req, res, next) => {
     if (order.status !== STATUS.COLLECTING) {
       return res.status(400).json({ error: 'Order is not being collected' });
     }
-
-    const isMember = await prisma.shopMember.findUnique({
-      where: { userId_shopId: { userId: req.user.id, shopId: order.shopId } },
-    });
-    if (!isMember) return res.status(403).json({ error: 'Not a shop member' });
+    if (!(await isShopMember(req.user.id, order.shopId))) {
+      return res.status(403).json({ error: 'Not a shop member' });
+    }
 
     const updated = await prisma.order.update({
       where: { id: order.id },
@@ -249,8 +263,8 @@ router.post('/:id/shop/ready', authMiddleware, async (req, res, next) => {
 
     emit(req, `order:${order.id}`, 'order:updated', updated);
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
-    // If courier still not assigned, re-notify nearby couriers (now urgent)
-    if (!updated.courierId) notifyNearbyCouriers(req, updated);
+    if (!updated.courierId) notifyNearbyCouriers(req, updated).catch(() => {});
+    push.notifyBuyerStatusUpdate(updated).catch(() => {});
 
     res.json({ order: updated });
   } catch (err) { next(err); }
@@ -259,19 +273,27 @@ router.post('/:id/shop/ready', authMiddleware, async (req, res, next) => {
 // ─── POST /api/orders/:id/shop/cancel ────────────────────────────────────────
 router.post('/:id/shop/cancel', authMiddleware, async (req, res, next) => {
   try {
-    const { reason } = req.body;
+    const { reason } = req.body || {};
     const order = await prisma.order.findUnique({ where: { id: req.params.id } });
     if (!order) return res.status(404).json({ error: 'Not found' });
+    if (!(await isShopMember(req.user.id, order.shopId))) {
+      return res.status(403).json({ error: 'Not a shop member' });
+    }
+    if ([STATUS.DELIVERED, STATUS.CONFIRMED_BY_BUYER, STATUS.CANCELLED].includes(order.status)) {
+      return res.status(400).json({ error: 'Order is finalized' });
+    }
 
     const updated = await prisma.order.update({
       where: { id: order.id },
-      data: { status: STATUS.CANCELLED, cancelledAt: new Date(), cancelReason: reason },
+      data: { status: STATUS.CANCELLED, cancelledAt: new Date(), cancelReason: reason || 'shop' },
       include: { items: true, shop: true },
     });
 
     emit(req, `order:${order.id}`, 'order:updated', updated);
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
     emit(req, `shop:${order.shopId}`, 'order:updated', updated);
+    push.notifyBuyerStatusUpdate(updated).catch(() => {});
+    audit({ actorId: req.user.id, action: 'order.cancel_by_shop', targetType: 'Order', targetId: order.id, metadata: { reason } });
 
     res.json({ order: updated });
   } catch (err) { next(err); }
@@ -286,37 +308,44 @@ router.post('/:id/courier/accept', authMiddleware, requireRole('courier'), async
       return res.status(400).json({ error: 'Order is not available' });
     }
 
-    // If shop already finished assembly — go straight to courierAssigned;
-    // otherwise keep collecting so shop UI doesn't get out of sync.
     const newStatus = order.status === STATUS.READY_FOR_PICKUP
       ? STATUS.COURIER_ASSIGNED
       : STATUS.COLLECTING;
-    const updated = await prisma.order.update({
-      where: { id: order.id },
+
+    // Atomic claim — only succeeds if courierId is still null.
+    const claim = await prisma.order.updateMany({
+      where: { id: order.id, courierId: null },
       data: { courierId: req.user.id, status: newStatus },
+    });
+    if (claim.count === 0) {
+      return res.status(409).json({ error: 'Order already taken' });
+    }
+
+    const updated = await prisma.order.findUnique({
+      where: { id: order.id },
       include: { items: true, shop: true, courier: { select: { id: true, name: true, phone: true } } },
     });
 
     emit(req, `order:${order.id}`, 'order:updated', updated);
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
     emit(req, `shop:${order.shopId}`, 'order:updated', updated);
-    emit(req, `couriers`, 'order:taken', { orderId: order.id });
+    emit(req, 'couriers', 'order:taken', { orderId: order.id });
+    push.notifyBuyerStatusUpdate(updated).catch(() => {});
 
     res.json({ order: updated });
   } catch (err) { next(err); }
 });
 
 // ─── POST /api/orders/:id/courier/pickup ─────────────────────────────────────
-// Курьер вводит номер заказа от магазина
 router.post('/:id/courier/pickup', authMiddleware, requireRole('courier'), async (req, res, next) => {
   try {
-    const { orderNumber } = req.body;
+    const { orderNumber } = req.body || {};
     const order = await prisma.order.findUnique({ where: { id: req.params.id } });
     if (!order) return res.status(404).json({ error: 'Not found' });
     if (order.courierId !== req.user.id) {
       return res.status(403).json({ error: 'Not your order' });
     }
-    if (order.orderNumber?.toLowerCase() !== orderNumber?.toLowerCase().trim()) {
+    if (order.orderNumber?.toLowerCase() !== orderNumber?.toLowerCase()?.trim()) {
       return res.status(400).json({ error: 'Wrong order number' });
     }
 
@@ -329,6 +358,7 @@ router.post('/:id/courier/pickup', authMiddleware, requireRole('courier'), async
     emit(req, `order:${order.id}`, 'order:updated', updated);
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
     emit(req, `shop:${order.shopId}`, 'order:updated', updated);
+    push.notifyBuyerStatusUpdate(updated).catch(() => {});
 
     res.json({ order: updated });
   } catch (err) { next(err); }
@@ -350,13 +380,13 @@ router.post('/:id/courier/start', authMiddleware, requireRole('courier'), async 
 
     emit(req, `order:${order.id}`, 'order:updated', updated);
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
+    push.notifyBuyerStatusUpdate(updated).catch(() => {});
 
     res.json({ order: updated });
   } catch (err) { next(err); }
 });
 
 // ─── POST /api/orders/:id/courier/arrived ────────────────────────────────────
-// Courier reached the customer's address — waiting at the door
 router.post('/:id/courier/arrived', authMiddleware, requireRole('courier'), async (req, res, next) => {
   try {
     const order = await prisma.order.findUnique({ where: { id: req.params.id } });
@@ -374,12 +404,12 @@ router.post('/:id/courier/arrived', authMiddleware, requireRole('courier'), asyn
     emit(req, `order:${order.id}`, 'order:updated', updated);
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
     emit(req, `shop:${order.shopId}`, 'order:updated', updated);
+    push.notifyBuyerStatusUpdate(updated).catch(() => {});
     res.json({ order: updated });
   } catch (err) { next(err); }
 });
 
 // ─── POST /api/orders/:id/courier/complete ───────────────────────────────────
-// Courier handed the order over to customer
 router.post('/:id/courier/complete', authMiddleware, requireRole('courier'), async (req, res, next) => {
   try {
     const order = await prisma.order.findUnique({ where: { id: req.params.id } });
@@ -401,13 +431,13 @@ router.post('/:id/courier/complete', authMiddleware, requireRole('courier'), asy
     emit(req, `order:${order.id}`, 'order:updated', updated);
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
     emit(req, `shop:${order.shopId}`, 'order:updated', updated);
+    push.notifyBuyerStatusUpdate(updated).catch(() => {});
 
     res.json({ order: updated });
   } catch (err) { next(err); }
 });
 
 // ─── POST /api/orders/:id/buyer/confirm ──────────────────────────────────────
-// Customer confirms they received the order (final step in the chain)
 router.post('/:id/buyer/confirm', authMiddleware, async (req, res, next) => {
   try {
     const order = await prisma.order.findUnique({ where: { id: req.params.id } });
@@ -432,15 +462,21 @@ router.post('/:id/buyer/confirm', authMiddleware, async (req, res, next) => {
 // ─── POST /api/orders/:id/rate ───────────────────────────────────────────────
 router.post('/:id/rate', authMiddleware, async (req, res, next) => {
   try {
-    const { rating, review } = req.body;
+    const { rating, review, courierRating, shopRating } = req.body || {};
     const order = await prisma.order.findUnique({ where: { id: req.params.id } });
     if (!order) return res.status(404).json({ error: 'Not found' });
     if (order.buyerId !== req.user.id) return res.status(403).json({ error: 'Not your order' });
+    if (![STATUS.DELIVERED, STATUS.CONFIRMED_BY_BUYER].includes(order.status)) {
+      return res.status(400).json({ error: 'Order not deliverable yet' });
+    }
 
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { buyerRating: rating, buyerReview: review },
-    });
+    const data = {};
+    if (rating != null) data.buyerRating = Math.max(1, Math.min(5, Number(rating)));
+    if (review) data.buyerReview = String(review).slice(0, 1000);
+    if (courierRating != null) data.courierRating = Math.max(1, Math.min(5, Number(courierRating)));
+    if (shopRating != null) data.shopRating = Math.max(1, Math.min(5, Number(shopRating)));
+
+    await prisma.order.update({ where: { id: order.id }, data });
     res.json({ success: true });
   } catch (err) { next(err); }
 });
