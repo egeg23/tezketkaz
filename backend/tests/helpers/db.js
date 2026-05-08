@@ -73,6 +73,11 @@ async function setupTestDb(slug) {
   try { app.use('/api', require('../../src/routes/working-hours')); } catch { /* noop */ }
   // Phase 6.1 — saved tokenized payment methods.
   try { app.use('/api/payment-methods', require('../../src/routes/payment-methods')); } catch { /* noop */ }
+  // Phase 7.2 — Wolt+/Yandex Plus membership.
+  try { app.use('/api/membership', require('../../src/routes/membership')); } catch { /* noop */ }
+  // Phase 7.3 — banners + favorites.
+  try { app.use('/api', require('../../src/routes/banners')); } catch { /* noop */ }
+  try { app.use('/api/favorites', require('../../src/routes/favorites')); } catch { /* noop */ }
   // Stub the io getter — orders.js uses `req.app.get('io')`.
   const noopIo = { to: () => ({ emit: () => {} }), emit: () => {} };
   app.set('io', noopIo);

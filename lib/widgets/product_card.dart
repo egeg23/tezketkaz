@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../providers/cart_provider.dart';
 import '../screens/buyer/product_detail_screen.dart';
+import '../services/favorite_api.dart';
 import '../theme/app_theme.dart';
 
 String _formatPrice(double price) {
@@ -15,9 +16,56 @@ String _formatPrice(double price) {
   return "$formatted so'm";
 }
 
-class ProductCard extends StatelessWidget {
+class ProductCard extends StatefulWidget {
   final Product product;
   const ProductCard({super.key, required this.product});
+
+  @override
+  State<ProductCard> createState() => _ProductCardState();
+}
+
+class _ProductCardState extends State<ProductCard> {
+  bool? _isFavorite;
+  bool _favBusy = false;
+
+  Product get product => widget.product;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadFavorite());
+  }
+
+  Future<void> _loadFavorite() async {
+    try {
+      final fav = await FavoriteApi.instance.check(productId: product.id);
+      if (!mounted) return;
+      setState(() => _isFavorite = fav);
+    } catch (_) {/* silent */}
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (_favBusy) return;
+    HapticFeedback.lightImpact();
+    setState(() {
+      _favBusy = true;
+      _isFavorite = !(_isFavorite ?? false);
+    });
+    try {
+      if (_isFavorite == true) {
+        await FavoriteApi.instance.addProduct(product.id);
+      } else {
+        await FavoriteApi.instance.removeProduct(product.id);
+      }
+    } catch (_) {
+      // Roll back on failure so the heart matches the server state.
+      if (mounted) {
+        setState(() => _isFavorite = !(_isFavorite ?? false));
+      }
+    } finally {
+      if (mounted) setState(() => _favBusy = false);
+    }
+  }
 
   void _onAdd(BuildContext context) {
     HapticFeedback.lightImpact();
@@ -107,6 +155,16 @@ class ProductCard extends StatelessWidget {
                       child: qty == 0
                           ? _AddButton(key: const ValueKey('add'), onTap: () => _onAdd(context))
                           : _Counter(key: const ValueKey('cnt'), qty: qty, product: product),
+                    ),
+                  ),
+                  // Phase 7.3 — favourite heart, sits bottom-right of the
+                  // image so it doesn't fight the add button or discount
+                  // badge. Optimistically toggles, rolls back on API error.
+                  Positioned(
+                    bottom: 8, right: 8,
+                    child: _FavoriteHeart(
+                      isFavorite: _isFavorite ?? false,
+                      onTap: _toggleFavorite,
                     ),
                   ),
                 ],
@@ -261,6 +319,33 @@ class _StepIcon extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Phase 7.3 — small circular heart overlay used by [ProductCard] and
+/// `_ShopCard` (via the public copy in `shops_screen.dart`).
+class _FavoriteHeart extends StatelessWidget {
+  final bool isFavorite;
+  final VoidCallback onTap;
+  const _FavoriteHeart({required this.isFavorite, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.white.withValues(alpha: 0.92),
+        shape: const CircleBorder(),
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: Icon(
+              isFavorite ? Icons.favorite : Icons.favorite_border,
+              color: isFavorite ? AppColors.error : AppColors.textSecondary,
+              size: 18,
+            ),
+          ),
+        ),
+      );
 }
 
 class _Shimmer extends StatelessWidget {

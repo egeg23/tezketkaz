@@ -25,6 +25,7 @@ const { audit } = require('../lib/audit');
 const click = require('../services/click');
 const payme = require('../services/payme');
 const uzum = require('../services/uzum');
+const kaspi = require('../services/kaspi');
 
 const VALID_INIT_METHODS = new Set(['click', 'payme', 'uzumpay']);
 
@@ -345,6 +346,62 @@ router.post(
           }
 
           return result;
+        },
+      );
+
+      return res.status(200).json(stored);
+    } catch (err) { next(err); }
+  },
+);
+
+// ─── POST /api/payments/kaspi/callback ───────────────────────────────────────
+// Phase 7 — Kazakhstan launch. Kaspi signs raw bytes via HMAC-SHA256
+// (X-Kaspi-Signature). The raw-body parser is mounted in index.js
+// RAW_PATHS so req.body arrives as a Buffer; the inline express.raw fallback
+// here mirrors the uzum route for robustness when this router is mounted in
+// isolation (e.g. in tests).
+router.post(
+  '/kaspi/callback',
+  express.raw({ type: '*/*', limit: '256kb' }),
+  async (req, res, next) => {
+    try {
+      const result = await kaspi.callback(req);
+      if (!result.ok) {
+        if (result.error === 'invalid_signature') {
+          return res.status(401).json({ error: 'invalid signature' });
+        }
+        if (result.error === 'invalid_json' || result.error === 'empty_body') {
+          return res.status(400).json({ error: result.error });
+        }
+        if (result.error === 'missing_transactionId') {
+          return res.status(400).json({ error: 'missing transactionId' });
+        }
+      }
+
+      const externalId = result.externalId;
+      if (!externalId) {
+        return res.status(200).json(result);
+      }
+
+      const stored = await withIdempotency(
+        { provider: 'kaspi', externalId, payload: result.body, orderId: result.body && result.body.orderId },
+        async () => {
+          // Side-effects on a successful "paid" event: socket emit + audit.
+          if (result.body && result.body.status === 'paid' && result.body.orderId) {
+            const order = await prisma.order.findUnique({ where: { id: result.body.orderId } });
+            const io = req.app.get('io');
+            if (io && order) io.to(`buyer:${order.buyerId}`).emit('payment:success', { orderId: order.id });
+            if (order) {
+              await audit({
+                actorId: order.buyerId,
+                action: 'payment.received',
+                targetType: 'Order',
+                targetId: order.id,
+                metadata: { provider: 'kaspi', externalId },
+              });
+            }
+          }
+          return { ok: true, externalId };
         },
       );
 

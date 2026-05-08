@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../l10n/l10n.dart';
 import '../../models/catalog.dart';
+import '../../services/analytics_service.dart';
 import '../../services/catalog_api.dart';
+import '../../services/favorite_api.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/banner_carousel.dart';
 import '../../widgets/common.dart';
 import '../../widgets/search_bar.dart';
 
@@ -38,6 +42,16 @@ class _ShopsScreenState extends State<ShopsScreen>
   void initState() {
     super.initState();
     _tab = TabController(length: _verticals.length, vsync: this);
+    // Phase 7.4 — log a screen view per vertical so analytics can attribute
+    // engagement by storefront type, not just by route.
+    _tab.addListener(() {
+      if (_tab.indexIsChanging) return;
+      final v = _verticals[_tab.index];
+      AnalyticsService.instance.logScreen('shops_${v.code}');
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AnalyticsService.instance.logScreen('shops_${_verticals.first.code}');
+    });
   }
 
   @override
@@ -65,16 +79,28 @@ class _ShopsScreenState extends State<ShopsScreen>
               .toList(),
         ),
       ),
-      body: TabBarView(
-        controller: _tab,
-        children: _verticals
-            .map((v) => _ShopsTabView(
-                  vertical: v.code,
-                  lat: _defaultLat,
-                  lng: _defaultLng,
-                  radiusKm: _radiusKm,
-                ))
-            .toList(),
+      body: Column(
+        children: [
+          // Phase 7.3 — promotional banner carousel sits above the tab
+          // contents so it stays visible across vertical switches.
+          const Padding(
+            padding: EdgeInsets.fromLTRB(0, 12, 0, 4),
+            child: BannerCarousel(),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tab,
+              children: _verticals
+                  .map((v) => _ShopsTabView(
+                        vertical: v.code,
+                        lat: _defaultLat,
+                        lng: _defaultLng,
+                        radiusKm: _radiusKm,
+                      ))
+                  .toList(),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -185,9 +211,55 @@ class _ShopsTabViewState extends State<_ShopsTabView>
   }
 }
 
-class _ShopCard extends StatelessWidget {
+class _ShopCard extends StatefulWidget {
   final Shop shop;
   const _ShopCard({required this.shop});
+
+  @override
+  State<_ShopCard> createState() => _ShopCardState();
+}
+
+class _ShopCardState extends State<_ShopCard> {
+  bool? _isFavorite;
+  bool _favBusy = false;
+
+  Shop get shop => widget.shop;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadFavorite());
+  }
+
+  Future<void> _loadFavorite() async {
+    try {
+      final fav = await FavoriteApi.instance.check(shopId: shop.id);
+      if (!mounted) return;
+      setState(() => _isFavorite = fav);
+    } catch (_) {/* silent */}
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (_favBusy) return;
+    HapticFeedback.lightImpact();
+    setState(() {
+      _favBusy = true;
+      _isFavorite = !(_isFavorite ?? false);
+    });
+    try {
+      if (_isFavorite == true) {
+        await FavoriteApi.instance.addShop(shop.id);
+      } else {
+        await FavoriteApi.instance.removeShop(shop.id);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isFavorite = !(_isFavorite ?? false));
+      }
+    } finally {
+      if (mounted) setState(() => _favBusy = false);
+    }
+  }
 
   String _verticalLabel(BuildContext context) {
     switch (shop.vertical) {
@@ -304,6 +376,17 @@ class _ShopCard extends StatelessWidget {
                     ],
                   ],
                 ),
+              ),
+              IconButton(
+                icon: Icon(
+                  _isFavorite == true
+                      ? Icons.favorite
+                      : Icons.favorite_border,
+                  color: _isFavorite == true
+                      ? AppColors.error
+                      : AppColors.textHint,
+                ),
+                onPressed: _toggleFavorite,
               ),
               const Icon(Icons.chevron_right_rounded, color: AppColors.textHint),
             ],

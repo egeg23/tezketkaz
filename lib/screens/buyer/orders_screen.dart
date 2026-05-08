@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../providers/cart_provider.dart';
 import '../../providers/order_provider.dart';
+import '../../services/order_api.dart';
 import '../../services/review_api.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/rating_dialog.dart';
@@ -75,6 +77,31 @@ class _OrderCard extends StatelessWidget {
 
   String _fmt(double v) =>
     '${v.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ')} so\'m';
+
+  /// Phase 7.3 — fetches a CartDraft from `POST /api/orders/:id/reorder`,
+  /// pushes it into the cart provider (skipping unavailable items), and
+  /// surfaces a snackbar with the skip reasons before navigating to the
+  /// cart screen.
+  Future<void> _reorder(BuildContext context) async {
+    try {
+      final draft = await OrderApi.instance.reorder(order.id);
+      if (!context.mounted) return;
+      final cart = context.read<CartProvider>();
+      final skipped = cart.replaceFromDraft(draft);
+      final snackText = skipped.isEmpty
+          ? 'Savat yangilandi'
+          : "Bu mahsulotlar mavjud emas: ${skipped.join(', ')}";
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(snackText)),
+      );
+      context.go('/buyer/cart');
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Xatolik: $e')),
+      );
+    }
+  }
 
   /// Walk through up to three rating dialogs (shop → courier → product).
   /// Each step is independent — a cancelled dialog skips to the next target.
@@ -293,18 +320,35 @@ class _OrderCard extends StatelessWidget {
                   ],
                   if (isComplete) ...[
                     const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _rateOrder(context),
-                        icon: const Icon(Icons.star_outline_rounded, size: 18),
-                        label: const Text('Buyurtmani baholash'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.warning,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(0, 40),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _rateOrder(context),
+                            icon: const Icon(Icons.star_outline_rounded,
+                                size: 18),
+                            label: const Text('Baholash'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.warning,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(0, 40),
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _reorder(context),
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: const Text('Qayta buyurtma'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 40),
+                              side: const BorderSide(color: AppColors.primary),
+                              foregroundColor: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],

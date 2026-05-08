@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../l10n/l10n.dart';
 import '../../models/loyalty.dart';
 import '../../services/api_client.dart';
@@ -305,6 +306,30 @@ class _LoyaltyScreenState extends State<LoyaltyScreen> {
                         : null,
                   ),
                 ],
+              ),
+              const SizedBox(height: 10),
+              // Phase 7.3 — share-sheet entry point. Pre-fills a ready-made
+              // referral message so the buyer can fire it into their
+              // messenger of choice without retyping.
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _referralCode?.isNotEmpty == true
+                      ? () {
+                          final code = _referralCode!;
+                          final text = t(context, 'loyalty.share_text')
+                              .replaceAll('{code}', code);
+                          Share.share(text);
+                        }
+                      : null,
+                  icon: const Icon(Icons.share_rounded, size: 18),
+                  label: Text(t(context, 'loyalty.share_cta')),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(0, 44),
+                  ),
+                ),
               ),
               const SizedBox(height: 14),
               const Divider(height: 1),

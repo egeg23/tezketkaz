@@ -7,8 +7,18 @@
 //   silver  500_000
 //   gold    2_000_000
 //   platinum 10_000_000
+//
+// Phase 7.2 — Wolt+/Yandex Plus membership stacks on top of the loyalty tier
+// multiplier when crediting an order:
+//   • plus → x1.5
+//   • pro  → x2.0
+// Final earn = floor((total/1000) * tierMult * membershipMult). The
+// `MEMBERSHIP_EARN_MULT` map is exported for tests and admin tooling.
 
 const TIER_MULT = { bronze: 1.0, silver: 1.2, gold: 1.5, platinum: 2.0 };
+
+// Phase 7.2 — membership earn multiplier. Stacks on top of TIER_MULT.
+const MEMBERSHIP_EARN_MULT = { plus: 1.5, pro: 2.0 };
 
 const TIER_THRESHOLDS = [
   { tier: 'platinum', min: 10_000_000 },
@@ -39,11 +49,12 @@ async function getOrCreateAccount(prisma, userId) {
   return account;
 }
 
-function pointsForOrder(account, orderTotal) {
+function pointsForOrder(account, orderTotal, membershipMult = 1.0) {
   const total = Math.max(0, Number(orderTotal) || 0);
   const tier = (account && account.tier) || 'bronze';
   const mult = TIER_MULT[tier] ?? 1.0;
-  return Math.floor((total / POINT_RATE_UZS) * mult);
+  const memMult = Number.isFinite(membershipMult) ? membershipMult : 1.0;
+  return Math.floor((total / POINT_RATE_UZS) * mult * memMult);
 }
 
 async function creditOrder(prisma, userId, orderId, orderTotal) {
@@ -58,7 +69,24 @@ async function creditOrder(prisma, userId, orderId, orderTotal) {
     return { pointsAdded: 0, newTier: account.tier, alreadyCredited: true };
   }
 
-  const pointsAdded = pointsForOrder(account, orderTotal);
+  // Phase 7.2 — apply membership earn multiplier when present.
+  let membershipMult = 1.0;
+  try {
+    const membership = await prisma.membership.findUnique({ where: { userId } });
+    if (
+      membership &&
+      membership.status === 'active' &&
+      membership.currentPeriodEnd &&
+      membership.currentPeriodEnd.getTime() > Date.now() &&
+      MEMBERSHIP_EARN_MULT[membership.tier]
+    ) {
+      membershipMult = MEMBERSHIP_EARN_MULT[membership.tier];
+    }
+  } catch {
+    // Membership lookup must never break order completion.
+  }
+
+  const pointsAdded = pointsForOrder(account, orderTotal, membershipMult);
   const newLifetime = (account.lifetimeSpent || 0) + (Number(orderTotal) || 0);
   const newTier = tierForSpend(newLifetime);
 
@@ -185,6 +213,7 @@ async function bonusReferral(prisma, refereeUserId) {
 
 module.exports = {
   TIER_MULT,
+  MEMBERSHIP_EARN_MULT,
   POINT_RATE_UZS,
   SPEND_VALUE_UZS,
   REFERRAL_BONUS_POINTS,

@@ -375,4 +375,113 @@ class CartProvider extends ChangeNotifier {
   }
 
   void clear() => clearForNewShop();
+
+  /// Phase 7.3 — populate the cart from a `POST /api/orders/:id/reorder`
+  /// CartDraft payload.
+  ///
+  /// Wipes the current items and pushes everything from `draft.items`,
+  /// skipping anything flagged `unavailable: true` or with `availableQty < 1`.
+  /// Returns the list of skipped product names so the caller can render a
+  /// snackbar; an empty list means everything was added cleanly.
+  List<String> replaceFromDraft(CartDraft draft) {
+    _lines.clear();
+    _currentShopId = draft.shopId;
+    _lastEstimate = null;
+    _lastEstimateKey = null;
+    _couponCode = null;
+    _loyaltyPoints = 0;
+    _scheduledFor = null;
+
+    final skipped = <String>[];
+    for (final item in draft.items) {
+      if (item.unavailable) {
+        skipped.add(item.product.name);
+        continue;
+      }
+      final qty = item.availableQty ?? item.quantity;
+      if (qty < 1) {
+        skipped.add(item.product.name);
+        continue;
+      }
+      final key = _keyFor(item.product.id, const []);
+      _lines[key] = CartLine(
+        key: key,
+        product: item.product,
+        quantity: qty,
+        unitPrice: item.unitPrice,
+      );
+    }
+    notifyListeners();
+    return skipped;
+  }
+}
+
+/// Phase 7.3 — payload shape returned by `POST /api/orders/:id/reorder`.
+///
+/// Each `CartDraftItem` mirrors a previous order line; `unavailable` marks
+/// items that can't be re-added (e.g. discontinued, out of zone) so the cart
+/// can skip them and inform the buyer.
+class CartDraft {
+  final String shopId;
+  final List<CartDraftItem> items;
+  const CartDraft({required this.shopId, required this.items});
+
+  factory CartDraft.fromJson(Map<String, dynamic> j) {
+    final shopId = j['shopId'] as String? ?? '';
+    final raw = j['items'] as List? ?? const [];
+    return CartDraft(
+      shopId: shopId,
+      items: raw
+          .map((i) =>
+              CartDraftItem.fromJson(Map<String, dynamic>.from(i as Map), shopId))
+          .toList(),
+    );
+  }
+}
+
+class CartDraftItem {
+  final Product product;
+  final int quantity;
+  final double unitPrice;
+  final bool unavailable;
+  final int? availableQty;
+  const CartDraftItem({
+    required this.product,
+    required this.quantity,
+    required this.unitPrice,
+    this.unavailable = false,
+    this.availableQty,
+  });
+
+  factory CartDraftItem.fromJson(Map<String, dynamic> j, String fallbackShopId) {
+    final p = j['product'] as Map?;
+    final productId =
+        (p?['id'] ?? j['productId']) as String? ?? '';
+    final productName =
+        (p?['name'] ?? j['productName']) as String? ?? '';
+    return CartDraftItem(
+      product: Product(
+        id: productId,
+        name: productName,
+        nameUz: (p?['nameUz'] as String?) ?? productName,
+        price: (p?['price'] as num?)?.toDouble() ??
+            (j['unitPrice'] as num?)?.toDouble() ??
+            0,
+        unit: (p?['unit'] as String?) ?? '',
+        category: (p?['category'] as String?) ?? '',
+        imageUrl: (p?['imageUrl'] as String?) ?? '',
+        shopId: (p?['shopId'] as String?) ?? fallbackShopId,
+      ),
+      quantity: (j['quantity'] as num?)?.toInt() ?? 1,
+      unitPrice: (j['unitPrice'] as num?)?.toDouble() ??
+          (p?['price'] as num?)?.toDouble() ??
+          0,
+      // Backend reorder payload uses `available: bool` (true = OK to add).
+      // Fall back to legacy `unavailable: bool` for any older callers.
+      unavailable: j.containsKey('available')
+          ? !(j['available'] as bool? ?? true)
+          : (j['unavailable'] as bool? ?? false),
+      availableQty: (j['availableQty'] as num?)?.toInt(),
+    );
+  }
 }

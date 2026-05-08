@@ -25,7 +25,10 @@ import 'screens/buyer/buyer_shell.dart';
 import 'screens/buyer/home_screen.dart';
 import 'screens/buyer/catalog_screen.dart';
 import 'screens/buyer/cart_screen.dart';
+import 'screens/buyer/country_settings_screen.dart';
+import 'screens/buyer/favorites_screen.dart';
 import 'screens/buyer/orders_screen.dart';
+import 'screens/buyer/subscription_screen.dart';
 import 'screens/buyer/tracking_screen.dart';
 import 'screens/buyer/profile_screen.dart';
 import 'screens/buyer/shops_screen.dart';
@@ -226,6 +229,18 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
           GoRoute(
             path: '/buyer/payment-methods',
             builder: (_, __) => const PaymentMethodsScreen(),
+          ),
+          GoRoute(
+            path: '/buyer/subscription',
+            builder: (_, __) => const SubscriptionScreen(),
+          ),
+          GoRoute(
+            path: '/buyer/favorites',
+            builder: (_, __) => const FavoritesScreen(),
+          ),
+          GoRoute(
+            path: '/buyer/country-settings',
+            builder: (_, __) => const CountrySettingsScreen(),
           ),
         ],
       ),

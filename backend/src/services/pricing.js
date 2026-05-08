@@ -71,9 +71,20 @@ async function pickSurgeRule(prisma, { vertical, zoneId, now = new Date() }) {
 // Compute deliveryFee, ETA, surge, zone for a destination served by `shopId`.
 // Returns:
 //   { zoneId, distanceKm, baseFee, perKmFee, freeKm, surgeFactor,
-//     surgeReason, eta, deliveryFee, minOrder, outOfZone }
+//     surgeReason, eta, deliveryFee, minOrder, outOfZone,
+//     membershipDiscount, freeDeliveryReason }
 // `outOfZone:true` means caller should reject the order — zoneId will be null.
-async function computeDelivery(prisma, { shopId, destLat, destLng }) {
+//
+// Phase 7.2 — when `userId` is provided and that user has an active membership
+// the deliveryFee is reduced (or zeroed) accordingly:
+//   • tier='pro'  → deliveryFee=0, freeDeliveryReason='membership_pro'
+//   • tier='plus' → deliveryFee halved, freeDeliveryReason='membership_plus_half'
+//
+// Phase 7 — `country` is accepted for forward-compat (per-country surge / fee
+// rules) but currently doesn't change the math; the shop's own currency drives
+// the units. Tax (VAT) is applied separately in services/tax.js.
+async function computeDelivery(prisma, { shopId, destLat, destLng, userId, country } = {}) {
+  void country;
   if (!shopId) throw Object.assign(new Error('shopId required'), { status: 400 });
   if (!Number.isFinite(destLat) || !Number.isFinite(destLng)) {
     throw Object.assign(new Error('destLat/destLng required'), { status: 400 });
@@ -126,10 +137,38 @@ async function computeDelivery(prisma, { shopId, destLat, destLng }) {
 
   const billableKm = Math.max(0, dKm - freeKm);
   const rawFee = baseFee + billableKm * perKmFee;
-  const deliveryFee = Math.round(rawFee * surgeFactor);
+  let deliveryFee = Math.round(rawFee * surgeFactor);
 
   let eta = eta_minutes(dKm) + 15; // 15-min prep buffer
   if (shop.vertical === 'restaurant') eta += 5;
+
+  // Phase 7.2 — apply membership perk on top of the surge-adjusted fee.
+  let membershipDiscount = 0;
+  let freeDeliveryReason = null;
+  if (userId) {
+    try {
+      const membership = await prisma.membership.findUnique({ where: { userId } });
+      if (
+        membership &&
+        membership.status === 'active' &&
+        membership.currentPeriodEnd &&
+        membership.currentPeriodEnd.getTime() > Date.now()
+      ) {
+        if (membership.tier === 'pro') {
+          membershipDiscount = deliveryFee;
+          deliveryFee = 0;
+          freeDeliveryReason = 'membership_pro';
+        } else if (membership.tier === 'plus') {
+          const halved = Math.round(deliveryFee / 2);
+          membershipDiscount = deliveryFee - halved;
+          deliveryFee = halved;
+          freeDeliveryReason = 'membership_plus_half';
+        }
+      }
+    } catch {
+      // Membership lookup must never break checkout.
+    }
+  }
 
   return {
     zoneId: zone.id,
@@ -143,6 +182,8 @@ async function computeDelivery(prisma, { shopId, destLat, destLng }) {
     deliveryFee,
     minOrder,
     outOfZone: false,
+    membershipDiscount,
+    freeDeliveryReason,
   };
 }
 

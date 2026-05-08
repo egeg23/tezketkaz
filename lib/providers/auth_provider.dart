@@ -1,8 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:provider/provider.dart';
 import '../models/models.dart';
+import '../services/analytics_service.dart';
 import '../services/api_client.dart';
+import '../services/membership_api.dart';
 import '../services/push_service.dart';
 import '../services/socket_service.dart';
 
@@ -14,6 +18,11 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
 
+  // Phase 7.2 — cached buyer membership row. Refreshed once on login and
+  // every 30 minutes after that while the auth provider is alive.
+  Membership? _membership;
+  Timer? _membershipTimer;
+
   AuthState get state => _state;
   User? get user => _user;
   bool get isLoading => _isLoading;
@@ -22,7 +31,83 @@ class AuthProvider extends ChangeNotifier {
   bool get isCourier => _user?.activeRole == UserRole.courier;
   bool get isShop => _user?.activeRole == UserRole.shop;
 
+  /// Phase 7.2 — current buyer membership (`null` when not subscribed).
+  Membership? get membership => _membership;
+
   final _api = ApiClient.instance;
+
+  /// Convenience: any caller with a `BuildContext` can poke a refresh
+  /// without holding a reference to the provider directly. Used by the
+  /// subscription screen after subscribe / cancel / reactivate.
+  static Future<void> refreshMembershipFromAnywhere(BuildContext ctx) async {
+    try {
+      await ctx.read<AuthProvider>().refreshMembership();
+    } catch (_) {/* ignore — best effort */}
+  }
+
+  Future<void> refreshMembership() async {
+    if (!isAuthenticated) return;
+    try {
+      _membership = await MembershipApi.instance.me();
+      notifyListeners();
+    } catch (_) {/* silent */}
+  }
+
+  void _startMembershipTimer() {
+    _membershipTimer?.cancel();
+    // 30 minutes — light enough that we never hammer the endpoint while still
+    // catching billing-cycle rollovers without a manual pull-to-refresh.
+    _membershipTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+      refreshMembership();
+    });
+  }
+
+  void _stopMembershipTimer() {
+    _membershipTimer?.cancel();
+    _membershipTimer = null;
+    _membership = null;
+  }
+
+  @override
+  void dispose() {
+    _membershipTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Phase 7.1 — push country + locale to the backend.
+  /// `PATCH /api/users/me` accepts `{country, locale}` and returns the
+  /// updated user object.
+  Future<void> updateCountryLocale({
+    required String country,
+    required String locale,
+  }) async {
+    try {
+      final res = await _api.patch('/api/users/me', {
+        'country': country,
+        'locale': locale,
+      });
+      final body = res.data;
+      final userJson = body is Map && body['user'] is Map
+          ? body['user'] as Map<String, dynamic>
+          : body is Map<String, dynamic>
+              ? body
+              : null;
+      if (userJson != null) {
+        _user = _parseUser(userJson);
+      } else if (_user != null) {
+        _user = _user!.copyWith(country: country);
+      }
+      notifyListeners();
+    } catch (_) {
+      // Backend write failed — keep the local locale change in any case so
+      // the user isn't stuck with an unwanted language.
+      if (_user != null) {
+        _user = _user!.copyWith(country: country);
+        notifyListeners();
+      }
+      rethrow;
+    }
+  }
 
   /// On app start — try to restore session from saved tokens
   Future<void> tryRestoreSession() async {
@@ -40,6 +125,13 @@ class AuthProvider extends ChangeNotifier {
       SocketService.instance.connect();
       // Fire-and-forget — push will silently degrade if Firebase not configured.
       unawaited(PushService.instance.init());
+      _startMembershipTimer();
+      unawaited(refreshMembership());
+      if (_user != null) {
+        unawaited(AnalyticsService.instance.setUser(_user!.id, {
+          if (_user!.country != null) 'country': _user!.country!,
+        }));
+      }
     } catch (_) {
       try { await _api.clearTokens(); } catch (_) {}
       _state = AuthState.unauthenticated;
@@ -83,6 +175,16 @@ class AuthProvider extends ChangeNotifier {
       _state = AuthState.authenticated;
       SocketService.instance.connect();
       unawaited(PushService.instance.init());
+      _startMembershipTimer();
+      unawaited(refreshMembership());
+      if (_user != null) {
+        unawaited(AnalyticsService.instance.setUser(_user!.id, {
+          if (_user!.country != null) 'country': _user!.country!,
+        }));
+        unawaited(AnalyticsService.instance.logEvent('login', {
+          'method': 'otp',
+        }));
+      }
       _setLoading(false);
       return true;
     } on ApiException catch (e) {
@@ -171,6 +273,8 @@ class AuthProvider extends ChangeNotifier {
 
     await _api.clearTokens();
     SocketService.instance.disconnect();
+    _stopMembershipTimer();
+    unawaited(AnalyticsService.instance.setUser(null));
     _user = null;
     _state = AuthState.unauthenticated;
     notifyListeners();
@@ -192,6 +296,7 @@ class AuthProvider extends ChangeNotifier {
       courierStatus: _parseCourierStatus(json['courierStatus']),
       shopId: firstShop?['id'],
       shopName: firstShop?['name'],
+      country: json['country'] as String?,
     );
   }
 

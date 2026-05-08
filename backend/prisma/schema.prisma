@@ -72,6 +72,15 @@ model User {
   paymentMethods     PaymentMethod[]
   verificationDocs   VerificationDocument[]
 
+  // Phase 7 — country code drives currency, VAT rate, payment provider mix.
+  // ISO 3166-1 alpha-2: UZ (default) | KZ | KG | RU.
+  country        String   @default("UZ")
+
+  // Phase 7 relations
+  membership     Membership?
+  favorites      Favorite[]
+  bannerImpressions BannerImpression[]
+
   // Referral (Phase 3 loyalty)
   referralCode   String?  @unique
   referredById   String?
@@ -528,6 +537,11 @@ model Order {
   // Currency snapshot at order time (mirrors Shop.currency).
   currency        String   @default("UZS")
 
+  // Phase 7 — VAT/НДС snapshot. taxRate is the percentage applied (e.g. 0.12),
+  // taxAmount is what was added on top of subtotal (in major units of currency).
+  taxRate         Float    @default(0)
+  taxAmount       Float    @default(0)
+
   // Items
   items           OrderItem[]
 
@@ -867,4 +881,122 @@ model VerificationDocument {
 
   @@index([userId, type])
   @@index([status])
+}
+
+// ── Phase 7: subscription, banners, favorites ───────────────────────────────
+
+// Wolt+ / Yandex Plus style membership. One row per user; tier upgrades
+// rewrite this row (we do not keep tier history here — that's in
+// LoyaltyTransaction with a 'membership' reason).
+model Membership {
+  id                String   @id @default(uuid())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String   @unique
+
+  // 'plus' (basic perks) | 'pro' (free delivery + priority support)
+  tier              String   @default("plus")
+
+  // 'active' | 'past_due' | 'cancelled' | 'expired'
+  status            String   @default("active")
+
+  // ISO currency snapshot of the price the user signed up at (e.g. "UZS").
+  currency          String   @default("UZS")
+
+  // Price per renewal period in major units. 30000 UZS / month at launch.
+  periodAmount      Float
+
+  // 'monthly' | 'yearly'
+  billingPeriod     String   @default("monthly")
+
+  startedAt         DateTime @default(now())
+  currentPeriodEnd  DateTime
+  cancelledAt       DateTime?
+  // When status='past_due' how many billing retries we've done. Reset on success.
+  failedRenewals    Int      @default(0)
+  lastChargeAt      DateTime?
+  lastChargeError   String?
+
+  autoRenew         Boolean  @default(true)
+  paymentMethodId   String?  // saved card to charge on renewal
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, currentPeriodEnd])
+}
+
+// Promo banners shown on buyer home / vertical landing. Admin-managed.
+model Banner {
+  id            String   @id @default(uuid())
+
+  titleUz       String
+  titleRu       String
+  titleEn       String?
+
+  subtitleUz    String?
+  subtitleRu    String?
+  subtitleEn    String?
+
+  imageUrl      String
+
+  // Where tapping the banner sends the user. Examples:
+  //   /buyer/shops?vertical=restaurant
+  //   /shop/SHOP_ID
+  //   /buyer/promo?code=WELCOME20
+  // Null = decorative banner (no tap action).
+  deepLink      String?
+
+  // 'all' | 'grocery' | 'restaurant' | 'pharmacy' | 'electronics'
+  vertical      String   @default("all")
+
+  // ISO country filter ("UZ", "KZ", "KG"). Null = all.
+  country       String?
+
+  priority      Int      @default(0)
+  isActive      Boolean  @default(true)
+
+  validFrom     DateTime?
+  validUntil    DateTime?
+
+  // Optional: track impressions/clicks for the admin dashboard.
+  impressions   BannerImpression[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isActive, priority])
+  @@index([vertical, isActive])
+  @@index([country])
+}
+
+model BannerImpression {
+  id        String   @id @default(uuid())
+  banner    Banner   @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+  bannerId  String
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  // 'view' | 'click'
+  kind      String
+  createdAt DateTime @default(now())
+
+  @@index([bannerId, kind, createdAt])
+  @@index([userId, kind])
+}
+
+// Per-user favorite product. Shop-favorites would be a similar model with
+// shopId instead — skip for now, can be added in Phase 8 if demand exists.
+model Favorite {
+  id         String   @id @default(uuid())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+
+  // Either productId OR shopId is set; never both.
+  productId  String?
+  shopId     String?
+
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@unique([userId, shopId])
+  @@index([userId])
 }

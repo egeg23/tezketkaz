@@ -16,6 +16,9 @@ const shopHours = require('../services/shopHours');
 const click = require('../services/click');
 const payme = require('../services/payme');
 const money = require('../lib/money');
+// Phase 7 — multi-country VAT + country-aware estimate.
+const tax = require('../services/tax');
+const country = require('../services/country');
 
 // Phase 6 — backwards-compatible Money envelope. We keep the raw Float fields
 // (subtotal, total, etc.) AND emit a sibling `*_money` object so the Flutter
@@ -265,6 +268,7 @@ router.post('/estimate', authMiddleware, async (req, res, next) => {
       shopId,
       destLat: Number(address.lat),
       destLng: Number(address.lng),
+      userId: req.user.id,
     });
 
     if (delivery.outOfZone) {
@@ -306,7 +310,18 @@ router.post('/estimate', authMiddleware, async (req, res, next) => {
     }
 
     const discount = couponDiscount + loyaltyDiscount;
-    const total = Math.max(0, subtotal + delivery.deliveryFee - discount);
+
+    // Phase 7 — VAT applies to (subtotal - discount) clamped at 0. Country
+    // comes from the user; defaults to UZ for legacy accounts without one.
+    const userCountry = req.user.country || country.fromPhone(req.user.phone) || 'UZ';
+    const taxBase = Math.max(0, subtotal - discount);
+    const { taxRate, taxAmount } = tax.compute({
+      subtotal: taxBase,
+      deliveryFee: delivery.deliveryFee,
+      country: userCountry,
+    });
+
+    const total = Math.max(0, subtotal + delivery.deliveryFee - discount + taxAmount);
 
     res.json({
       subtotal,
@@ -317,6 +332,8 @@ router.post('/estimate', authMiddleware, async (req, res, next) => {
       coupon: couponInfo,
       loyaltyDiscount,
       loyaltyPointsApplied,
+      taxRate,
+      taxAmount,
       total,
       minOrder: delivery.minOrder,
       minOrderMet,
@@ -327,6 +344,7 @@ router.post('/estimate', authMiddleware, async (req, res, next) => {
       zoneId: delivery.zoneId,
       items: itemsBreakdown,
       currency: shop.currency || 'UZS',
+      country: userCountry,
       shopOpen,
       opensAt,
     });
@@ -413,6 +431,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
         shopId,
         destLat: Number(deliveryLat),
         destLng: Number(deliveryLng),
+        userId: req.user.id,
       });
       if (delivery.outOfZone) {
         return res.status(400).json({ error: 'out_of_zone' });
@@ -458,7 +477,19 @@ router.post('/', authMiddleware, async (req, res, next) => {
     }
 
     const discount = couponDiscount + loyaltyDiscount;
-    const total = Math.max(0, subtotal + deliveryFee - discount);
+
+    // Phase 7 — VAT applied to (subtotal - discount) clamped at 0; delivery
+    // fee is the courier reward and is not taxed in our model. Country comes
+    // from the buyer (User.country); falls back to phone-prefix detection.
+    const userCountry = req.user.country || country.fromPhone(req.user.phone) || 'UZ';
+    const taxBase = Math.max(0, subtotal - discount);
+    const { taxRate, taxAmount } = tax.compute({
+      subtotal: taxBase,
+      deliveryFee,
+      country: userCountry,
+    });
+
+    const total = Math.max(0, subtotal + deliveryFee - discount + taxAmount);
     // Default false; the saved-method charge below or the provider webhook
     // flips it to true. Cash is "paid on delivery" so still starts at false.
     let isPaid = false;
@@ -523,6 +554,8 @@ router.post('/', authMiddleware, async (req, res, next) => {
         paymentMethodId: savedMethod ? savedMethod.id : null,
         currency: shop.currency || 'UZS',
         subtotal, deliveryFee, total,
+        // Phase 7 — VAT snapshot.
+        taxRate, taxAmount,
         couponCode: validatedCoupon ? validatedCoupon.code : null,
         discount,
         loyaltySpent: requestedPoints,
@@ -1068,6 +1101,101 @@ router.post('/:id/rate', authMiddleware, async (req, res, next) => {
 
     await prisma.order.update({ where: { id: order.id }, data });
     res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/orders/:id/reorder — buyer-only cart draft helper ─────────────
+// Phase 7.3 — produce a CartDraft from a previous order. We DO NOT create a
+// new Order — that's the buyer's choice on the next checkout. We surface
+// per-item availability so the UI can warn before saving the cart.
+router.post('/:id/reorder', authMiddleware, async (req, res, next) => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { items: true, shop: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Not found' });
+    if (order.buyerId !== req.user.id) return res.status(403).json({ error: 'Not your order' });
+
+    const productIds = order.items.map((i) => i.productId);
+    const products = productIds.length
+      ? await prisma.product.findMany({ where: { id: { in: productIds } } })
+      : [];
+    const productMap = new Map(products.map((p) => [p.id, p]));
+
+    const shopActive = !!order.shop?.isActive;
+
+    const items = order.items.map((it) => {
+      const product = productMap.get(it.productId);
+      let modifiers = [];
+      if (it.modifiers) {
+        try {
+          modifiers = JSON.parse(it.modifiers) || [];
+        } catch {
+          modifiers = [];
+        }
+      }
+      let available = true;
+      let skipReason = null;
+      if (!product) {
+        available = false;
+        skipReason = 'product_deleted';
+      } else if (!product.isAvailable) {
+        available = false;
+        skipReason = 'out_of_stock';
+      } else if (product.shopId !== order.shopId) {
+        // Shop relocation/migration — refuse cross-shop reorder.
+        available = false;
+        skipReason = 'product_moved';
+      } else if (!shopActive) {
+        available = false;
+        skipReason = 'shop_inactive';
+      }
+      return {
+        productId: it.productId,
+        productName: it.productName,
+        quantity: it.quantity,
+        unitPrice: it.price,
+        modifiers,
+        available,
+        skipReason,
+        // Embed enough product info so the UI can render the line without
+        // a second roundtrip. Null when product was deleted.
+        product: product ? {
+          id: product.id,
+          name: product.name,
+          nameUz: product.nameUz,
+          price: product.price,
+          discountPrice: product.discountPrice,
+          unit: product.unit,
+          category: product.category,
+          imageUrl: product.imageUrl,
+          shopId: product.shopId,
+        } : null,
+      };
+    });
+
+    // Resolve a saved Address that matches the original order's coords. Best
+    // effort — if nothing matches, returns null and the buyer picks again.
+    let deliveryAddressId = null;
+    if (order.deliveryLat != null && order.deliveryLng != null) {
+      const matches = await prisma.address.findMany({
+        where: { userId: req.user.id },
+      });
+      const same = matches.find((a) => (
+        a.lat != null && a.lng != null
+        && Math.abs(a.lat - order.deliveryLat) < 0.0001
+        && Math.abs(a.lng - order.deliveryLng) < 0.0001
+      ));
+      if (same) deliveryAddressId = same.id;
+    }
+
+    res.json({
+      shopId: order.shopId,
+      items,
+      couponCode: null,
+      deliveryAddressId,
+    });
   } catch (err) { next(err); }
 });
 
