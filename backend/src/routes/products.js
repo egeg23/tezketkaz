@@ -270,10 +270,26 @@ router.get('/template', (req, res) => {
 });
 
 // ─── POST /api/products/upload-image ────────────────────────────────────────
-router.post('/upload-image', authMiddleware, uploadImage.single('image'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file' });
-  const url = `/uploads/products/${req.file.filename}`;
-  res.json({ url, filename: req.file.filename, size: req.file.size });
+// Gated to shop members + admins so random buyers can't fill /uploads with
+// junk. Buyers occasionally upload images for chat/reviews via dedicated
+// endpoints — those carry their own gating.
+router.post('/upload-image', authMiddleware, uploadImage.single('image'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file' });
+    if (!req.user.isAdmin) {
+      const member = await prisma.shopMember.findFirst({
+        where: { userId: req.user.id },
+        select: { id: true },
+      });
+      if (!member) {
+        // Discard the uploaded file so we don't accumulate orphans.
+        try { fs.unlinkSync(req.file.path); } catch { /* noop */ }
+        return res.status(403).json({ error: 'Shop membership required' });
+      }
+    }
+    const url = `/uploads/products/${req.file.filename}`;
+    res.json({ url, filename: req.file.filename, size: req.file.size });
+  } catch (err) { next(err); }
 });
 
 // ─── POST /api/products ─────────────────────────────────────────────────────
@@ -344,19 +360,30 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
     if (!(await requireShopMember(req, product.shopId))) {
       return res.status(403).json({ error: 'Not a shop member' });
     }
+    let hardDeleteRefused = false;
     if (req.query.hard === '1') {
       try {
         await prisma.product.delete({ where: { id: req.params.id } });
         return res.json({ deleted: true });
       } catch (e) {
-        // Foreign-key constraint — fall back to soft delete
+        // Foreign-key constraint (past OrderItems) — fall back to soft
+        // delete and tell the client what happened so the UI can explain.
+        hardDeleteRefused = true;
+        if (e?.code !== 'P2003' && e?.code !== 'P2014') {
+          // Unexpected error — log it.
+          // eslint-disable-next-line global-require
+          require('../lib/logger').warn(
+            { err: e.message, productId: req.params.id },
+            'hard-delete failed unexpectedly',
+          );
+        }
       }
     }
     await prisma.product.update({
       where: { id: req.params.id },
       data: { isAvailable: false },
     });
-    res.json({ deleted: false, archived: true });
+    res.json({ deleted: false, archived: true, hardDeleteRefused });
   } catch (err) { next(err); }
 });
 

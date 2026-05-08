@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../theme/app_theme.dart';
 import 'shop_shell.dart';
@@ -10,7 +11,6 @@ import 'shop_shell.dart';
 class ShopHistoryScreen extends StatelessWidget {
   const ShopHistoryScreen({super.key});
 
-  static const _shopId = 'shop_korzinka';
   String _fmt(double v) => '${v.toInt()
     .toString()
     .replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ')} so\'m';
@@ -18,7 +18,8 @@ class ShopHistoryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final orderProv = context.watch<OrderProvider>();
-    final done = orderProv.doneForShop(_shopId);
+    final shopId = context.read<AuthProvider>().user?.shopId ?? '';
+    final done = orderProv.doneForShop(shopId);
     final delivered = done.where((o) => o.status == AppOrderStatus.delivered).toList();
     final todayTotal = delivered.fold(0.0, (s, o) => s + o.total);
 
@@ -152,7 +153,9 @@ class ShopProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final orders = context.watch<OrderProvider>();
-    const shopId = 'shop_korzinka';
+    final user = context.watch<AuthProvider>().user;
+    final shopId = user?.shopId ?? '';
+    final shopName = user?.name ?? 'Do\'kon';
     final delivered = orders.doneForShop(shopId)
         .where((o) => o.status == AppOrderStatus.delivered).length;
 
@@ -194,10 +197,10 @@ class ShopProfileScreen extends StatelessWidget {
                   child: const Center(child: Text('🏪', style: TextStyle(fontSize: 40))),
                 ),
                 const SizedBox(height: 12),
-                const Text('Korzinka — Yunusobod',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                const Text('ID: shop_korzinka',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                Text(shopName,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                Text('ID: ${shopId.isEmpty ? "—" : shopId}',
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,

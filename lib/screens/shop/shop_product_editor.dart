@@ -110,7 +110,7 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
           'unit': _unit,
           'category': _category,
           'imageUrl': _imageUrl,
-          'stock': int.parse(_stock.text),
+          'stock': int.tryParse(_stock.text.trim()) ?? 100,
           'isAvailable': _isAvailable,
         });
       } else {

@@ -149,6 +149,9 @@ const io = new Server(server, {
   cors: { origin: corsOrigins.includes('*') ? '*' : corsOrigins, credentials: true },
 });
 app.set('io', io);
+// Expose io to non-request contexts (BullMQ workers + the no-op queue's
+// inline dispatcher fallback in lib/queues.js).
+global.__tkk_io = io;
 
 // ─── API Routes ─────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);

@@ -459,7 +459,9 @@ router.post('/', authMiddleware, async (req, res, next) => {
 
     const discount = couponDiscount + loyaltyDiscount;
     const total = Math.max(0, subtotal + deliveryFee - discount);
-    let isPaid = paymentMethod === 'cash' ? false : false; // online → wait for webhook
+    // Default false; the saved-method charge below or the provider webhook
+    // flips it to true. Cash is "paid on delivery" so still starts at false.
+    let isPaid = false;
     let paymentRef = null;
 
     // Phase 6.1 — saved-method charge happens BEFORE order creation so we can
@@ -834,6 +836,14 @@ router.post('/:id/shop/cancel', authMiddleware, async (req, res, next) => {
       include: { items: true, shop: true },
     });
 
+    // Free the courier (if any was assigned) so dispatcher can offer new orders.
+    if (order.courierId) {
+      await prisma.user.updateMany({
+        where: { id: order.courierId, activeOrderId: order.id },
+        data: { activeOrderId: null },
+      });
+    }
+
     emit(req, `order:${order.id}`, 'order:updated', updated);
     emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
     emit(req, `shop:${order.shopId}`, 'order:updated', updated);
@@ -866,6 +876,13 @@ router.post('/:id/courier/accept', authMiddleware, requireRole('courier'), async
     if (claim.count === 0) {
       return res.status(409).json({ error: 'Order already taken' });
     }
+
+    // Mark courier busy so the dispatcher excludes them from new offers
+    // until this order completes/cancels (parity with dispatcher.acceptOffer).
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { activeOrderId: order.id },
+    });
 
     const updated = await prisma.order.findUnique({
       where: { id: order.id },
@@ -975,7 +992,11 @@ router.post('/:id/courier/complete', authMiddleware, requireRole('courier'), asy
 
     await prisma.user.update({
       where: { id: req.user.id },
-      data: { ordersCount: { increment: 1 } },
+      data: {
+        ordersCount: { increment: 1 },
+        // Free the courier so the dispatcher can offer them new orders.
+        activeOrderId: null,
+      },
     });
 
     // Phase 3: credit loyalty points + referral bonus on delivery.
