@@ -66,6 +66,8 @@ function noopQueues() {
     membership: makeNoopQueue('membership'),
     accountDeletion: makeNoopQueue('accountDeletion'),
     backup: makeNoopQueue('backup'),
+    // Phase 10.1 — daily sweep of expired open group orders.
+    groupExpiry: makeNoopQueue('groupExpiry'),
   };
 }
 
@@ -91,6 +93,8 @@ function queues() {
     membership: new Queue('membership', { connection }),
     accountDeletion: new Queue('accountDeletion', { connection }),
     backup: new Queue('backup', { connection }),
+    // Phase 10.1 — daily sweep of expired open group orders.
+    groupExpiry: new Queue('groupExpiry', { connection }),
   };
   return _queues;
 }
@@ -121,6 +125,9 @@ function startWorkers(handlers) {
   }
   if (handlers.backup) {
     _workers.push(new Worker('backup', handlers.backup, { connection, concurrency: 1 }));
+  }
+  if (handlers.groupExpiry) {
+    _workers.push(new Worker('groupExpiry', handlers.groupExpiry, { connection, concurrency: 1 }));
   }
   for (const w of _workers) {
     w.on('failed', (job, err) => logger.error({ queue: w.name, jobId: job?.id, err }, 'worker job failed'));

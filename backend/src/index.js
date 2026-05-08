@@ -42,6 +42,11 @@ const instantPayoutRoutes = require('./routes/instant-payout');
 const courierPerformanceRoutes = require('./routes/courier-performance');
 const heatmapRoutes = require('./routes/heatmap');
 const gdprRoutes = require('./routes/gdpr');
+const orderGroupRoutes = require('./routes/order-groups');
+// Phase 10.2 — customer support inbox.
+const supportRoutes = require('./routes/support');
+// Phase 10.3 — admin push notification campaigns.
+const pushCampaignRoutes = require('./routes/push-campaigns');
 const { setupSockets } = require('./sockets');
 
 const app = express();
@@ -169,6 +174,17 @@ app.use('/api/users', userRoutes);
 app.use('/api/users', gdprRoutes);
 app.use('/api/shops', shopRoutes);
 app.use('/api/products', productRoutes);
+// Phase 10.1 — group orders / split-bill (mounted right after products so
+// the host's `shopId` lookups + the join flow share the same auth surface
+// as the product/cart routes).
+app.use('/api/order-groups', orderGroupRoutes);
+// Phase 10.2 — customer support inbox. User endpoints under /api/support and
+// admin endpoints under /api/admin/support (separate sub-router export).
+app.use('/api/support', supportRoutes);
+app.use('/api/admin/support', supportRoutes.adminRouter);
+// Phase 10.3 — admin push notification campaigns + user track-open beacon.
+app.use('/api/admin/push-campaigns', pushCampaignRoutes.adminRouter);
+app.use('/api/push-campaigns', pushCampaignRoutes.userRouter);
 // Phase 7.3 — banners (public list + admin CRUD; declares absolute paths
 // under /banners and /admin/banners).
 app.use('/api', bannerRoutes);
@@ -278,6 +294,8 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
     const accountDeletionJobs = require('./jobs/accountDeletion');
     // eslint-disable-next-line global-require
     const backupJobs = require('./jobs/backup');
+    // eslint-disable-next-line global-require
+    const groupExpiryJobs = require('./jobs/groupExpiry');
     startWorkers({
       dispatch: dispatchJobs.dispatchHandler,
       autoCancel: dispatchJobs.autoCancelHandler,
@@ -286,6 +304,7 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
       membership: membershipJobs.membershipHandler,
       accountDeletion: accountDeletionJobs.accountDeletionHandler,
       backup: backupJobs.backupHandler,
+      groupExpiry: groupExpiryJobs.groupExpiryHandler,
     });
     // Schedule weekly payouts: Mondays at 03:00 UTC.
     try {
@@ -322,6 +341,15 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
       });
     } catch (err) {
       logger.warn({ err: err.message }, 'failed to schedule daily backup cron');
+    }
+    // Phase 10.1 — daily group-order expiry sweep at 06:00 UTC.
+    try {
+      queues().groupExpiry.add('sweep', {}, {
+        repeat: { cron: '0 6 * * *' },
+        jobId: 'group-expiry-sweep-cron',
+      });
+    } catch (err) {
+      logger.warn({ err: err.message }, 'failed to schedule group expiry cron');
     }
     logger.info('BullMQ workers started');
   } catch (err) {

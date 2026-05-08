@@ -696,3 +696,322 @@ export function useUploadBannerImage() {
     },
   });
 }
+
+// ---------- Phase 10 — Support tickets ----------
+
+export type SupportPriority = "low" | "normal" | "high" | "urgent";
+export type SupportStatus =
+  | "open"
+  | "in_progress"
+  | "awaiting_user"
+  | "closed"
+  | "resolved";
+
+export interface SupportTicketAuthor {
+  id: string;
+  name?: string | null;
+  phone?: string | null;
+  role?: string;
+}
+
+export interface SupportTicketMessage {
+  id: string;
+  ticketId: string;
+  body: string;
+  senderId: string;
+  senderRole: string;
+  sender?: SupportTicketAuthor;
+  attachments?: Array<{ url: string; filename?: string; size?: number }>;
+  createdAt: string;
+}
+
+export interface SupportTicket {
+  id: string;
+  subject: string;
+  status: SupportStatus | string;
+  priority: SupportPriority | string;
+  category?: string | null;
+  author?: SupportTicketAuthor;
+  authorId?: string;
+  assignee?: SupportTicketAuthor | null;
+  assigneeId?: string | null;
+  lastReplyAt?: string | null;
+  unreplied?: boolean;
+  messageCount?: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SupportTicketDetail extends SupportTicket {
+  messages: SupportTicketMessage[];
+}
+
+export interface SupportTicketsQuery {
+  status?: string;
+  priority?: string;
+  assigneeId?: string;
+  q?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface SupportTicketListResponse {
+  data: SupportTicket[];
+  nextCursor?: string | null;
+}
+
+export interface SupportStats {
+  open: number;
+  in_progress: number;
+  awaiting_user: number;
+  closed_today: number;
+  resolved_today: number;
+}
+
+export function useSupportTickets(params: SupportTicketsQuery = {}) {
+  const q = new URLSearchParams();
+  if (params.status) q.set("status", params.status);
+  if (params.priority) q.set("priority", params.priority);
+  if (params.assigneeId) q.set("assigneeId", params.assigneeId);
+  if (params.q) q.set("q", params.q);
+  if (params.cursor) q.set("cursor", params.cursor);
+  if (params.limit) q.set("limit", String(params.limit));
+  return useQuery<SupportTicketListResponse>({
+    queryKey: ["support-tickets", params],
+    queryFn: () =>
+      api<SupportTicketListResponse>(`/api/admin/support/tickets?${q.toString()}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useSupportTicket(id: string | undefined) {
+  return useQuery<SupportTicketDetail>({
+    queryKey: ["support-ticket", id],
+    queryFn: () => api<SupportTicketDetail>(`/api/admin/support/tickets/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useSupportStats() {
+  return useQuery<SupportStats>({
+    queryKey: ["support-stats"],
+    queryFn: () => api<SupportStats>(`/api/admin/support/stats`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useAssignTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; assigneeId: string | null }) =>
+      api(`/api/admin/support/tickets/${vars.id}/assign`, {
+        method: "POST",
+        body: { assigneeId: vars.assigneeId },
+      }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["support-ticket", v.id] });
+      qc.invalidateQueries({ queryKey: ["support-tickets"] });
+      qc.invalidateQueries({ queryKey: ["support-stats"] });
+    },
+  });
+}
+
+export function useUpdateTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: {
+      id: string;
+      body: { status?: string; priority?: string; category?: string };
+    }) =>
+      api(`/api/admin/support/tickets/${vars.id}`, {
+        method: "PATCH",
+        body: vars.body,
+      }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["support-ticket", v.id] });
+      qc.invalidateQueries({ queryKey: ["support-tickets"] });
+      qc.invalidateQueries({ queryKey: ["support-stats"] });
+    },
+  });
+}
+
+export function useCloseTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/admin/support/tickets/${id}/close`, { method: "POST" }),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["support-ticket", id] });
+      qc.invalidateQueries({ queryKey: ["support-tickets"] });
+      qc.invalidateQueries({ queryKey: ["support-stats"] });
+    },
+  });
+}
+
+export function useReplyTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: {
+      id: string;
+      body: string;
+      attachments?: Array<{ url: string; filename?: string; size?: number }>;
+    }) =>
+      api(`/api/admin/support/tickets/${vars.id}/messages`, {
+        method: "POST",
+        body: { body: vars.body, attachments: vars.attachments },
+      }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["support-ticket", v.id] });
+      qc.invalidateQueries({ queryKey: ["support-tickets"] });
+    },
+  });
+}
+
+// ---------- Phase 10 — Push campaigns ----------
+
+export type CampaignStatus =
+  | "draft"
+  | "scheduled"
+  | "sending"
+  | "sent"
+  | "failed"
+  | "cancelled";
+
+export interface PushCampaign {
+  id: string;
+  titleUz?: string | null;
+  titleRu?: string | null;
+  titleEn?: string | null;
+  titleKk?: string | null;
+  bodyUz?: string | null;
+  bodyRu?: string | null;
+  bodyEn?: string | null;
+  bodyKk?: string | null;
+  deepLink?: string | null;
+  audienceQuery?: Record<string, unknown> | null;
+  status: CampaignStatus | string;
+  scheduledFor?: string | null;
+  sentAt?: string | null;
+  recipientCount?: number;
+  successCount?: number;
+  failureCount?: number;
+  openCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CampaignListResponse {
+  data: PushCampaign[];
+  nextCursor?: string | null;
+}
+
+export interface CampaignsQuery {
+  status?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface CampaignStats {
+  recipientCount: number;
+  successCount: number;
+  failureCount: number;
+  openCount: number;
+  successRate?: number;
+  openRate?: number;
+}
+
+export function useCampaigns(params: CampaignsQuery = {}) {
+  const q = new URLSearchParams();
+  if (params.status) q.set("status", params.status);
+  if (params.cursor) q.set("cursor", params.cursor);
+  if (params.limit) q.set("limit", String(params.limit));
+  return useQuery<CampaignListResponse>({
+    queryKey: ["push-campaigns", params],
+    queryFn: () =>
+      api<CampaignListResponse>(`/api/admin/push-campaigns?${q.toString()}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useCampaign(id: string | undefined) {
+  return useQuery<PushCampaign>({
+    queryKey: ["push-campaign", id],
+    queryFn: () => api<PushCampaign>(`/api/admin/push-campaigns/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<PushCampaign>) =>
+      api<PushCampaign>(`/api/admin/push-campaigns`, { method: "POST", body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["push-campaigns"] }),
+  });
+}
+
+export function useUpdateCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; body: Partial<PushCampaign> }) =>
+      api(`/api/admin/push-campaigns/${vars.id}`, {
+        method: "PATCH",
+        body: vars.body,
+      }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["push-campaign", v.id] });
+      qc.invalidateQueries({ queryKey: ["push-campaigns"] });
+    },
+  });
+}
+
+export function useSendCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/admin/push-campaigns/${id}/send`, { method: "POST" }),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["push-campaign", id] });
+      qc.invalidateQueries({ queryKey: ["push-campaigns"] });
+    },
+  });
+}
+
+export function useCancelCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/admin/push-campaigns/${id}/cancel`, { method: "POST" }),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["push-campaign", id] });
+      qc.invalidateQueries({ queryKey: ["push-campaigns"] });
+    },
+  });
+}
+
+export function useDeleteCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/admin/push-campaigns/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["push-campaigns"] }),
+  });
+}
+
+export function useCampaignStats(id: string | undefined) {
+  return useQuery<CampaignStats>({
+    queryKey: ["push-campaign-stats", id],
+    queryFn: () => api<CampaignStats>(`/api/admin/push-campaigns/${id}/stats`),
+    enabled: !!id,
+  });
+}
+
+export function usePreviewAudience() {
+  return useMutation({
+    mutationFn: (audienceQuery: Record<string, unknown>) =>
+      api<{ recipientCount: number }>(`/api/admin/push-campaigns/preview`, {
+        method: "POST",
+        body: { audienceQuery },
+      }),
+  });
+}

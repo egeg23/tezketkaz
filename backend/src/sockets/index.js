@@ -115,6 +115,35 @@ async function setupSockets(io) {
       if (typeof orderId === 'string' && orderId) socket.leave(`order:${orderId}`);
     });
 
+    // Phase 10.1 — group order room. Only members of the group (incl. host)
+    // may join. We validate against OrderGroupMember for non-host callers and
+    // OrderGroup.hostUserId for the host themselves (so the host can subscribe
+    // before their host-membership row is read by socket.user).
+    socket.on('orderGroup:subscribe', async (groupId) => {
+      if (typeof groupId !== 'string' || !groupId) return;
+      try {
+        const group = await prisma.orderGroup.findUnique({
+          where: { id: groupId },
+          select: { id: true, hostUserId: true },
+        });
+        if (!group) return;
+        let allowed = group.hostUserId === user.id;
+        if (!allowed) {
+          const m = await prisma.orderGroupMember.findUnique({
+            where: { groupId_userId: { groupId, userId: user.id } },
+          }).catch(() => null);
+          allowed = !!m;
+        }
+        if (!allowed && user.isAdmin) allowed = true;
+        if (allowed) socket.join(`orderGroup:${groupId}`);
+      } catch (err) {
+        logger.warn({ err: err.message, groupId }, 'orderGroup:subscribe failed');
+      }
+    });
+    socket.on('orderGroup:unsubscribe', (groupId) => {
+      if (typeof groupId === 'string' && groupId) socket.leave(`orderGroup:${groupId}`);
+    });
+
     // Phase 3: chat join — validate participant before subscribing.
     socket.on('chat:join', async (payload = {}) => {
       const orderId = typeof payload === 'string' ? payload : payload.orderId;

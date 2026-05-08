@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../l10n/l10n.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/order_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../models/models.dart';
 
@@ -176,13 +177,20 @@ class ProfileScreen extends StatelessWidget {
               subtitle: '${user.country ?? 'UZ'} · ${L10n.instance.locale.languageCode}',
               onTap: () => context.push('/buyer/country-settings'),
             ),
+            // Phase 10.3 — theme picker (Auto / Light / Dark).
+            _ThemeTile(),
             _Tile(
               icon: '🔒',
               title: t(context, 'privacy.title'),
               subtitle: 'GDPR · Export · Delete',
               onTap: () => context.push('/buyer/data-privacy'),
             ),
-            _Tile(icon: '❓', title: 'Yordam', onTap: () {}),
+            // Phase 10.2 — customer support inbox.
+            _Tile(
+              icon: '💬',
+              title: t(context, 'support.title'),
+              onTap: () => context.push('/buyer/support'),
+            ),
           ]),
 
           const SizedBox(height: 10),
@@ -288,4 +296,52 @@ class _Tile extends StatelessWidget {
     onTap: onTap,
     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
   );
+}
+
+/// Phase 10.3 — picker for `ThemeMode.system` / `light` / `dark`. The change
+/// is persisted by [ThemeProvider] and re-renders the whole `MaterialApp`
+/// tree thanks to the AnimatedBuilder in main.dart.
+class _ThemeTile extends StatelessWidget {
+  String _label(BuildContext context, ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return t(context, 'theme.light');
+      case ThemeMode.dark:
+        return t(context, 'theme.dark');
+      case ThemeMode.system:
+        return t(context, 'theme.system');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.watch<ThemeProvider>();
+    return ListTile(
+      leading: const Text('🌙', style: TextStyle(fontSize: 22)),
+      title: Text(t(context, 'theme.title'),
+          style: const TextStyle(
+              fontWeight: FontWeight.w500, fontSize: 14)),
+      subtitle: Text(_label(context, theme.themeMode),
+          style: const TextStyle(fontSize: 12)),
+      trailing: DropdownButton<ThemeMode>(
+        value: theme.themeMode,
+        underline: const SizedBox.shrink(),
+        items: [
+          DropdownMenuItem(
+              value: ThemeMode.system,
+              child: Text(t(context, 'theme.system'))),
+          DropdownMenuItem(
+              value: ThemeMode.light,
+              child: Text(t(context, 'theme.light'))),
+          DropdownMenuItem(
+              value: ThemeMode.dark,
+              child: Text(t(context, 'theme.dark'))),
+        ],
+        onChanged: (mode) {
+          if (mode != null) theme.setThemeMode(mode);
+        },
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+    );
+  }
 }

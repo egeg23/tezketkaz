@@ -1280,6 +1280,222 @@ class L10n extends ChangeNotifier {
       'kk':
           'Бұл Phase 9 GDPR бөлімі. Тапсырыс тарихы заң бойынша 5 жыл сақталады.',
     },
+
+    // ── Phase 10.1 — Group orders ─────────────────────────────────────────
+    'group.create': {
+      'uz': "Guruh buyurtma tuzish",
+      'ru': 'Создать групповой заказ',
+      'en': 'Make this a group order',
+      'kk': 'Топтық тапсырыс жасау',
+    },
+    'group.join': {
+      'uz': "Guruhga qo'shilish",
+      'ru': 'Присоединиться',
+      'en': 'Join group',
+      'kk': 'Топқа қосылу',
+    },
+    'group.invite': {
+      'uz': 'Taklif yuborish',
+      'ru': 'Поделиться приглашением',
+      'en': 'Share invite',
+      'kk': 'Шақыру жіберу',
+    },
+    'group.share_code': {
+      'uz': "Qo'shilish kodi",
+      'ru': 'Код приглашения',
+      'en': 'Join code',
+      'kk': 'Қосылу коды',
+    },
+    'group.host_label': {
+      'uz': 'Tashkilotchi',
+      'ru': 'Организатор',
+      'en': 'Host',
+      'kk': 'Ұйымдастырушы',
+    },
+    'group.member_label': {
+      'uz': 'Siz',
+      'ru': 'Вы',
+      'en': 'You',
+      'kk': 'Сіз',
+    },
+    'group.lock_order': {
+      'uz': 'Buyurtmani qulflash',
+      'ru': 'Зафиксировать заказ',
+      'en': 'Lock order',
+      'kk': 'Тапсырысты бекіту',
+    },
+    'group.pay_my_share': {
+      'uz': "O'z ulushimni to'lash",
+      'ru': 'Оплатить свою долю',
+      'en': 'Pay my share',
+      'kk': 'Өз үлесімді төлеу',
+    },
+    'group.pay_for_all': {
+      'uz': "Hammasi uchun to'lash",
+      'ru': 'Оплатить за всех',
+      'en': 'Pay for everyone',
+      'kk': 'Барлығы үшін төлеу',
+    },
+    'group.cancelled': {
+      'uz': 'Bu guruh bekor qilindi',
+      'ru': 'Группа отменена',
+      'en': 'This group was cancelled',
+      'kk': 'Бұл топ тоқтатылды',
+    },
+    'group.expired': {
+      'uz': 'Muddati tugadi',
+      'ru': 'Срок истёк',
+      'en': 'Group expired',
+      'kk': 'Мерзімі бітті',
+    },
+    'group.locked_at': {
+      'uz': 'Qulflangan',
+      'ru': 'Зафиксировано',
+      'en': 'Locked',
+      'kk': 'Бекітілген',
+    },
+
+    // ── Phase 10.2 — Customer support ─────────────────────────────────────
+    'support.title': {
+      'uz': 'Yordam',
+      'ru': 'Поддержка',
+      'en': 'Support',
+      'kk': 'Қолдау',
+    },
+    'support.new_ticket': {
+      'uz': 'Yangi murojaat',
+      'ru': 'Новое обращение',
+      'en': 'New ticket',
+      'kk': 'Жаңа өтініш',
+    },
+    'support.subject_hint': {
+      'uz': 'Mavzu',
+      'ru': 'Тема',
+      'en': 'Subject',
+      'kk': 'Тақырып',
+    },
+    'support.body_hint': {
+      'uz': 'Muammoni batafsil tasvirlab bering',
+      'ru': 'Опишите проблему подробнее',
+      'en': 'Describe your issue in detail',
+      'kk': 'Мәселені толығырақ сипаттаңыз',
+    },
+    'support.category_order': {
+      'uz': 'Buyurtma',
+      'ru': 'Заказ',
+      'en': 'Order',
+      'kk': 'Тапсырыс',
+    },
+    'support.category_payment': {
+      'uz': "To'lov",
+      'ru': 'Оплата',
+      'en': 'Payment',
+      'kk': 'Төлем',
+    },
+    'support.category_delivery': {
+      'uz': 'Yetkazib berish',
+      'ru': 'Доставка',
+      'en': 'Delivery',
+      'kk': 'Жеткізу',
+    },
+    'support.category_account': {
+      'uz': 'Hisob',
+      'ru': 'Аккаунт',
+      'en': 'Account',
+      'kk': 'Аккаунт',
+    },
+    'support.category_other': {
+      'uz': 'Boshqa',
+      'ru': 'Другое',
+      'en': 'Other',
+      'kk': 'Басқа',
+    },
+    'support.priority_low': {
+      'uz': 'Past',
+      'ru': 'Низкий',
+      'en': 'Low',
+      'kk': 'Төмен',
+    },
+    'support.priority_normal': {
+      'uz': 'Oddiy',
+      'ru': 'Обычный',
+      'en': 'Normal',
+      'kk': 'Қалыпты',
+    },
+    'support.priority_high': {
+      'uz': 'Yuqori',
+      'ru': 'Высокий',
+      'en': 'High',
+      'kk': 'Жоғары',
+    },
+    'support.priority_urgent': {
+      'uz': 'Shoshilinch',
+      'ru': 'Срочно',
+      'en': 'Urgent',
+      'kk': 'Шұғыл',
+    },
+    'support.status_open': {
+      'uz': 'Ochiq',
+      'ru': 'Открыт',
+      'en': 'Open',
+      'kk': 'Ашық',
+    },
+    'support.status_pending': {
+      'uz': 'Kutilmoqda',
+      'ru': 'В ожидании',
+      'en': 'Pending',
+      'kk': 'Күтуде',
+    },
+    'support.status_resolved': {
+      'uz': 'Hal qilindi',
+      'ru': 'Решено',
+      'en': 'Resolved',
+      'kk': 'Шешілді',
+    },
+    'support.status_closed': {
+      'uz': 'Yopildi',
+      'ru': 'Закрыт',
+      'en': 'Closed',
+      'kk': 'Жабық',
+    },
+    'support.close_ticket': {
+      'uz': 'Yopish',
+      'ru': 'Закрыть',
+      'en': 'Close',
+      'kk': 'Жабу',
+    },
+    'support.no_tickets': {
+      'uz': "Murojaatlar yo'q",
+      'ru': 'Обращений нет',
+      'en': 'No tickets yet',
+      'kk': 'Өтініштер жоқ',
+    },
+
+    // ── Phase 10.3 — Dark mode ────────────────────────────────────────────
+    'theme.title': {
+      'uz': 'Tungi rejim',
+      'ru': 'Тёмная тема',
+      'en': 'Theme',
+      'kk': 'Тақырып',
+    },
+    'theme.system': {
+      'uz': 'Avto',
+      'ru': 'Авто',
+      'en': 'Auto',
+      'kk': 'Авто',
+    },
+    'theme.light': {
+      'uz': 'Yorug\'',
+      'ru': 'Светлая',
+      'en': 'Light',
+      'kk': 'Ашық',
+    },
+    'theme.dark': {
+      'uz': 'Tungi',
+      'ru': 'Тёмная',
+      'en': 'Dark',
+      'kk': 'Қараңғы',
+    },
   };
 }
 

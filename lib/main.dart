@@ -16,6 +16,7 @@ import 'providers/auth_provider.dart';
 import 'providers/cart_provider.dart';
 import 'providers/courier_state_provider.dart';
 import 'providers/order_provider.dart';
+import 'providers/theme_provider.dart';
 
 import 'screens/auth/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
@@ -28,8 +29,13 @@ import 'screens/buyer/cart_screen.dart';
 import 'screens/buyer/country_settings_screen.dart';
 import 'screens/buyer/data_privacy_screen.dart';
 import 'screens/buyer/favorites_screen.dart';
+import 'screens/buyer/group_order_screen.dart';
+import 'screens/buyer/group_order_join_screen.dart';
 import 'screens/buyer/orders_screen.dart';
 import 'screens/buyer/subscription_screen.dart';
+import 'screens/buyer/support_inbox_screen.dart';
+import 'screens/buyer/support_new_ticket_screen.dart';
+import 'screens/buyer/support_thread_screen.dart';
 import 'screens/buyer/tracking_screen.dart';
 import 'screens/buyer/profile_screen.dart';
 import 'screens/buyer/shops_screen.dart';
@@ -90,6 +96,7 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
   final _cart = CartProvider();
   final _orders = OrderProvider();
   final _courier = CourierStateProvider();
+  final _theme = ThemeProvider();
   late final GoRouter _router = _buildRouter(_auth);
 
   StreamSubscription<dynamic>? _pushTapSub;
@@ -97,6 +104,9 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
   @override
   void initState() {
     super.initState();
+    // Phase 10.3 — load persisted theme preference (best-effort; defaults to
+    // ThemeMode.system so the first frame uses the OS palette).
+    _theme.load();
     // Phase 6 — deep-link FCM taps into the right screen. The push service
     // exposes `onTap` which fires for foreground / background / cold-start
     // notifications.
@@ -105,11 +115,31 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
         final data = msg.data;
         final type = data['type']?.toString();
         final orderId = data['orderId']?.toString();
+        // Phase 10.1 — group invite deep-link (push payloads can carry a
+        // `joinCode` for "joined the group" notifications).
+        final joinCode = data['joinCode']?.toString();
+        final groupId = data['groupId']?.toString();
+        if (groupId != null && groupId.isNotEmpty) {
+          _router.go('/buyer/group/$groupId');
+          return;
+        }
+        if (joinCode != null && joinCode.isNotEmpty) {
+          _router.go('/buyer/group/join', extra: joinCode);
+          return;
+        }
         if (type == null) return;
         if (type == 'chat_message' && orderId != null && orderId.isNotEmpty) {
           _router.go('/order/$orderId/chat');
         } else if (type == 'promo') {
           _router.go('/buyer/promo');
+        } else if (type == 'support_message') {
+          // Phase 10.2 — admin replied to a ticket.
+          final ticketId = data['ticketId']?.toString();
+          if (ticketId != null && ticketId.isNotEmpty) {
+            _router.go('/buyer/support/$ticketId');
+          } else {
+            _router.go('/buyer/support');
+          }
         } else if (type.startsWith('order_')) {
           if (orderId != null && orderId.isNotEmpty) {
             _router.go('/buyer/tracking/$orderId');
@@ -138,12 +168,21 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
         ChangeNotifierProvider.value(value: _cart),
         ChangeNotifierProvider.value(value: _orders),
         ChangeNotifierProvider.value(value: _courier),
+        ChangeNotifierProvider.value(value: _theme),
       ],
-      child: MaterialApp.router(
-        title: 'TezKetKaz',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        routerConfig: _router,
+      // AnimatedBuilder rebuilds MaterialApp.router whenever the theme
+      // provider notifies — that way toggling Auto/Light/Dark from the
+      // profile screen takes effect immediately without a hot restart.
+      child: AnimatedBuilder(
+        animation: _theme,
+        builder: (_, __) => MaterialApp.router(
+          title: 'TezKetKaz',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: _theme.themeMode,
+          routerConfig: _router,
+        ),
       ),
     );
   }
@@ -203,6 +242,38 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       GoRoute(
         path: '/buyer/loyalty',
         builder: (_, __) => const LoyaltyScreen(),
+      ),
+
+      // Phase 10.1 — group orders. Modal-style screens; no shell so the buyer
+      // can deep-link into a group from a share link without our bottom nav.
+      GoRoute(
+        path: '/buyer/group/join',
+        builder: (_, s) => GroupOrderJoinScreen(
+          // The push handler / link parser passes the join code as `extra`.
+          initialCode: s.extra is String ? s.extra as String : null,
+        ),
+      ),
+      GoRoute(
+        path: '/buyer/group/:groupId',
+        builder: (_, s) => GroupOrderScreen(
+          groupId: s.pathParameters['groupId'] ?? '',
+        ),
+      ),
+
+      // Phase 10.2 — support inbox / threads / new ticket.
+      GoRoute(
+        path: '/buyer/support',
+        builder: (_, __) => const SupportInboxScreen(),
+      ),
+      GoRoute(
+        path: '/buyer/support/new',
+        builder: (_, __) => const SupportNewTicketScreen(),
+      ),
+      GoRoute(
+        path: '/buyer/support/:ticketId',
+        builder: (_, s) => SupportThreadScreen(
+          ticketId: s.pathParameters['ticketId'] ?? '',
+        ),
       ),
 
       ShellRoute(
