@@ -68,6 +68,10 @@ model User {
   chatMessagesSent   ChatMessage[] @relation("ChatSender")
   chatMessagesRecv   ChatMessage[] @relation("ChatReceiver")
 
+  // Phase 6 relations
+  paymentMethods     PaymentMethod[]
+  verificationDocs   VerificationDocument[]
+
   // Referral (Phase 3 loyalty)
   referralCode   String?  @unique
   referredById   String?
@@ -200,16 +204,45 @@ model Shop {
   freeDeliveryKm  Float?
   minOrderAmount  Float?
 
+  // Phase 6 — multi-currency framework. Active values: UZS for Uzbekistan
+  // launch. KZT/KGS activated in Phase 7 when expanding to KZ/KG.
+  currency    String   @default("UZS")
+
   members     ShopMember[]
   products    Product[]
   orders      Order[]
   zones       DeliveryZone[]
+  workingHours ShopWorkingHours[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([vertical])
   @@index([isActive])
+}
+
+// Phase 6 — working hours per day-of-week. One row per (shop, dayOfWeek).
+// Multiple rows allowed for split shifts (e.g., lunch break).
+model ShopWorkingHours {
+  id        String   @id @default(uuid())
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId    String
+
+  // 0=Sunday, 1=Monday, ..., 6=Saturday (matches JS Date.getDay())
+  dayOfWeek Int
+
+  // "HH:MM" 24h. Crossing midnight allowed: endsAt < startsAt means closes
+  // next day (e.g. starts 18:00, ends 02:00 next morning).
+  startsAt  String
+  endsAt    String
+
+  // True if shop is closed all day (overrides startsAt/endsAt).
+  isClosed  Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shopId, dayOfWeek])
 }
 
 // Delivery zone polygon for a shop. Stored as JSON ring of [lat,lng] points
@@ -486,6 +519,15 @@ model Order {
   refundReason    String?
   dispute         Dispute?
 
+  // Phase 6 — tip + saved-payment-method linkage
+  tipAmount       Float    @default(0)
+  tipPaidAt       DateTime?
+  paymentMethodId String?    // null = legacy per-order method (cash, hosted Click flow, etc.)
+  paymentMethod_  PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+
+  // Currency snapshot at order time (mirrors Shop.currency).
+  currency        String   @default("UZS")
+
   // Items
   items           OrderItem[]
 
@@ -761,4 +803,68 @@ model Dispute {
 
   @@index([status])
   @@index([openedById])
+}
+
+// ── Phase 6: payment methods (tokenized cards) + KYC documents ──────────────
+
+// Saved tokenized payment method. Provider stores the actual PAN; we keep
+// only the display fields (brand, last4, expiry) and the provider-side
+// token id for recurring charges.
+model PaymentMethod {
+  id           String   @id @default(uuid())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+
+  // 'click' | 'payme' | 'uzum' | 'kaspi' (KZ, Phase 7) | 'cash'
+  provider     String
+
+  // Provider-side token / saved-card id used to charge without re-entering PAN.
+  // null for cash-on-delivery method.
+  providerId   String?
+
+  // Display-only fields. Never store raw PAN.
+  brand        String?  // visa | mastercard | uzcard | humo
+  last4        String?
+  expiryMonth  Int?
+  expiryYear   Int?
+
+  isDefault    Boolean  @default(false)
+  isActive     Boolean  @default(true)
+
+  // Orders that used this payment method (back-relation only).
+  orders       Order[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId, isActive])
+}
+
+// KYC / verification document upload. Used by couriers (passport, STIR cert)
+// and shops (license, tax cert).
+model VerificationDocument {
+  id              String   @id @default(uuid())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+
+  // 'passport_front' | 'passport_back' | 'selfie' | 'self_employed_cert' |
+  // 'shop_license' | 'shop_tax_cert' | 'driver_license'
+  type            String
+
+  // URL of the uploaded image. Currently /uploads/verification/* served by
+  // backend; will move to Cloudflare R2 in Phase 9.
+  url             String
+
+  // pending | approved | rejected
+  status          String   @default("pending")
+
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId, type])
+  @@index([status])
 }
