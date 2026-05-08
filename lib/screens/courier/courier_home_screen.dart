@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -5,8 +7,11 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../../l10n/l10n.dart';
+import '../../models/money.dart';
 import '../../providers/courier_state_provider.dart';
 import '../../providers/order_provider.dart';
+import '../../services/heatmap_api.dart';
 import '../../theme/app_theme.dart';
 
 /// Phase 2 courier home — shift toggle, live map and incoming dispatch
@@ -24,6 +29,14 @@ class _CourierHomeScreenState extends State<CourierHomeScreen> {
 
   final _mapCtrl = MapController();
 
+  // Phase 8.4 — heatmap state. Cells are refreshed every 60s while the
+  // courier is online. The toggle hides/shows the layer locally without
+  // dropping the cached cells, so toggling back on is instant.
+  List<HeatmapCell> _heatmapCells = const [];
+  bool _heatmapVisible = false;
+  Timer? _heatmapTimer;
+  bool _heatmapBusy = false;
+
   @override
   void initState() {
     super.initState();
@@ -35,8 +48,43 @@ class _CourierHomeScreenState extends State<CourierHomeScreen> {
 
   @override
   void dispose() {
+    _heatmapTimer?.cancel();
     _mapCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshHeatmap() async {
+    if (_heatmapBusy) return;
+    final courier = context.read<CourierStateProvider>();
+    if (!courier.isOnline) return;
+    final loc = courier.lastLocation ?? _fallbackCenter;
+    _heatmapBusy = true;
+    try {
+      final cells = await HeatmapApi.instance.me(
+        lat: loc.latitude,
+        lng: loc.longitude,
+      );
+      if (!mounted) return;
+      setState(() => _heatmapCells = cells);
+    } catch (_) {
+      // Best-effort — keep the previously cached cells on failure.
+    } finally {
+      _heatmapBusy = false;
+    }
+  }
+
+  void _toggleHeatmap() {
+    setState(() => _heatmapVisible = !_heatmapVisible);
+    if (_heatmapVisible) {
+      _refreshHeatmap();
+      _heatmapTimer ??= Timer.periodic(
+        const Duration(seconds: 60),
+        (_) => _refreshHeatmap(),
+      );
+    } else {
+      _heatmapTimer?.cancel();
+      _heatmapTimer = null;
+    }
   }
 
   Future<void> _toggleShift() async {
@@ -44,6 +92,10 @@ class _CourierHomeScreenState extends State<CourierHomeScreen> {
     final courier = context.read<CourierStateProvider>();
     if (courier.isOnline) {
       await courier.goOffline();
+      // Stop polling heatmap once we're off-shift.
+      _heatmapTimer?.cancel();
+      _heatmapTimer = null;
+      if (mounted) setState(() => _heatmapVisible = false);
     } else {
       await courier.goOnline();
     }
@@ -153,17 +205,32 @@ class _CourierHomeScreenState extends State<CourierHomeScreen> {
                   ),
                 ),
 
-                // Live map.
+                // Live map + heatmap toggle.
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: SizedBox(
                     height: 220,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(20),
-                      child: _CourierMap(
-                        controller: _mapCtrl,
-                        center: courier.lastLocation ?? _fallbackCenter,
-                        offerHint: pendingOffer,
+                      child: Stack(
+                        children: [
+                          _CourierMap(
+                            controller: _mapCtrl,
+                            center: courier.lastLocation ?? _fallbackCenter,
+                            offerHint: pendingOffer,
+                            heatmapCells:
+                                _heatmapVisible ? _heatmapCells : const [],
+                          ),
+                          if (courier.isOnline)
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: _HeatmapToggle(
+                                visible: _heatmapVisible,
+                                onTap: _toggleHeatmap,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
@@ -402,6 +469,13 @@ class _PendingOfferBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = (secondsLeft / 60).clamp(0.0, 1.0);
+    final locale = L10n.instance.locale.languageCode;
+    // Phase 8.1 — when a batchId is present, the headline payout becomes the
+    // total estimatedReward across the whole batch. Falls back to the
+    // single-order `payout` for non-batch offers.
+    final headlinePayout = offer.isBatch
+        ? (offer.estimatedReward?.toDouble() ?? offer.payout)
+        : offer.payout;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       decoration: BoxDecoration(
@@ -413,6 +487,30 @@ class _PendingOfferBanner extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Phase 8.1 — prominent BATCH × N badge sits above the regular
+          // header for stacked offers. Non-batch offers skip it.
+          if (offer.isBatch) ...[
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                L10n.instance.t('dispatch.batch_badge').replaceAll(
+                      '{count}',
+                      '${offer.totalDeliveries ?? 2}',
+                    ),
+                style: const TextStyle(
+                    color: AppColors.courier,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                    letterSpacing: 0.5),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           Row(
             children: [
               const Text('📢',
@@ -454,8 +552,17 @@ class _PendingOfferBanner extends StatelessWidget {
             spacing: 6,
             runSpacing: 6,
             children: [
-              if (offer.payout != null)
-                _PendingChip('💰 ${_fmtMoney(offer.payout!)}'),
+              if (headlinePayout != null)
+                _PendingChip('💰 ${_fmtMoney(headlinePayout.toDouble())}'),
+              // Phase 8.2 — tip estimate chip. Only shown when the backend
+              // attached a positive `tipEstimate` to the offer.
+              if ((offer.tipEstimate ?? 0) > 0)
+                _PendingChip(
+                  L10n.instance.t('dispatch.tip_estimate_chip').replaceAll(
+                        '{amount}',
+                        Money(offer.tipEstimate!, 'UZS').format(locale),
+                      ),
+                ),
               if (offer.distanceKm != null)
                 _PendingChip('📍 ${offer.distanceKm!.toStringAsFixed(1)} km'),
               if (offer.etaMinutes != null)
@@ -525,10 +632,15 @@ class _CourierMap extends StatelessWidget {
   // forwarded by the parent screen, just not yet visualised.
   final DispatchOffer? offerHint;
 
+  /// Phase 8.4 — heatmap cells from `HeatmapApi.me`. When empty no heatmap
+  /// layer is drawn, so callers can pass `[]` to hide the layer.
+  final List<HeatmapCell> heatmapCells;
+
   const _CourierMap({
     required this.controller,
     required this.center,
     this.offerHint,
+    this.heatmapCells = const [],
   });
 
   @override
@@ -547,6 +659,21 @@ class _CourierMap extends StatelessWidget {
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'com.tezketkaz.app',
         ),
+        if (heatmapCells.isNotEmpty)
+          CircleLayer(
+            circles: [
+              for (final c in heatmapCells)
+                CircleMarker(
+                  point: LatLng(c.lat, c.lng),
+                  // 100m + up to 400m extra by intensity.
+                  radius: 100 + 400 * c.intensity,
+                  useRadiusInMeter: true,
+                  color: const Color(0xFFFF3B30)
+                      .withValues(alpha: 0.2 + 0.5 * c.intensity),
+                  borderStrokeWidth: 0,
+                ),
+            ],
+          ),
         MarkerLayer(markers: [
           Marker(
             point: center,
@@ -557,6 +684,42 @@ class _CourierMap extends StatelessWidget {
           ),
         ]),
       ],
+    );
+  }
+}
+
+class _HeatmapToggle extends StatelessWidget {
+  final bool visible;
+  final VoidCallback onTap;
+  const _HeatmapToggle({required this.visible, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      elevation: 4,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                L10n.instance
+                    .t(visible ? 'heatmap.toggle_hide' : 'heatmap.toggle_show'),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

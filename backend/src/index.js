@@ -38,6 +38,9 @@ const workingHoursRoutes = require('./routes/working-hours');
 const membershipRoutes = require('./routes/membership');
 const bannerRoutes = require('./routes/banners');
 const favoriteRoutes = require('./routes/favorites');
+const instantPayoutRoutes = require('./routes/instant-payout');
+const courierPerformanceRoutes = require('./routes/courier-performance');
+const heatmapRoutes = require('./routes/heatmap');
 const { setupSockets } = require('./sockets');
 
 const app = express();
@@ -183,11 +186,19 @@ app.use('/api/orders', orderRoutes);
 // Phase 7.2 — Wolt+/Yandex Plus membership.
 app.use('/api/membership', membershipRoutes);
 app.use('/api/couriers', courierRoutes);
+// Phase 8.3 — courier performance breakdown (mounted alongside main courier
+// router so /me/performance stacks with the existing /me/* sub-paths).
+app.use('/api/couriers', courierPerformanceRoutes);
+// Phase 8.4 — courier demand heatmap.
+app.use('/api/couriers', heatmapRoutes);
 // Phase 2 routes mounted at /api so they can declare absolute paths under
 // /couriers/me/... and /orders/:id/dispatch/...
 app.use('/api', courierShiftRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/admin/pricing-rules', pricingRuleRoutes);
+// Phase 8.5 — instant payout (courier balance + admin review). Declares its
+// own absolute paths under /couriers and /admin so it mounts at /api.
+app.use('/api', instantPayoutRoutes);
 app.use('/api/admin', adminRoutes);
 // Phase 3: reviews + chat. Both routers declare absolute paths under /api/orders
 // /:id/{reviews,chat} and /api/reviews/:id, so they mount at /api.

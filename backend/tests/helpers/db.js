@@ -78,6 +78,14 @@ async function setupTestDb(slug) {
   // Phase 7.3 — banners + favorites.
   try { app.use('/api', require('../../src/routes/banners')); } catch { /* noop */ }
   try { app.use('/api/favorites', require('../../src/routes/favorites')); } catch { /* noop */ }
+  // Phase 8.3 — courier performance breakdown.
+  try { app.use('/api/couriers', require('../../src/routes/courier-performance')); } catch { /* noop */ }
+  // Phase 8.4 — courier demand heatmap.
+  try { app.use('/api/couriers', require('../../src/routes/heatmap')); } catch { /* noop */ }
+  // Phase 2 — courier shifts + dispatch accept/decline.
+  try { app.use('/api', require('../../src/routes/courier-shifts')); } catch { /* noop */ }
+  // Phase 8.5 — instant payout (declares absolute /couriers and /admin paths).
+  try { app.use('/api', require('../../src/routes/instant-payout')); } catch { /* noop */ }
   // Stub the io getter — orders.js uses `req.app.get('io')`.
   const noopIo = { to: () => ({ emit: () => {} }), emit: () => {} };
   app.set('io', noopIo);

@@ -3,6 +3,7 @@ import '../../l10n/l10n.dart';
 import '../../models/money.dart';
 import '../../services/earnings_api.dart';
 import '../../services/order_api.dart';
+import '../../services/payout_api.dart';
 import '../../providers/order_provider.dart';
 import '../../theme/app_theme.dart';
 
@@ -22,6 +23,8 @@ class _EarningsScreenState extends State<EarningsScreen>
   late final TabController _tabs;
   Future<EarningsSummary>? _summaryFuture;
   Future<List<AppOrder>>? _historyFuture;
+  // Phase 8.5 — instant payout balance shared across all tabs.
+  Future<PayoutBalance>? _balanceFuture;
 
   @override
   void initState() {
@@ -34,7 +37,61 @@ class _EarningsScreenState extends State<EarningsScreen>
     setState(() {
       _summaryFuture = EarningsApi.instance.me();
       _historyFuture = _loadHistory();
+      _balanceFuture = _loadBalance();
     });
+  }
+
+  Future<PayoutBalance> _loadBalance() async {
+    try {
+      return await PayoutApi.instance.myBalance();
+    } catch (_) {
+      return PayoutBalance.empty();
+    }
+  }
+
+  /// Phase 8.5 — fire the payout request. Re-fetches the balance so the UI
+  /// flips to the "pending" state immediately on success.
+  Future<void> _requestPayout(PayoutBalance balance) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(L10n.instance.t('payout.cashout_now')),
+        content: Text(
+          '${L10n.instance.t('payout.balance')}: '
+          '${Money(balance.availableBalance, balance.currency).format(_locale())}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(L10n.instance.t('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(L10n.instance.t('common.confirm')),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await PayoutApi.instance.request();
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        content: Text(L10n.instance.t('payout.requested_success')),
+        behavior: SnackBarBehavior.floating,
+      ));
+      setState(() {
+        _balanceFuture = _loadBalance();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        content: Text(e.toString()),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.error,
+      ));
+    }
   }
 
   /// Best-effort: pull recent delivered orders for this courier. The Phase 6
@@ -100,25 +157,45 @@ class _EarningsScreenState extends State<EarningsScreen>
               return _ErrorView(error: snap.error.toString(), onRetry: _load);
             }
             final s = snap.data ?? EarningsSummary.empty();
-            return TabBarView(
-              controller: _tabs,
+            // Phase 8.5 — payout card pinned above the tab content. The card
+            // is shown across all tabs so the courier can cash out from any
+            // period view.
+            return Column(
               children: [
-                _TodayTab(summary: s, historyFuture: _historyFuture),
-                _PeriodTab(
-                  total: s.weeklyMoney,
-                  orders: s.weeklyOrders.toInt(),
-                  tips: s.tipsMoney,
-                  daily: _daysSlice(s.daily, 7),
-                  label: 'Bu hafta',
+                FutureBuilder<PayoutBalance>(
+                  future: _balanceFuture,
+                  builder: (_, balSnap) {
+                    final bal = balSnap.data;
+                    if (bal == null) return const SizedBox.shrink();
+                    return _InstantPayoutCard(
+                      balance: bal,
+                      onCashOut: () => _requestPayout(bal),
+                    );
+                  },
                 ),
-                _PeriodTab(
-                  total: s.monthlyMoney,
-                  orders: s.monthlyOrders.toInt(),
-                  tips: s.tipsMoney,
-                  daily: _daysSlice(s.daily, 30),
-                  label: 'Bu oy',
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabs,
+                    children: [
+                      _TodayTab(summary: s, historyFuture: _historyFuture),
+                      _PeriodTab(
+                        total: s.weeklyMoney,
+                        orders: s.weeklyOrders.toInt(),
+                        tips: s.tipsMoney,
+                        daily: _daysSlice(s.daily, 7),
+                        label: 'Bu hafta',
+                      ),
+                      _PeriodTab(
+                        total: s.monthlyMoney,
+                        orders: s.monthlyOrders.toInt(),
+                        tips: s.tipsMoney,
+                        daily: _daysSlice(s.daily, 30),
+                        label: 'Bu oy',
+                      ),
+                      _LifetimeTab(summary: s),
+                    ],
+                  ),
                 ),
-                _LifetimeTab(summary: s),
               ],
             );
           },
@@ -546,6 +623,124 @@ class _EmptyHint extends StatelessWidget {
               )),
         ),
       );
+}
+
+/// Phase 8.5 — instant payout card. Disabled when balance < min payout, or
+/// when there is already a pending request.
+class _InstantPayoutCard extends StatelessWidget {
+  final PayoutBalance balance;
+  final VoidCallback onCashOut;
+  const _InstantPayoutCard({required this.balance, required this.onCashOut});
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = _locale();
+    final money = Money(balance.availableBalance, balance.currency);
+    final min = Money(balance.minPayout, balance.currency);
+    final canCashOut = balance.canRequest;
+    final showBelowMin =
+        !balance.hasPending && balance.availableBalance < balance.minPayout;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('💸', style: TextStyle(fontSize: 22)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      L10n.instance.t('payout.balance'),
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      money.format(locale),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                onPressed: canCashOut ? onCashOut : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.courier,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(0, 40),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(L10n.instance.t('payout.cashout_now')),
+              ),
+            ],
+          ),
+          if (balance.hasPending) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.hourglass_top,
+                      color: AppColors.warning, size: 16),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      L10n.instance.t('payout.pending'),
+                      style: const TextStyle(
+                        color: AppColors.warning,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (showBelowMin) ...[
+            const SizedBox(height: 8),
+            Text(
+              L10n.instance
+                  .t('payout.below_min')
+                  .replaceAll('{amount}', min.format(locale)),
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _ErrorView extends StatelessWidget {

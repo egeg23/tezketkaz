@@ -40,8 +40,31 @@ class OrderApi {
       courierId: json['courierId'],
       courierName: json['courier']?['name'],
       reward: (json['courierReward'] as num? ?? 12000).toDouble(),
+      // Phase 8.1 — backend may attach stacked-dispatch metadata.
+      batchId: json['batchId'] as String?,
+      batchSequence: (json['batchSequence'] as num?)?.toInt(),
+      batchTotal: (json['batchTotal'] as num?)?.toInt() ??
+          (json['totalDeliveries'] as num?)?.toInt(),
       createdAt: DateTime.parse(json['createdAt']),
     );
+  }
+
+  /// Phase 8.1 — fetch all orders that share the given batchId. Falls back
+  /// to a `[order]` list of the courier's active order when the dedicated
+  /// endpoint is unavailable.
+  Future<List<AppOrder>> courierBatch(String batchId) async {
+    try {
+      final res = await _api.get('/api/orders/courier/batch/$batchId');
+      final data = res.data;
+      final list = (data is Map && data['orders'] is List)
+          ? data['orders'] as List
+          : (data is List ? data : const []);
+      return list
+          .map<AppOrder>((o) => _parseOrder(Map<String, dynamic>.from(o)))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
   }
 
   AppOrderStatus _parseStatus(String s) {

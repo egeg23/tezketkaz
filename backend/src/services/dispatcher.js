@@ -1,15 +1,25 @@
 // Phase 2 dispatcher — picks N candidate couriers per offer batch, records
 // DispatchOffer rows, schedules a BullMQ retry, and processes courier
 // accept/decline transitions.
+//
+// Phase 8.1 — stacked dispatch. When several pending orders cluster in a
+// shop or small radius within a tight pickup window we group them into an
+// OrderBatch and offer that bundle to a single courier as one DispatchOffer.
 
 const presence = require('./redis-state');
 const logger = require('../lib/logger');
+const { distanceKm: haversineKm } = require('../lib/geo');
+const tipEstimate = require('./tipEstimate');
 
 const STATUS_PENDING = 'pending';
 const STATUS_ACCEPTED = 'accepted';
 const STATUS_DECLINED = 'declined';
 const STATUS_TIMED_OUT = 'timed_out';
 const STATUS_SUPERSEDED = 'superseded';
+
+// Statuses a pending order can be in before it's dispatched. We batch on
+// these (paid/confirmed bookings ready for courier handoff).
+const BATCHABLE_STATUSES = ['paid', 'confirmed', 'pending', 'collecting', 'readyForPickup'];
 
 // Score a candidate courier vs. an order. Higher = better.
 function scoreCourier(courier, order, distanceKm) {
@@ -51,6 +61,143 @@ function safeEmit(io, room, event, payload) {
   }
 }
 
+// ─── Phase 8.1 stacked dispatch ─────────────────────────────────────────────
+
+// Find pending orders that can be batched together with `seedOrderId`.
+// Greedy: starts from the seed, looks for up to `batchCap-1` other unbatched
+// orders that share the seed's shop OR sit within `radiusKm` of it AND were
+// created within `windowMs`. Returns one candidate cluster (or null).
+async function buildBatchCandidates(prisma, opts = {}) {
+  const radiusKm = opts.radiusKm ?? 1;
+  const windowMs = opts.windowMs ?? 5 * 60 * 1000;
+  const batchCap = opts.batchCap ?? 3;
+  const seedOrderId = opts.seedOrderId || null;
+
+  // Pull all unbatched candidates up front (small set in practice).
+  const orders = await prisma.order.findMany({
+    where: {
+      batchId: null,
+      courierId: null,
+      status: { in: BATCHABLE_STATUSES },
+    },
+    include: { shop: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (orders.length < 2) return [];
+
+  const indexById = new Map(orders.map((o) => [o.id, o]));
+  const used = new Set();
+  const clusters = [];
+
+  function shopPoint(o) {
+    if (!o.shop) return null;
+    if (o.shop.lat == null || o.shop.lng == null) return null;
+    return { lat: o.shop.lat, lng: o.shop.lng };
+  }
+
+  function tryCluster(seed) {
+    if (used.has(seed.id)) return null;
+    const seedPt = shopPoint(seed);
+    const seedTime = seed.createdAt instanceof Date ? seed.createdAt.getTime() : new Date(seed.createdAt).getTime();
+    const members = [seed];
+    const memberIds = new Set([seed.id]);
+
+    for (const o of orders) {
+      if (members.length >= batchCap) break;
+      if (memberIds.has(o.id) || used.has(o.id)) continue;
+
+      // Time window
+      const oTime = o.createdAt instanceof Date ? o.createdAt.getTime() : new Date(o.createdAt).getTime();
+      if (Math.abs(oTime - seedTime) > windowMs) continue;
+
+      // Same shop OR within radius
+      let groupable = false;
+      if (o.shopId && o.shopId === seed.shopId) {
+        groupable = true;
+      } else {
+        const oPt = shopPoint(o);
+        if (seedPt && oPt) {
+          const d = haversineKm(seedPt.lat, seedPt.lng, oPt.lat, oPt.lng);
+          if (Number.isFinite(d) && d < radiusKm) groupable = true;
+        }
+      }
+      if (!groupable) continue;
+
+      members.push(o);
+      memberIds.add(o.id);
+    }
+
+    if (members.length < 2) return null;
+    return members;
+  }
+
+  if (seedOrderId) {
+    const seed = indexById.get(seedOrderId);
+    if (!seed) return [];
+    const members = tryCluster(seed);
+    if (!members) return [];
+    members.forEach((m) => used.add(m.id));
+    return [makeCandidate(members)];
+  }
+
+  for (const seed of orders) {
+    if (used.has(seed.id)) continue;
+    const members = tryCluster(seed);
+    if (!members) continue;
+    members.forEach((m) => used.add(m.id));
+    clusters.push(makeCandidate(members));
+  }
+  return clusters;
+}
+
+function makeCandidate(members) {
+  let totalReward = 0;
+  for (const m of members) {
+    totalReward += Number(m.courierReward || 0);
+    totalReward += Number(m.tipAmount || 0);
+  }
+  return {
+    seedOrderId: members[0].id,
+    memberOrderIds: members.map((m) => m.id),
+    totalReward,
+  };
+}
+
+// Persist an OrderBatch row and link member orders by sequence. Returns the
+// created OrderBatch row.
+async function commitBatch(prisma, candidate) {
+  const memberIds = candidate.memberOrderIds;
+  if (!Array.isArray(memberIds) || memberIds.length < 2) {
+    throw new Error('commitBatch requires >= 2 memberOrderIds');
+  }
+  // Resolve members to determine sequence by createdAt (asc).
+  const members = await prisma.order.findMany({
+    where: { id: { in: memberIds }, batchId: null },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (members.length !== memberIds.length) {
+    throw Object.assign(new Error('Batch members already linked or missing'), { status: 409 });
+  }
+
+  const batch = await prisma.orderBatch.create({
+    data: {
+      totalDeliveries: members.length,
+      estimatedReward: candidate.totalReward || 0,
+      status: STATUS_PENDING,
+    },
+  });
+
+  // Link orders with batchSequence in createdAt order.
+  for (let i = 0; i < members.length; i += 1) {
+    await prisma.order.update({
+      where: { id: members[i].id },
+      data: { batchId: batch.id, batchSequence: i },
+    });
+  }
+  return batch;
+}
+
 async function offerNextBatch(prisma, io, orderId, opts = {}) {
   const {
     batchSize = 3,
@@ -61,12 +208,38 @@ async function offerNextBatch(prisma, io, orderId, opts = {}) {
     batchIndex = 0,
   } = opts;
 
-  const order = await prisma.order.findUnique({
+  let order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { shop: true },
+    include: { shop: true, batch: true },
   });
   if (!order) return { offered: [], reason: 'not-found' };
   if (order.courierId) return { offered: [], reason: 'already-assigned' };
+
+  // ── Phase 8.1: opportunistic batching ─────────────────────────────────────
+  // If this order isn't already in a batch, see if we can group it with other
+  // pending orders before dispatching. If so, the offer pays the batch reward
+  // and references the OrderBatch row.
+  let batch = order.batch || null;
+  if (!batch && !opts.skipBatch) {
+    try {
+      const candidates = await buildBatchCandidates(prisma, {
+        seedOrderId: orderId,
+        radiusKm: opts.batchRadiusKm ?? 1,
+        windowMs: opts.batchWindowMs ?? 5 * 60 * 1000,
+        batchCap: opts.batchCap ?? 3,
+      });
+      if (candidates.length) {
+        batch = await commitBatch(prisma, candidates[0]);
+        // Reload the seed order so it reflects the new batchId.
+        order = await prisma.order.findUnique({
+          where: { id: orderId },
+          include: { shop: true, batch: true },
+        });
+      }
+    } catch (err) {
+      logger.warn({ err: err.message, orderId }, 'buildBatchCandidates failed');
+    }
+  }
 
   // No-courier-found short-circuit
   if (batchIndex >= maxBatches || radiusKm > maxRadiusKm) {
@@ -114,6 +287,26 @@ async function offerNextBatch(prisma, io, orderId, opts = {}) {
 
   const expiresAt = new Date(Date.now() + holdSeconds * 1000);
   const created = [];
+
+  // Phase 8.2 — compute the tip estimate once per offer round so couriers see
+  // the buyer's expected tip in the offer banner. For batched dispatch we
+  // average the heuristic across member orders. Failures degrade to 0.
+  let tipEst = 0;
+  try {
+    if (batch) {
+      const memberOrders = await prisma.order.findMany({
+        where: { batchId: batch.id },
+        select: { id: true },
+      });
+      tipEst = await tipEstimate.estimateForBatch(prisma, memberOrders.map((m) => m.id));
+    } else {
+      tipEst = await tipEstimate.estimateForOrder(prisma, orderId);
+    }
+  } catch (err) {
+    logger.warn({ err: err.message, orderId }, 'tipEstimate failed; using 0');
+    tipEst = 0;
+  }
+
   for (const p of picks) {
     try {
       const offer = await prisma.dispatchOffer.create({
@@ -124,15 +317,24 @@ async function offerNextBatch(prisma, io, orderId, opts = {}) {
           score: p.score,
           distanceKm: p.distanceKm || null,
           expiresAt,
+          tipEstimate: tipEst,
+          batchId: batch ? batch.id : null,
         },
       });
       created.push(offer);
-      safeEmit(io, `courier:${p.courier.id}`, 'dispatch:offer', {
+      const payload = {
         orderId,
         offerId: offer.id,
         expiresAt: expiresAt.toISOString(),
         distanceKm: p.distanceKm,
-      });
+        tipEstimate: tipEst,
+      };
+      if (batch) {
+        payload.batchId = batch.id;
+        payload.totalDeliveries = batch.totalDeliveries;
+        payload.estimatedReward = batch.estimatedReward;
+      }
+      safeEmit(io, `courier:${p.courier.id}`, 'dispatch:offer', payload);
     } catch (err) {
       // Likely a race on UNIQUE(orderId, courierId) — ignore.
       logger.debug({ err: err.message, courierId: p.courier.id, orderId }, 'offer create skipped');
@@ -194,22 +396,68 @@ async function acceptOffer(prisma, io, orderId, courierId) {
       data: { status: STATUS_SUPERSEDED, respondedAt: now },
     });
 
-    const updated = await tx.order.update({
+    // ── Phase 8.1 stacked dispatch ────────────────────────────────────────
+    // Resolve the effective batch id from the offer (preferred) or the
+    // order. When set, ALL member orders receive the courier assignment
+    // and the courier's activeOrderId is pinned to the first sequence.
+    const batchId = offer.batchId || order.batchId || null;
+    let firstOrderId = orderId;
+
+    if (batchId) {
+      await tx.orderBatch.update({
+        where: { id: batchId },
+        data: { courierId, status: STATUS_ACCEPTED },
+      });
+
+      const members = await tx.order.findMany({
+        where: { batchId },
+        orderBy: { batchSequence: 'asc' },
+      });
+
+      for (const m of members) {
+        await tx.order.update({
+          where: { id: m.id },
+          data: {
+            courierId,
+            status: 'courierAssigned',
+            acceptedAt: m.acceptedAt || now,
+          },
+        });
+        // Supersede competing pending offers on sibling orders so other
+        // couriers don't double-assign within the batch.
+        await tx.dispatchOffer.updateMany({
+          where: {
+            orderId: m.id,
+            status: STATUS_PENDING,
+            NOT: { id: offer.id },
+          },
+          data: { status: STATUS_SUPERSEDED, respondedAt: now },
+        });
+      }
+
+      firstOrderId = (members[0] && members[0].id) || orderId;
+    } else {
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          courierId,
+          status: 'courierAssigned',
+          acceptedAt: order.acceptedAt || now,
+        },
+      });
+    }
+
+    const updated = await tx.order.findUnique({
       where: { id: orderId },
-      data: {
-        courierId,
-        status: 'courierAssigned',
-        acceptedAt: order.acceptedAt || now,
-      },
       include: { items: true, shop: true, courier: { select: { id: true, name: true, phone: true } } },
     });
 
     await tx.user.update({
       where: { id: courierId },
-      data: { activeOrderId: orderId },
+      data: { activeOrderId: firstOrderId },
     });
 
-    return { order: updated, supersededCourierIds: [] };
+    return { order: updated, batchId, firstOrderId };
   }).then(async ({ order }) => {
     // Outside the transaction: gather superseded offers to notify those couriers.
     const others = await prisma.dispatchOffer.findMany({
@@ -286,4 +534,6 @@ module.exports = {
   declineOffer,
   expireOverdueOffers,
   flushPending,
+  buildBatchCandidates,
+  commitBatch,
 };

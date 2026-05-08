@@ -1028,6 +1028,131 @@ class L10n extends ChangeNotifier {
           'TezKetKaz-ға қосылыңыз! Менің {code} кодыммен бірінші тапсырысқа 5000 UZS жеңілдік. Жүктеп алыңыз: https://tezketkaz.uz/r/{code}',
     },
 
+    // ── Phase 8.2 — Tip estimate / batch dispatch ────────────────────────
+    'dispatch.tip_estimate_chip': {
+      'uz': '💰 + ~{amount}',
+      'ru': '💰 + ~{amount}',
+      'en': '💰 + ~{amount}',
+      'kk': '💰 + ~{amount}',
+    },
+    'dispatch.batch_badge': {
+      'uz': 'BATCH × {count}',
+      'ru': 'BATCH × {count}',
+      'en': 'BATCH × {count}',
+      'kk': 'BATCH × {count}',
+    },
+    'dispatch.batch_progress': {
+      'uz': 'Buyurtma {index}/{total}',
+      'ru': 'Заказ {index}/{total}',
+      'en': 'Order {index}/{total}',
+      'kk': 'Тапсырыс {index}/{total}',
+    },
+
+    // ── Phase 8.3 — Performance dashboard ────────────────────────────────
+    'performance.title': {
+      'uz': 'Samaradorlik',
+      'ru': 'Эффективность',
+      'en': 'Performance',
+      'kk': 'Тиімділік',
+    },
+    'performance.acceptance': {
+      'uz': 'Qabul qilish',
+      'ru': 'Приём заказов',
+      'en': 'Acceptance',
+      'kk': 'Қабылдау',
+    },
+    'performance.completion': {
+      'uz': 'Bajarish',
+      'ru': 'Завершение',
+      'en': 'Completion',
+      'kk': 'Аяқтау',
+    },
+    'performance.on_time': {
+      'uz': 'Vaqtida',
+      'ru': 'Вовремя',
+      'en': 'On time',
+      'kk': 'Уақытында',
+    },
+    'performance.avg_rating': {
+      'uz': "O'rtacha reyting",
+      'ru': 'Средний рейтинг',
+      'en': 'Avg rating',
+      'kk': 'Орташа рейтинг',
+    },
+    'performance.tips_total': {
+      'uz': 'Chayryak jami',
+      'ru': 'Всего чаевых',
+      'en': 'Tips total',
+      'kk': 'Барлық шай ақы',
+    },
+    'performance.no_data': {
+      'uz': "Ma'lumot yetarli emas",
+      'ru': 'Недостаточно данных',
+      'en': 'Not enough data yet',
+      'kk': 'Дерек жеткіліксіз',
+    },
+
+    // ── Phase 8.4 — Heatmap toggle ───────────────────────────────────────
+    'heatmap.toggle_show': {
+      'uz': '🔥 Hududdagi buyurtmalar',
+      'ru': '🔥 Заказы рядом',
+      'en': '🔥 Orders nearby',
+      'kk': '🔥 Жақын тапсырыстар',
+    },
+    'heatmap.toggle_hide': {
+      'uz': '🔥 Yashirish',
+      'ru': '🔥 Скрыть',
+      'en': '🔥 Hide',
+      'kk': '🔥 Жасыру',
+    },
+
+    // ── Phase 8.1 — Stacked / batch deliveries ───────────────────────────
+    'batch.upcoming_pickup': {
+      'uz': 'Keyingi olinish',
+      'ru': 'Следующий забор',
+      'en': 'Next pickup',
+      'kk': 'Келесі алу',
+    },
+    'batch.view_overview': {
+      'uz': "Hammasini ko'rish",
+      'ru': 'Все заказы',
+      'en': 'View batch',
+      'kk': 'Барлығын көру',
+    },
+
+    // ── Phase 8.5 — Instant payout ───────────────────────────────────────
+    'payout.cashout_now': {
+      'uz': 'Hozir yechib olish',
+      'ru': 'Вывести сейчас',
+      'en': 'Cash out now',
+      'kk': 'Қазір шығару',
+    },
+    'payout.balance': {
+      'uz': 'Mavjud balans',
+      'ru': 'Доступный баланс',
+      'en': 'Available balance',
+      'kk': 'Қолжетімді баланс',
+    },
+    'payout.below_min': {
+      'uz': 'Minimal summa: {amount}',
+      'ru': 'Минимум для вывода: {amount}',
+      'en': 'Minimum payout: {amount}',
+      'kk': 'Ең аз шығару сомасы: {amount}',
+    },
+    'payout.pending': {
+      'uz': "So'rov qabul qilindi — admin 24 soat ichida ishlov beradi",
+      'ru':
+          'Запрос принят — администратор обработает в течение 24 часов',
+      'en': 'Pending request — admin will process within 24h',
+      'kk': 'Сұраныс қабылданды — әкімші 24 сағат ішінде өңдейді',
+    },
+    'payout.requested_success': {
+      'uz': "So'rov yuborildi 🎉",
+      'ru': 'Запрос отправлен 🎉',
+      'en': 'Payout requested 🎉',
+      'kk': 'Сұраныс жіберілді 🎉',
+    },
+
     // ── Phase 7.1 — Country / locale picker ──────────────────────────────
     'settings.country_locale': {
       'uz': 'Mamlakat va til',
