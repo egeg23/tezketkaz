@@ -56,6 +56,10 @@ class Shift {
 }
 
 /// A single dispatch offer pushed by the backend on the courier socket.
+///
+/// Phase 8 extended this payload with optional stacked-dispatch (batch) and
+/// tip-estimate fields. All new fields are nullable so the UI keeps working
+/// against the older Phase 2 backend payload.
 class DispatchOffer {
   final String orderId;
   final DateTime expiresAt;
@@ -64,6 +68,13 @@ class DispatchOffer {
   final int? etaMinutes;
   final String? shopName;
   final String? customerAddress;
+  // Phase 8.2 — courier-side tip estimate, in the order's currency (UZS).
+  final num? tipEstimate;
+  // Phase 8.1 — stacked dispatch. When `batchId` is set the courier is being
+  // offered a batch of `totalDeliveries` orders for `estimatedReward` total.
+  final String? batchId;
+  final int? totalDeliveries;
+  final num? estimatedReward;
 
   const DispatchOffer({
     required this.orderId,
@@ -73,6 +84,10 @@ class DispatchOffer {
     this.etaMinutes,
     this.shopName,
     this.customerAddress,
+    this.tipEstimate,
+    this.batchId,
+    this.totalDeliveries,
+    this.estimatedReward,
   });
 
   factory DispatchOffer.fromJson(Map<String, dynamic> j) {
@@ -95,8 +110,15 @@ class DispatchOffer {
       etaMinutes: (j['etaMinutes'] as num?)?.toInt(),
       shopName: j['shopName'] as String?,
       customerAddress: j['customerAddress'] as String?,
+      tipEstimate: j['tipEstimate'] as num?,
+      batchId: j['batchId'] as String?,
+      totalDeliveries: (j['totalDeliveries'] as num?)?.toInt(),
+      estimatedReward: j['estimatedReward'] as num?,
     );
   }
+
+  /// True when this offer is for a stacked / batch delivery.
+  bool get isBatch => batchId != null && (totalDeliveries ?? 1) > 1;
 
   /// Seconds until the offer expires, clamped at 0.
   int secondsRemaining(DateTime now) {

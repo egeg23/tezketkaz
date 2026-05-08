@@ -62,6 +62,25 @@ const T = {
     en: { title: 'Promo', body: 'A new offer for you!' },
     kk: { title: 'Жаңа акция', body: 'Сізге арналған жаңа акция!' },
   },
+  // Phase 8.5 — instant payout lifecycle.
+  instant_payout_requested: {
+    uz: { title: "Pul so'rovi qabul qilindi", body: "Pul so'rovingiz ko'rib chiqilmoqda" },
+    ru: { title: 'Запрос на выплату принят', body: 'Ваш запрос обрабатывается' },
+    en: { title: 'Payout requested', body: 'Your payout request is being reviewed' },
+    kk: { title: 'Төлем сұрауы қабылданды', body: 'Сұрауыңыз қаралуда' },
+  },
+  instant_payout_paid: {
+    uz: { title: 'Pul yuborildi', body: 'Hisobingizga pul tushdi' },
+    ru: { title: 'Выплата отправлена', body: 'Деньги поступили на ваш счёт' },
+    en: { title: 'Payout sent', body: 'Funds have been transferred to your account' },
+    kk: { title: 'Төлем жіберілді', body: 'Қаражат шотыңызға аударылды' },
+  },
+  instant_payout_rejected: {
+    uz: { title: "Pul so'rovi rad etildi", body: "Pul so'rovingiz rad etildi" },
+    ru: { title: 'Запрос на выплату отклонён', body: 'Ваш запрос на выплату отклонён' },
+    en: { title: 'Payout rejected', body: 'Your payout request was rejected' },
+    kk: { title: 'Төлем сұрауы қабылданбады', body: 'Сұрауыңыз қабылданбады' },
+  },
 };
 
 function pickLocale(locale) {

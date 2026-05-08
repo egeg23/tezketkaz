@@ -40,6 +40,7 @@ import 'screens/courier/courier_shell.dart';
 import 'screens/courier/courier_home_screen.dart';
 import 'screens/courier/active_order_screen.dart';
 import 'screens/courier/earnings_screen.dart';
+import 'screens/courier/performance_screen.dart';
 import 'screens/courier/courier_profile_screen.dart';
 import 'screens/shop/shop_shell.dart';
 import 'screens/shop/shop_orders_screen.dart';
@@ -251,6 +252,7 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
           GoRoute(path: '/courier', builder: (_, __) => const CourierHomeScreen()),
           GoRoute(path: '/courier/order/:orderId', builder: (_, s) => ActiveOrderScreen(orderId: s.pathParameters['orderId'] ?? '')),
           GoRoute(path: '/courier/earnings', builder: (_, __) => const EarningsScreen()),
+          GoRoute(path: '/courier/performance', builder: (_, __) => const PerformanceScreen()),
           GoRoute(path: '/courier/profile', builder: (_, __) => const CourierProfileScreen()),
         ],
       ),

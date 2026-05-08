@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/l10n.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
 
@@ -199,6 +200,18 @@ class CourierProfileScreen extends StatelessWidget {
           ),
 
           const SizedBox(height: 16),
+
+          // Phase 8.3 — performance dashboard tile.
+          _Section(title: 'Statistika', children: [
+            _MenuItem(
+              icon: '📊',
+              title: L10n.instance.t('performance.title'),
+              subtitle: 'KPI, reyting, kunlik daromad',
+              onTap: () => context.push('/courier/performance'),
+            ),
+          ]),
+
+          const SizedBox(height: 12),
 
           // Sections
           _Section(title: 'Ish sozlamalari', children: [

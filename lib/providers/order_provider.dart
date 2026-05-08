@@ -29,6 +29,12 @@ class AppOrder {
   String? courierId;
   String? courierName;
   double reward;
+  // Phase 8.1 — stacked dispatch. `batchId` groups multiple orders that the
+  // courier picks up together. `batchSequence` is the 1-based position of
+  // this order within the batch (e.g. 2 of 3).
+  final String? batchId;
+  final int? batchSequence;
+  final int? batchTotal;
   final DateTime createdAt;
 
   AppOrder({
@@ -49,6 +55,9 @@ class AppOrder {
     this.courierId,
     this.courierName,
     this.reward = 12000,
+    this.batchId,
+    this.batchSequence,
+    this.batchTotal,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 

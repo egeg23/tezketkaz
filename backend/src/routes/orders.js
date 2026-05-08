@@ -1023,12 +1023,41 @@ router.post('/:id/courier/complete', authMiddleware, requireRole('courier'), asy
       include: { items: true, shop: true, courier: { select: { id: true, name: true, phone: true } } },
     });
 
+    // Phase 8.1 — if this order is part of a batch, advance the batch's
+    // progress counter and either advance the courier to the next order in
+    // the sequence, or close the batch when all members are delivered.
+    let nextActiveOrderId = null;
+    if (order.batchId) {
+      const batch = await prisma.orderBatch.update({
+        where: { id: order.batchId },
+        data: { deliveriesCompleted: { increment: 1 } },
+      });
+      if (batch.deliveriesCompleted >= batch.totalDeliveries) {
+        await prisma.orderBatch.update({
+          where: { id: batch.id },
+          data: { status: 'completed', completedAt: new Date() },
+        });
+      } else {
+        // Find the next undelivered member by sequence.
+        const next = await prisma.order.findFirst({
+          where: {
+            batchId: batch.id,
+            id: { not: order.id },
+            status: { not: STATUS.DELIVERED },
+          },
+          orderBy: { batchSequence: 'asc' },
+        });
+        if (next) nextActiveOrderId = next.id;
+      }
+    }
+
     await prisma.user.update({
       where: { id: req.user.id },
       data: {
         ordersCount: { increment: 1 },
-        // Free the courier so the dispatcher can offer them new orders.
-        activeOrderId: null,
+        // Free the courier (or advance to next batch member) so the
+        // dispatcher can offer them new orders.
+        activeOrderId: nextActiveOrderId,
       },
     });
 
@@ -1196,6 +1225,46 @@ router.post('/:id/reorder', authMiddleware, async (req, res, next) => {
       couponCode: null,
       deliveryAddressId,
     });
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/orders/courier/active ──────────────────────────────────────────
+// Phase 8 — returns the courier's currently active order (whatever
+// User.activeOrderId points at). The Flutter active-order screen polls this
+// after each batch leg completes so it can advance to the next member of
+// the batch automatically.
+router.get('/courier/active', authMiddleware, requireRole('courier'), async (req, res, next) => {
+  try {
+    const me = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { activeOrderId: true },
+    });
+    if (!me?.activeOrderId) return res.json({ order: null });
+    const order = await prisma.order.findUnique({
+      where: { id: me.activeOrderId },
+      include: { items: true, shop: true, courier: { select: { id: true, name: true, phone: true } } },
+    });
+    if (!order || order.courierId !== req.user.id) {
+      return res.json({ order: null });
+    }
+    res.json({ order });
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/orders/courier/batch/:batchId ──────────────────────────────────
+// Phase 8 — returns all orders in a batch the courier is handling, sorted
+// by batchSequence. Used by the active-order screen to render the upcoming
+// pickups list and the batch overview map.
+router.get('/courier/batch/:batchId', authMiddleware, requireRole('courier'), async (req, res, next) => {
+  try {
+    const orders = await prisma.order.findMany({
+      where: { batchId: req.params.batchId, courierId: req.user.id },
+      include: { items: true, shop: true },
+      orderBy: { batchSequence: 'asc' },
+    });
+    if (!orders.length) return res.status(404).json({ error: 'Not found' });
+    const batch = await prisma.orderBatch.findUnique({ where: { id: req.params.batchId } });
+    res.json({ batch, orders });
   } catch (err) { next(err); }
 });
 

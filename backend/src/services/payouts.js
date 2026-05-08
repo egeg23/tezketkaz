@@ -84,6 +84,26 @@ async function generateWeeklyPayouts(prisma, { weekStart } = {}) {
     byCourier.set(o.courierId, e);
   }
 
+  // Phase 8.5 — for each courier, sum up any instant payouts already paid or
+  // pending in this same window so we don't pay them twice. We treat
+  // status in ('paid', 'requested') as committed.
+  const instantPayouts = await prisma.payout.findMany({
+    where: {
+      recipientType: 'courier',
+      source: 'instant',
+      status: { in: ['paid', 'requested'] },
+      createdAt: { gte: start, lt: end },
+    },
+    select: { recipientId: true, netAmount: true },
+  });
+  const instantByCourier = new Map();
+  for (const p of instantPayouts) {
+    instantByCourier.set(
+      p.recipientId,
+      (instantByCourier.get(p.recipientId) || 0) + Number(p.netAmount || 0),
+    );
+  }
+
   // ── Shops: aggregate by shopId ────────────────────────────────────────────
   const byShop = new Map();
   for (const o of orders) {
@@ -105,8 +125,14 @@ async function generateWeeklyPayouts(prisma, { weekStart } = {}) {
     const commission = 0;
     const refundsTotal = 0;
     const tipsTotal = Number(agg.tips || 0);
-    const netAmount = grossAmount + tipsTotal;
-    const notes = JSON.stringify({ tipsTotal });
+    // Phase 8.5 — subtract any instant payouts already requested or paid for
+    // this courier within the window. Floor at 0 so we never produce a
+    // negative weekly payout (e.g. courier withdrew more than this week
+    // accrued — that overage will be reconciled on the next run).
+    const instantTotal = Number(instantByCourier.get(courierId) || 0);
+    let netAmount = grossAmount + tipsTotal - instantTotal;
+    if (netAmount < 0) netAmount = 0;
+    const notes = JSON.stringify({ tipsTotal, instantTotal });
     const row = await prisma.payout.upsert({
       where: {
         recipientType_recipientId_periodStart: {

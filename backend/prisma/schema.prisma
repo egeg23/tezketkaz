@@ -339,12 +339,22 @@ model DispatchOffer {
   distanceKm Float?
   expiresAt  DateTime
 
+  // Phase 8 — Wolt-tier transparency: estimated tip the buyer is likely to
+  // leave (heuristic from shop's recent tip-rate or rolling avg per buyer).
+  // Surfaced to the courier in the offer banner.
+  tipEstimate Float    @default(0)
+
+  // Phase 8 — Optional batch this offer is for. When non-null the courier
+  // accepts a 2-3 order pickup chain rather than a single delivery.
+  batchId    String?
+
   offeredAt  DateTime @default(now())
   respondedAt DateTime?
 
   @@unique([orderId, courierId])
   @@index([orderId, status])
   @@index([courierId, offeredAt])
+  @@index([batchId])
 }
 
 // Hierarchical category tree. Categories can be global (shopId = null) or
@@ -541,6 +551,14 @@ model Order {
   // taxAmount is what was added on top of subtotal (in major units of currency).
   taxRate         Float    @default(0)
   taxAmount       Float    @default(0)
+
+  // Phase 8 — stacked dispatch. When set, this order is part of a batch
+  // the same courier picked up together. Null for solo deliveries.
+  batchId         String?
+  batch           OrderBatch? @relation(fields: [batchId], references: [id])
+  // Position within the batch's pickup+delivery sequence (0,1,2...). Null
+  // for solo orders or when not yet sequenced.
+  batchSequence   Int?
 
   // Items
   items           OrderItem[]
@@ -776,11 +794,19 @@ model Payout {
 
   ordersCount   Int      @default(0)
 
-  // pending | paid | failed | cancelled
+  // pending | requested | paid | failed | cancelled
+  // 'requested' is set by the courier's instant-payout flow (Phase 8.5);
+  // admin then transitions to 'paid' or 'failed'.
   status        String   @default("pending")
   paidAt        DateTime?
   txnRef        String?
   notes         String?
+
+  // Phase 8.5 — instant payout request timestamp + linked courier (for
+  // off-cycle requests that don't follow the weekly aggregate).
+  requestedAt   DateTime?
+  // 'weekly' | 'instant'. weekly is the legacy cron-generated payout.
+  source        String   @default("weekly")
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -999,4 +1025,40 @@ model Favorite {
   @@unique([userId, productId])
   @@unique([userId, shopId])
   @@index([userId])
+}
+
+// ── Phase 8: stacked dispatch (multi-pickup batch) ──────────────────────────
+
+// A bundle of 2-3 orders the same courier accepted together. The dispatcher
+// builds a batch when several pending orders share a zone and overlap in
+// pickup time; the courier sees one offer that pays the sum of rewards.
+model OrderBatch {
+  id              String   @id @default(uuid())
+  courierId       String?  // assigned when the batch is accepted
+  // 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled'
+  status          String   @default("pending")
+
+  // Total orders in the batch when offered (locked in at offer time).
+  totalDeliveries Int
+
+  // How many of those have reached `delivered` status. UI uses this for the
+  // "2/3 deliveries done" indicator on courier_home_screen.
+  deliveriesCompleted Int  @default(0)
+
+  // Sum of Order.courierReward + tip across all orders, snapshotted when the
+  // batch is offered so courier sees the right pay before accepting.
+  estimatedReward Float    @default(0)
+
+  pickedUpAt      DateTime?
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+
+  // Member orders.
+  orders          Order[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([courierId, status])
+  @@index([status])
 }

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../l10n/l10n.dart';
 import '../../providers/order_provider.dart';
 import '../../services/order_api.dart';
 import '../../theme/app_theme.dart';
@@ -26,6 +27,11 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
   final _numberCtrl = TextEditingController();
   bool _numberError = false;
 
+  // Phase 8.1 — sibling orders in the same batch as `widget.orderId`. Loaded
+  // lazily once we know the active order's `batchId`.
+  List<AppOrder> _batchOrders = const [];
+  String? _loadedBatchId;
+
   // Simulated path: shop → customer (Tashkent Yunusobod area)
   static const _shopPoint = (lat: 41.3617, lng: 69.2877);
   static const _customerPoint = (lat: 41.3700, lng: 69.2890);
@@ -39,6 +45,20 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
       ..repeat(reverse: true);
     _pulse = Tween(begin: 1.0, end: 1.1).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+  }
+
+  /// Phase 8.1 — pull all sibling orders for the current batch so we can
+  /// preview the next pickup and render the batch overview sheet.
+  Future<void> _ensureBatchLoaded(String batchId) async {
+    if (_loadedBatchId == batchId) return;
+    _loadedBatchId = batchId;
+    try {
+      final list = await OrderApi.instance.courierBatch(batchId);
+      if (!mounted) return;
+      setState(() => _batchOrders = list);
+    } catch (_) {
+      // Silent — batch overview is opt-in eye-candy, not load-bearing.
+    }
   }
 
   @override
@@ -103,9 +123,32 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
         break;
 
       case DeliveryStep.done:
-        context.go('/courier');
+        // The done screen has a primary CTA which routes through
+        // `_finishAndAdvance`; this `case` only fires on the rare path where
+        // `_advance` is called while in the done step (e.g. quick double-tap).
+        final order = orders.findById(widget.orderId);
+        await _finishAndAdvance(order?.batchId);
         break;
     }
+  }
+
+  /// Phase 8.1 — when finishing a batch leg, jump to the courier's next
+  /// active order automatically. Falls back to the home screen otherwise.
+  Future<void> _finishAndAdvance(String? batchId) async {
+    if (batchId != null) {
+      try {
+        final next = await OrderApi.instance.courierActive();
+        if (!mounted) return;
+        if (next != null && next.id != widget.orderId) {
+          context.go('/courier/order/${next.id}');
+          return;
+        }
+      } catch (_) {
+        // Fall through to home on error.
+      }
+    }
+    if (!mounted) return;
+    context.go('/courier');
   }
 
   Future<void> _openMap(String address) async {
@@ -125,7 +168,28 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
   Widget build(BuildContext context) {
     final order = context.watch<OrderProvider>().findById(widget.orderId);
     if (order == null) return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));
-    if (_step == DeliveryStep.done) return _DoneScreen(reward: order.reward, onFinish: () => context.go('/courier'));
+    // Phase 8.1 — kick off batch fetch the first time we render an order in
+    // a batch. Safe to call repeatedly; `_ensureBatchLoaded` is idempotent.
+    if (order.batchId != null) {
+      _ensureBatchLoaded(order.batchId!);
+    }
+    if (_step == DeliveryStep.done) {
+      return _DoneScreen(
+        reward: order.reward,
+        onFinish: () => _finishAndAdvance(order.batchId),
+      );
+    }
+
+    final isBatch = order.batchId != null;
+    final upcoming = isBatch
+        ? _batchOrders
+            .where((o) =>
+                o.id != order.id &&
+                o.status != AppOrderStatus.delivered &&
+                o.status != AppOrderStatus.confirmedByBuyer &&
+                o.status != AppOrderStatus.cancelled)
+            .toList()
+        : const <AppOrder>[];
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -136,6 +200,8 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
               step: _step,
               onCancel: () => _showCancelSheet(context, order),
               onChat: () => context.push('/order/${order.id}/chat'),
+              batchSequence: order.batchSequence,
+              batchTotal: order.batchTotal,
             ),
             Expanded(
               flex: 5,
@@ -184,6 +250,12 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
                     onMap: _openMap,
                     onNumberChanged: () => setState(() => _numberError = false),
                   ),
+                  // Phase 8.1 — upcoming batch orders preview + overview CTA.
+                  if (isBatch && upcoming.isNotEmpty)
+                    _BatchUpcomingList(
+                      upcoming: upcoming,
+                      onOverview: () => _showBatchOverview(context, order),
+                    ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
                     child: _CtaButton(step: _step, onTap: _advance, canProceed: _canProceed()),
@@ -193,6 +265,20 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showBatchOverview(BuildContext context, AppOrder current) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _BatchOverviewSheet(
+        current: current,
+        all: _batchOrders.isEmpty ? [current] : _batchOrders,
       ),
     );
   }
@@ -242,7 +328,15 @@ class _TopBar extends StatelessWidget {
   final DeliveryStep step;
   final VoidCallback onCancel;
   final VoidCallback? onChat;
-  const _TopBar({required this.step, required this.onCancel, this.onChat});
+  final int? batchSequence;
+  final int? batchTotal;
+  const _TopBar({
+    required this.step,
+    required this.onCancel,
+    this.onChat,
+    this.batchSequence,
+    this.batchTotal,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -255,40 +349,291 @@ class _TopBar extends StatelessWidget {
     };
     final steps = DeliveryStep.values.where((s) => s != DeliveryStep.done).toList();
     final curIdx = steps.indexOf(step);
+    final isBatch = (batchTotal ?? 0) > 1;
 
     return Container(
       color: AppColors.surface,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: Row(
+      padding: EdgeInsets.fromLTRB(16, isBatch ? 8 : 12, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: steps.asMap().entries.map((e) => Container(
-              width: e.key == curIdx ? 20 : 8, height: 8,
-              margin: const EdgeInsets.only(right: 4),
+          if (isBatch) ...[
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: e.key <= curIdx ? AppColors.courier : AppColors.border,
-                borderRadius: BorderRadius.circular(4),
+                color: AppColors.courierLight,
+                borderRadius: BorderRadius.circular(8),
               ),
-            )).toList(),
-          ),
-          const SizedBox(width: 10),
-          Expanded(child: Text(labels[step] ?? '', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
-          if (onChat != null)
-            IconButton(
-              onPressed: onChat,
-              icon: const Icon(Icons.chat_bubble_outline_rounded,
-                  color: AppColors.courier),
-              style: IconButton.styleFrom(
-                backgroundColor: AppColors.courierLight,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+              child: Text(
+                L10n.instance
+                    .t('dispatch.batch_progress')
+                    .replaceAll('{index}', '${batchSequence ?? 1}')
+                    .replaceAll('{total}', '${batchTotal ?? 2}'),
+                style: const TextStyle(
+                  color: AppColors.courier,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
+                ),
               ),
             ),
-          const SizedBox(width: 4),
-          IconButton(
-            onPressed: onCancel,
-            icon: const Icon(Icons.close, color: AppColors.textSecondary),
-            style: IconButton.styleFrom(backgroundColor: AppColors.bg, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            const SizedBox(height: 6),
+          ],
+          Row(
+            children: [
+              Row(
+                children: steps
+                    .asMap()
+                    .entries
+                    .map((e) => Container(
+                          width: e.key == curIdx ? 20 : 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(right: 4),
+                          decoration: BoxDecoration(
+                            color: e.key <= curIdx
+                                ? AppColors.courier
+                                : AppColors.border,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ))
+                    .toList(),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  labels[step] ?? '',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+              ),
+              if (onChat != null)
+                IconButton(
+                  onPressed: onChat,
+                  icon: const Icon(Icons.chat_bubble_outline_rounded,
+                      color: AppColors.courier),
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.courierLight,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              const SizedBox(width: 4),
+              IconButton(
+                onPressed: onCancel,
+                icon: const Icon(Icons.close,
+                    color: AppColors.textSecondary),
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.bg,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Phase 8.1 — list of upcoming sibling orders in the same batch with a
+/// "view batch overview" button that opens a bottom sheet.
+class _BatchUpcomingList extends StatelessWidget {
+  final List<AppOrder> upcoming;
+  final VoidCallback onOverview;
+  const _BatchUpcomingList({
+    required this.upcoming,
+    required this.onOverview,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('📦', style: TextStyle(fontSize: 14)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  L10n.instance.t('batch.upcoming_pickup'),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: onOverview,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 0),
+                  minimumSize: const Size(0, 28),
+                  foregroundColor: AppColors.courier,
+                ),
+                child: Text(
+                  L10n.instance.t('batch.view_overview'),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          for (final o in upcoming.take(2))
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  const Icon(Icons.location_on_outlined,
+                      size: 14, color: AppColors.textHint),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      o.deliveryAddress,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  if (o.batchSequence != null)
+                    Text(
+                      '#${o.batchSequence}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textHint,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Phase 8.1 — bottom sheet that lists every order in the batch. The map
+/// preview is intentionally minimal (a placeholder card with addresses) so
+/// we don't depend on the live Yandex map widget here.
+class _BatchOverviewSheet extends StatelessWidget {
+  final AppOrder current;
+  final List<AppOrder> all;
+  const _BatchOverviewSheet({required this.current, required this.all});
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...all]..sort((a, b) =>
+        (a.batchSequence ?? 0).compareTo(b.batchSequence ?? 0));
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('📦', style: TextStyle(fontSize: 22)),
+              const SizedBox(width: 8),
+              Text(
+                L10n.instance.t('batch.view_overview'),
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Map placeholder — production version would render the full route.
+          Container(
+            height: 140,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE3F2FD),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Center(
+              child: Text('🗺️', style: TextStyle(fontSize: 40)),
+            ),
+          ),
+          const SizedBox(height: 14),
+          for (final o in sorted)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: o.id == current.id
+                    ? AppColors.courierLight
+                    : AppColors.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: o.id == current.id
+                      ? AppColors.courier
+                      : AppColors.border,
+                  width: o.id == current.id ? 1.5 : 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: AppColors.courier,
+                    child: Text(
+                      '${o.batchSequence ?? '?'}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          o.shopName,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          o.deliveryAddress,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(L10n.instance.t('common.back')),
+            ),
           ),
         ],
       ),
