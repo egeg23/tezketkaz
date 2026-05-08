@@ -110,17 +110,121 @@ router.get('/orders', authMiddleware, requireAdmin, async (req, res, next) => {
 });
 
 // ─── GET /api/admin/users ────────────────────────────────────────────────────
+// Phase 6.12 — paginated, filterable, searchable user list.
+//   role     — buyer | courier | shop | admin
+//   status   — courierStatus filter (none | pending | approved | rejected)
+//   q        — search phone or name (case-insensitive contains)
 router.get('/users', authMiddleware, requireAdmin, async (req, res, next) => {
   try {
-    const users = await prisma.user.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 200,
+    const { role, status, q } = req.query;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const cursor = req.query.cursor || null;
+
+    const where = {};
+    if (role === 'buyer') where.isBuyer = true;
+    else if (role === 'courier') where.isCourier = true;
+    else if (role === 'shop') where.isShop = true;
+    else if (role === 'admin') where.isAdmin = true;
+
+    if (status) where.courierStatus = String(status);
+
+    if (q && String(q).trim()) {
+      const needle = String(q).trim();
+      where.OR = [
+        { phone: { contains: needle } },
+        { name: { contains: needle } },
+      ];
+    }
+
+    const findArgs = {
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      take: limit + 1,
+    };
+    if (cursor) {
+      findArgs.cursor = { id: String(cursor) };
+      findArgs.skip = 1;
+    }
+
+    const rows = await prisma.user.findMany(findArgs);
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    res.json({
+      users: page,
+      nextCursor: hasMore ? page[page.length - 1].id : null,
     });
-    res.json({ users });
   } catch (err) { next(err); }
 });
 
+// ─── GET /api/admin/users/:id ────────────────────────────────────────────────
+router.get('/users/:id', authMiddleware, requireAdmin, async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      include: {
+        shopMemberships: { include: { shop: { select: { id: true, name: true } } } },
+        loyalty: true,
+      },
+    });
+    if (!user) return res.status(404).json({ error: 'Not found' });
+
+    const [ordersCount, totalSpentAgg, recentOrders] = await Promise.all([
+      prisma.order.count({ where: { buyerId: user.id } }),
+      prisma.order.aggregate({
+        where: { buyerId: user.id, status: { in: ['delivered', 'confirmedByBuyer'] } },
+        _sum: { total: true },
+      }),
+      prisma.order.findMany({
+        where: { buyerId: user.id },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: {
+          id: true, orderNumber: true, status: true, total: true,
+          createdAt: true, deliveredAt: true, shopId: true,
+        },
+      }),
+    ]);
+
+    res.json({
+      user,
+      ordersCount,
+      totalSpent: totalSpentAgg._sum.total || 0,
+      lastSeenAt: user.lastSeenAt,
+      recentOrders,
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── PATCH /api/admin/users/:id ──────────────────────────────────────────────
+router.patch('/users/:id', authMiddleware, requireAdmin, async (req, res, next) => {
+  try {
+    const ALLOWED = ['name', 'isAdmin', 'isCourier', 'isShop', 'courierStatus', 'locale'];
+    const data = {};
+    for (const k of ALLOWED) {
+      if (req.body && Object.prototype.hasOwnProperty.call(req.body, k)) {
+        data[k] = req.body[k];
+      }
+    }
+    if (data.isAdmin !== undefined) data.isAdmin = !!data.isAdmin;
+    if (data.isCourier !== undefined) data.isCourier = !!data.isCourier;
+    if (data.isShop !== undefined) data.isShop = !!data.isShop;
+
+    const user = await prisma.user.update({ where: { id: req.params.id }, data });
+    await audit({
+      actorId: req.user.id,
+      action: 'user.update',
+      targetType: 'User', targetId: user.id,
+      metadata: data, ipAddress: req.ip,
+    });
+    res.json({ user });
+  } catch (err) {
+    if (err && err.code === 'P2025') return res.status(404).json({ error: 'Not found' });
+    next(err);
+  }
+});
+
 // ─── POST /api/admin/users/:id/admin ─────────────────────────────────────────
+// Legacy endpoint — kept for backward compatibility with existing clients.
 router.post('/users/:id/admin', authMiddleware, requireAdmin, async (req, res, next) => {
   try {
     const { isAdmin } = req.body || {};
@@ -134,6 +238,281 @@ router.post('/users/:id/admin', authMiddleware, requireAdmin, async (req, res, n
       targetType: 'User', targetId: user.id, ipAddress: req.ip,
     });
     res.json({ user: { id: user.id, isAdmin: user.isAdmin } });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/admin/users/:id/ban ───────────────────────────────────────────
+// We don't have a `User.isActive`/`isBanned` column yet. To avoid touching the
+// schema, the lowest-friction approach is:
+//   1. Revoke ALL refresh tokens for this user (forces re-login + locks them
+//      out because verify-otp is the only entry path and admins can refuse).
+//   2. Demote: clear isAdmin, isCourier, isShop. courierStatus -> 'rejected'.
+//   3. Audit-log the action with the supplied reason in metadata.
+// To unban: re-issue tokens isn't possible, but we restore role flags so when
+// they re-authenticate they're back to a normal account.
+router.post('/users/:id/ban', authMiddleware, requireAdmin, async (req, res, next) => {
+  try {
+    const { reason } = req.body || {};
+    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!target) return res.status(404).json({ error: 'Not found' });
+
+    const now = new Date();
+    const [, user] = await Promise.all([
+      prisma.refreshToken.updateMany({
+        where: { userId: target.id, revokedAt: null },
+        data: { revokedAt: now },
+      }),
+      prisma.user.update({
+        where: { id: target.id },
+        data: {
+          isAdmin: false,
+          isCourier: false,
+          isShop: false,
+          courierStatus: 'rejected',
+        },
+      }),
+    ]);
+
+    await audit({
+      actorId: req.user.id,
+      action: 'user.ban',
+      targetType: 'User', targetId: user.id,
+      metadata: { reason: reason || null }, ipAddress: req.ip,
+    });
+    res.json({ user, banned: true });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/admin/users/:id/unban ─────────────────────────────────────────
+// Restores the buyer role; admin/courier/shop flags must be re-granted
+// explicitly via PATCH /api/admin/users/:id afterwards.
+router.post('/users/:id/unban', authMiddleware, requireAdmin, async (req, res, next) => {
+  try {
+    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!target) return res.status(404).json({ error: 'Not found' });
+
+    const user = await prisma.user.update({
+      where: { id: target.id },
+      data: { isBuyer: true, courierStatus: target.courierStatus === 'rejected' ? 'none' : target.courierStatus },
+    });
+    await audit({
+      actorId: req.user.id,
+      action: 'user.unban',
+      targetType: 'User', targetId: user.id,
+      ipAddress: req.ip,
+    });
+    res.json({ user, banned: false });
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/admin/shops ────────────────────────────────────────────────────
+// Phase 6.12 — list shops with member count, order count, last 30d GMV.
+router.get('/shops', authMiddleware, requireAdmin, async (req, res, next) => {
+  try {
+    const { status, q, vertical } = req.query;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const cursor = req.query.cursor || null;
+
+    const where = {};
+    if (status === 'active') where.isActive = true;
+    else if (status === 'inactive') where.isActive = false;
+    if (vertical) where.vertical = String(vertical);
+    if (q && String(q).trim()) {
+      const needle = String(q).trim();
+      where.OR = [
+        { name: { contains: needle } },
+        { address: { contains: needle } },
+        { phone: { contains: needle } },
+      ];
+    }
+
+    const findArgs = {
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      take: limit + 1,
+      include: {
+        _count: { select: { members: true, orders: true } },
+      },
+    };
+    if (cursor) {
+      findArgs.cursor = { id: String(cursor) };
+      findArgs.skip = 1;
+    }
+
+    const rows = await prisma.shop.findMany(findArgs);
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+
+    // Compute last-30d GMV per shop in a single groupBy.
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const ids = page.map((s) => s.id);
+    const gmvAgg = ids.length
+      ? await prisma.order.groupBy({
+          by: ['shopId'],
+          where: {
+            shopId: { in: ids },
+            createdAt: { gte: since },
+            status: { in: ['delivered', 'confirmedByBuyer'] },
+          },
+          _sum: { total: true },
+        })
+      : [];
+    const gmvMap = new Map(gmvAgg.map((g) => [g.shopId, g._sum.total || 0]));
+
+    const shops = page.map((s) => ({
+      ...s,
+      membersCount: s._count?.members ?? 0,
+      ordersCount: s._count?.orders ?? 0,
+      lastWeekGMV: gmvMap.get(s.id) || 0,        // legacy alias used by some clients
+      last30dGMV: gmvMap.get(s.id) || 0,
+    }));
+    res.json({
+      shops,
+      nextCursor: hasMore ? page[page.length - 1].id : null,
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/admin/shops/:id ────────────────────────────────────────────────
+router.get('/shops/:id', authMiddleware, requireAdmin, async (req, res, next) => {
+  try {
+    const shop = await prisma.shop.findUnique({
+      where: { id: req.params.id },
+      include: {
+        members: {
+          include: { user: { select: { id: true, name: true, phone: true } } },
+        },
+        _count: { select: { orders: true, products: true } },
+      },
+    });
+    if (!shop) return res.status(404).json({ error: 'Not found' });
+
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const gmvAgg = await prisma.order.aggregate({
+      where: {
+        shopId: shop.id,
+        createdAt: { gte: since },
+        status: { in: ['delivered', 'confirmedByBuyer'] },
+      },
+      _sum: { total: true },
+    });
+    res.json({
+      shop,
+      membersCount: shop.members.length,
+      ordersCount: shop._count?.orders ?? 0,
+      productsCount: shop._count?.products ?? 0,
+      last30dGMV: gmvAgg._sum.total || 0,
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── PATCH /api/admin/shops/:id ──────────────────────────────────────────────
+router.patch('/shops/:id', authMiddleware, requireAdmin, async (req, res, next) => {
+  try {
+    const ALLOWED = [
+      'name', 'isActive', 'vertical', 'address', 'phone',
+      'deliveryBaseFee', 'deliveryPerKm', 'freeDeliveryKm',
+      'minOrderAmount', 'currency',
+    ];
+    const data = {};
+    for (const k of ALLOWED) {
+      if (req.body && Object.prototype.hasOwnProperty.call(req.body, k)) {
+        data[k] = req.body[k];
+      }
+    }
+    if (data.isActive !== undefined) data.isActive = !!data.isActive;
+    for (const num of ['deliveryBaseFee', 'deliveryPerKm', 'freeDeliveryKm', 'minOrderAmount']) {
+      if (data[num] !== undefined && data[num] !== null && data[num] !== '') {
+        data[num] = Number(data[num]);
+      } else if (data[num] === '' || data[num] === null) {
+        data[num] = null;
+      }
+    }
+
+    const shop = await prisma.shop.update({ where: { id: req.params.id }, data });
+    await audit({
+      actorId: req.user.id,
+      action: 'shop.update',
+      targetType: 'Shop', targetId: shop.id,
+      metadata: data, ipAddress: req.ip,
+    });
+    res.json({ shop });
+  } catch (err) {
+    if (err && err.code === 'P2025') return res.status(404).json({ error: 'Not found' });
+    next(err);
+  }
+});
+
+// ─── POST /api/admin/shops/:id/suspend ───────────────────────────────────────
+router.post('/shops/:id/suspend', authMiddleware, requireAdmin, async (req, res, next) => {
+  try {
+    const shop = await prisma.shop.update({
+      where: { id: req.params.id },
+      data: { isActive: false },
+    });
+    await audit({
+      actorId: req.user.id,
+      action: 'shop.suspend',
+      targetType: 'Shop', targetId: shop.id,
+      metadata: { reason: req.body?.reason || null }, ipAddress: req.ip,
+    });
+    res.json({ shop });
+  } catch (err) {
+    if (err && err.code === 'P2025') return res.status(404).json({ error: 'Not found' });
+    next(err);
+  }
+});
+
+// ─── POST /api/admin/shops/:id/activate ──────────────────────────────────────
+router.post('/shops/:id/activate', authMiddleware, requireAdmin, async (req, res, next) => {
+  try {
+    const shop = await prisma.shop.update({
+      where: { id: req.params.id },
+      data: { isActive: true },
+    });
+    await audit({
+      actorId: req.user.id,
+      action: 'shop.activate',
+      targetType: 'Shop', targetId: shop.id, ipAddress: req.ip,
+    });
+    res.json({ shop });
+  } catch (err) {
+    if (err && err.code === 'P2025') return res.status(404).json({ error: 'Not found' });
+    next(err);
+  }
+});
+
+// ─── DELETE /api/admin/shops/:id ─────────────────────────────────────────────
+// Soft-delete: refuse if there are still open orders, otherwise mark inactive
+// + suffix the name so it's clear in lists.
+router.delete('/shops/:id', authMiddleware, requireAdmin, async (req, res, next) => {
+  try {
+    const shop = await prisma.shop.findUnique({ where: { id: req.params.id } });
+    if (!shop) return res.status(404).json({ error: 'Not found' });
+
+    const OPEN_STATUSES = [
+      'pending', 'confirmed', 'collecting', 'readyForPickup',
+      'courierAssigned', 'pickedUp', 'inDelivery',
+    ];
+    const openCount = await prisma.order.count({
+      where: { shopId: shop.id, status: { in: OPEN_STATUSES } },
+    });
+    if (openCount > 0) {
+      return res.status(409).json({ error: 'Shop has open orders', openCount });
+    }
+
+    const suffix = ' [archived]';
+    const newName = shop.name && shop.name.endsWith(suffix) ? shop.name : `${shop.name}${suffix}`;
+    const updated = await prisma.shop.update({
+      where: { id: shop.id },
+      data: { isActive: false, name: newName },
+    });
+    await audit({
+      actorId: req.user.id,
+      action: 'shop.delete',
+      targetType: 'Shop', targetId: shop.id, ipAddress: req.ip,
+    });
+    res.json({ shop: updated, archived: true });
   } catch (err) { next(err); }
 });
 

@@ -50,6 +50,10 @@ dependencies:
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
 
+  # Phase 6 — geolocation + permissions for the cart map picker / current location flow
+  geolocator: ^13.0.0
+  permission_handler: ^11.0.0
+
   # Observability
   sentry_flutter: ^8.9.0
 

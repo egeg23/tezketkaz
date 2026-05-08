@@ -306,3 +306,302 @@ export function useResolveDispute() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["disputes"] }),
   });
 }
+
+// ---------- Phase 6.12 — Shops ----------
+
+export interface Shop {
+  id: string;
+  name: string;
+  description?: string | null;
+  logoUrl?: string | null;
+  address: string;
+  lat?: number | null;
+  lng?: number | null;
+  phone?: string | null;
+  vertical: string;
+  isActive: boolean;
+  rating?: number;
+  openTime?: string;
+  closeTime?: string;
+  deliveryBaseFee?: number | null;
+  deliveryPerKm?: number | null;
+  freeDeliveryKm?: number | null;
+  minOrderAmount?: number | null;
+  currency?: string;
+  membersCount?: number;
+  ordersCount?: number;
+  last30dGMV?: number;
+  lastWeekGMV?: number;
+  members?: Array<{
+    id: string;
+    role: string;
+    user: { id: string; name?: string | null; phone?: string | null };
+  }>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ShopListResponse {
+  shops: Shop[];
+  nextCursor?: string | null;
+}
+
+export interface ShopsQuery {
+  status?: string;
+  vertical?: string;
+  q?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export function useShops(params: ShopsQuery = {}) {
+  const q = new URLSearchParams();
+  if (params.status) q.set("status", params.status);
+  if (params.vertical) q.set("vertical", params.vertical);
+  if (params.q) q.set("q", params.q);
+  if (params.cursor) q.set("cursor", params.cursor);
+  if (params.limit) q.set("limit", String(params.limit));
+  return useQuery<ShopListResponse>({
+    queryKey: ["admin-shops", params],
+    queryFn: () => api<ShopListResponse>(`/api/admin/shops?${q.toString()}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useShop(id: string | undefined) {
+  return useQuery<{
+    shop: Shop;
+    membersCount: number;
+    ordersCount: number;
+    productsCount: number;
+    last30dGMV: number;
+  }>({
+    queryKey: ["admin-shop", id],
+    queryFn: () => api(`/api/admin/shops/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateShop() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; body: Partial<Shop> }) =>
+      api(`/api/admin/shops/${vars.id}`, { method: "PATCH", body: vars.body }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["admin-shop", v.id] });
+      qc.invalidateQueries({ queryKey: ["admin-shops"] });
+    },
+  });
+}
+
+export function useSuspendShop() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; reason?: string }) =>
+      api(`/api/admin/shops/${vars.id}/suspend`, {
+        method: "POST",
+        body: { reason: vars.reason },
+      }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["admin-shop", v.id] });
+      qc.invalidateQueries({ queryKey: ["admin-shops"] });
+    },
+  });
+}
+
+export function useActivateShop() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/admin/shops/${id}/activate`, { method: "POST" }),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["admin-shop", id] });
+      qc.invalidateQueries({ queryKey: ["admin-shops"] });
+    },
+  });
+}
+
+export function useDeleteShop() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/admin/shops/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-shops"] }),
+  });
+}
+
+// ---------- Phase 6.12 — Users ----------
+
+export interface AdminUser {
+  id: string;
+  phone: string;
+  name?: string | null;
+  isBuyer: boolean;
+  isCourier: boolean;
+  isShop: boolean;
+  isAdmin: boolean;
+  courierStatus: string;
+  locale: string;
+  rating?: number;
+  ordersCount?: number;
+  isOnline?: boolean;
+  lastSeenAt?: string | null;
+  createdAt?: string;
+}
+
+export interface UserListResponse {
+  users: AdminUser[];
+  nextCursor?: string | null;
+}
+
+export interface UsersQuery {
+  role?: string;
+  status?: string;
+  q?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export function useUsers(params: UsersQuery = {}) {
+  const q = new URLSearchParams();
+  if (params.role) q.set("role", params.role);
+  if (params.status) q.set("status", params.status);
+  if (params.q) q.set("q", params.q);
+  if (params.cursor) q.set("cursor", params.cursor);
+  if (params.limit) q.set("limit", String(params.limit));
+  return useQuery<UserListResponse>({
+    queryKey: ["admin-users", params],
+    queryFn: () => api<UserListResponse>(`/api/admin/users?${q.toString()}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useUser(id: string | undefined) {
+  return useQuery<{
+    user: AdminUser & {
+      shopMemberships: Array<{ id: string; role: string; shop: { id: string; name: string } }>;
+      loyalty?: { tier: string; points: number; cashback: number } | null;
+    };
+    ordersCount: number;
+    totalSpent: number;
+    lastSeenAt?: string | null;
+    recentOrders: Array<{
+      id: string;
+      orderNumber?: string | null;
+      status: string;
+      total: number;
+      createdAt: string;
+      deliveredAt?: string | null;
+      shopId: string;
+    }>;
+  }>({
+    queryKey: ["admin-user", id],
+    queryFn: () => api(`/api/admin/users/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; body: Partial<AdminUser> }) =>
+      api(`/api/admin/users/${vars.id}`, { method: "PATCH", body: vars.body }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["admin-user", v.id] });
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+  });
+}
+
+export function useBanUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; reason: string }) =>
+      api(`/api/admin/users/${vars.id}/ban`, {
+        method: "POST",
+        body: { reason: vars.reason },
+      }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["admin-user", v.id] });
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+  });
+}
+
+export function useUnbanUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/admin/users/${id}/unban`, { method: "POST" }),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["admin-user", id] });
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+  });
+}
+
+// ---------- Phase 6.5 — KYC verification ----------
+
+export interface VerificationDoc {
+  id: string;
+  userId: string;
+  type: string;
+  url: string;
+  status: "pending" | "approved" | "rejected" | string;
+  reviewedById?: string | null;
+  reviewedAt?: string | null;
+  rejectionReason?: string | null;
+  createdAt?: string;
+  user?: { id: string; name?: string | null; phone?: string | null; courierStatus?: string };
+}
+
+export interface VerificationListResponse {
+  docs: VerificationDoc[];
+  nextCursor?: string | null;
+}
+
+export interface KYCQuery {
+  status?: string;
+  type?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export function usePendingKYC(params: KYCQuery = { status: "pending" }) {
+  const q = new URLSearchParams();
+  if (params.status) q.set("status", params.status);
+  if (params.type) q.set("type", params.type);
+  if (params.cursor) q.set("cursor", params.cursor);
+  if (params.limit) q.set("limit", String(params.limit));
+  return useQuery<VerificationListResponse>({
+    queryKey: ["admin-verification", params],
+    queryFn: () => api<VerificationListResponse>(`/api/admin/verification?${q.toString()}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useApproveKYC() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/admin/verification/${id}/approve`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-verification"] });
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+  });
+}
+
+export function useRejectKYC() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; reason: string }) =>
+      api(`/api/admin/verification/${vars.id}/reject`, {
+        method: "POST",
+        body: { reason: vars.reason },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-verification"] });
+    },
+  });
+}

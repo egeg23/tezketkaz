@@ -12,6 +12,28 @@ const { validateCoupon, computeDiscount } = require('../services/coupons');
 const loyalty = require('../services/loyalty');
 const scheduling = require('../services/scheduling');
 const notifications = require('../services/notifications');
+const shopHours = require('../services/shopHours');
+const click = require('../services/click');
+const payme = require('../services/payme');
+const money = require('../lib/money');
+
+// Phase 6 — backwards-compatible Money envelope. We keep the raw Float fields
+// (subtotal, total, etc.) AND emit a sibling `*_money` object so the Flutter
+// Money model can parse either shape. `currency` defaults to UZS.
+function attachMoneyEnvelope(order) {
+  if (!order) return order;
+  const cur = order.currency || 'UZS';
+  const wrap = (n) => money.toJson(money.money(Number(n) || 0, cur));
+  const out = { ...order };
+  out.currency = cur;
+  out.subtotalMoney = wrap(order.subtotal);
+  out.deliveryFeeMoney = wrap(order.deliveryFee);
+  out.discountMoney = wrap(order.discount);
+  out.tipAmountMoney = wrap(order.tipAmount);
+  out.totalMoney = wrap(order.total);
+  out.refundedAmountMoney = wrap(order.refundedAmount);
+  return out;
+}
 
 // Phase 3: fire DB Notification + FCM + socket emit for an order transition.
 // Best-effort; never throw out of a state-change handler.
@@ -209,6 +231,20 @@ router.post('/estimate', authMiddleware, async (req, res, next) => {
     const shop = await prisma.shop.findUnique({ where: { id: shopId } });
     if (!shop) return res.status(404).json({ error: 'Shop not found' });
 
+    // Phase 6.4 — closed-shop hint. We don't reject /estimate (it's a preview),
+    // but we expose the flag so the UI can warn the user.
+    const workingHours = await prisma.shopWorkingHours.findMany({
+      where: { shopId: shop.id },
+      orderBy: [{ dayOfWeek: 'asc' }, { startsAt: 'asc' }],
+    });
+    const shopOpen = shopHours.isOpenNow({ ...shop, workingHours });
+    const opensAt = shopOpen
+      ? null
+      : (() => {
+        const next = shopHours.nextOpenAt({ ...shop, workingHours });
+        return next ? next.toISOString() : null;
+      })();
+
     let subtotal = 0;
     const itemsBreakdown = [];
     for (const i of items) {
@@ -290,6 +326,9 @@ router.post('/estimate', authMiddleware, async (req, res, next) => {
       surgeReason: delivery.surgeReason,
       zoneId: delivery.zoneId,
       items: itemsBreakdown,
+      currency: shop.currency || 'UZS',
+      shopOpen,
+      opensAt,
     });
   } catch (err) { next(err); }
 });
@@ -299,7 +338,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
   try {
     const {
       shopId, items, deliveryAddress, deliveryLat, deliveryLng,
-      customerComment, paymentMethod,
+      customerComment, paymentMethod, paymentMethodId,
       couponCode, loyaltyPoints, scheduledFor,
     } = req.body || {};
 
@@ -308,6 +347,19 @@ router.post('/', authMiddleware, async (req, res, next) => {
     }
     if (!['click', 'payme', 'uzumpay', 'cash'].includes(paymentMethod)) {
       return res.status(400).json({ error: 'Invalid payment method' });
+    }
+
+    // Phase 6.1 — if paymentMethodId provided, verify ownership upfront. We
+    // 404 (not 403) so callers can't use this endpoint to enumerate other
+    // users' methods.
+    let savedMethod = null;
+    if (paymentMethodId) {
+      savedMethod = await prisma.paymentMethod.findUnique({
+        where: { id: paymentMethodId },
+      });
+      if (!savedMethod || savedMethod.userId !== req.user.id || !savedMethod.isActive) {
+        return res.status(404).json({ error: 'payment_method_not_found' });
+      }
     }
 
     let subtotal = 0;
@@ -332,6 +384,27 @@ router.post('/', authMiddleware, async (req, res, next) => {
     const shop = await prisma.shop.findUnique({ where: { id: shopId } });
     if (!shop) return res.status(404).json({ error: 'Shop not found' });
     if (!shop.isActive) return res.status(400).json({ error: 'Shop is not active' });
+
+    // Phase 6.4 — closed-shop guard. Require either an open shop *now* or a
+    // scheduledFor that the buyer explicitly set. Front-end picks a slot from
+    // GET /working-hours; we trust scheduledFor here (validated for past/range
+    // below) — a future enhancement could also require scheduledFor to fall
+    // inside an open window.
+    {
+      const workingHours = await prisma.shopWorkingHours.findMany({
+        where: { shopId: shop.id },
+        orderBy: [{ dayOfWeek: 'asc' }, { startsAt: 'asc' }],
+      });
+      const openNow = shopHours.isOpenNow({ ...shop, workingHours });
+      if (!openNow && !scheduledFor) {
+        const next = shopHours.nextOpenAt({ ...shop, workingHours });
+        return res.status(400).json({
+          error: 'shop_closed',
+          code: 'shop_closed',
+          opensAt: next ? next.toISOString() : null,
+        });
+      }
+    }
 
     // Compute server-side delivery fee — never trust the client.
     let deliveryFee = 0;
@@ -386,7 +459,37 @@ router.post('/', authMiddleware, async (req, res, next) => {
 
     const discount = couponDiscount + loyaltyDiscount;
     const total = Math.max(0, subtotal + deliveryFee - discount);
-    const isPaid = paymentMethod === 'cash' ? false : false; // online → wait for webhook
+    let isPaid = paymentMethod === 'cash' ? false : false; // online → wait for webhook
+    let paymentRef = null;
+
+    // Phase 6.1 — saved-method charge happens BEFORE order creation so we can
+    // reflect the result on the row we insert. On failure we still create the
+    // order (isPaid=false) so the buyer can retry from the order screen, but
+    // we audit the failure for support visibility.
+    let chargeResult = null;
+    if (savedMethod && paymentMethod !== 'cash') {
+      const provider = savedMethod.provider;
+      try {
+        if (provider === 'click') {
+          chargeResult = await click.chargeWithToken(
+            savedMethod.providerId, total, undefined, shop.currency || 'UZS',
+          );
+        } else if (provider === 'payme') {
+          chargeResult = await payme.chargeWithToken(
+            savedMethod.providerId, total, undefined, shop.currency || 'UZS',
+          );
+        } else {
+          chargeResult = { ok: false, externalId: null, message: 'provider_not_chargeable' };
+        }
+      } catch (err) {
+        logger.warn({ err: err.message, provider }, 'saved-method charge failed');
+        chargeResult = { ok: false, externalId: null, message: err.message };
+      }
+      if (chargeResult && chargeResult.ok) {
+        isPaid = true;
+        paymentRef = chargeResult.externalId;
+      }
+    }
 
     // Phase 3 — validate scheduledFor up front so we don't write a row we'll reject.
     let scheduledAt = null;
@@ -414,6 +517,9 @@ router.post('/', authMiddleware, async (req, res, next) => {
         deliveryAddress, deliveryLat, deliveryLng,
         customerComment,
         paymentMethod, isPaid,
+        paymentRef,
+        paymentMethodId: savedMethod ? savedMethod.id : null,
+        currency: shop.currency || 'UZS',
         subtotal, deliveryFee, total,
         couponCode: validatedCoupon ? validatedCoupon.code : null,
         discount,
@@ -424,6 +530,21 @@ router.post('/', authMiddleware, async (req, res, next) => {
       },
       include: { items: true, shop: true, courier: true },
     });
+
+    if (savedMethod) {
+      audit({
+        actorId: req.user.id,
+        action: chargeResult && chargeResult.ok ? 'order.paid_saved_method' : 'order.charge_failed',
+        targetType: 'Order',
+        targetId: order.id,
+        metadata: {
+          paymentMethodId: savedMethod.id,
+          provider: savedMethod.provider,
+          ok: !!(chargeResult && chargeResult.ok),
+          message: chargeResult ? chargeResult.message : null,
+        },
+      });
+    }
 
     // Phase 3 — record coupon redemption + bump usage counter.
     if (validatedCoupon) {
@@ -485,7 +606,86 @@ router.post('/', authMiddleware, async (req, res, next) => {
       }
     }
 
-    res.status(201).json({ order });
+    res.status(201).json({ order: attachMoneyEnvelope(order) });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/orders/:id/tip — buyer adds a tip on a delivered order ───────
+// 100% of the tip goes to the courier (aggregated in the next weekly payout).
+// Validation:
+//   • Buyer-only (the order's buyer).
+//   • Order must be `delivered` (so we know who the courier was).
+//   • Amount must be > 0 and ≤ 50% of order.total (anti-abuse cap).
+//   • Buyer must have a saved payment method (either order.paymentMethodId or
+//     a fresh paymentMethodId in the body). Cash tips are out of scope here.
+router.post('/:id/tip', authMiddleware, async (req, res, next) => {
+  try {
+    const { amount, paymentMethodId: bodyPmId } = req.body || {};
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { shop: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Not found' });
+    if (order.buyerId !== req.user.id) return res.status(403).json({ error: 'Not your order' });
+    if (order.status !== STATUS.DELIVERED) {
+      return res.status(400).json({ error: 'order_not_delivered' });
+    }
+
+    const tip = Number(amount);
+    if (!Number.isFinite(tip) || tip <= 0) {
+      return res.status(400).json({ error: 'invalid_amount' });
+    }
+    if (tip >= order.total * 0.5) {
+      return res.status(400).json({ error: 'tip_too_large', maxTip: order.total * 0.5 });
+    }
+
+    // Resolve which saved method to charge: prefer the order's, fall back to
+    // the body. Cash-only orders have neither — surface a friendly error.
+    const pmId = order.paymentMethodId || bodyPmId;
+    if (!pmId) {
+      return res.status(400).json({ error: 'payment_method_required' });
+    }
+    const method = await prisma.paymentMethod.findUnique({ where: { id: pmId } });
+    if (!method || method.userId !== req.user.id || !method.isActive) {
+      return res.status(404).json({ error: 'payment_method_not_found' });
+    }
+
+    let result;
+    if (method.provider === 'click') {
+      result = await click.chargeWithToken(method.providerId, tip, order.id, order.currency || 'UZS');
+    } else if (method.provider === 'payme') {
+      result = await payme.chargeWithToken(method.providerId, tip, order.id, order.currency || 'UZS');
+    } else {
+      return res.status(400).json({ error: 'provider_not_chargeable' });
+    }
+
+    if (!result || !result.ok) {
+      audit({
+        actorId: req.user.id,
+        action: 'order.tip_failed',
+        targetType: 'Order',
+        targetId: order.id,
+        metadata: { amount: tip, message: result ? result.message : 'unknown' },
+      });
+      return res.status(402).json({ error: 'charge_failed', message: result ? result.message : 'unknown' });
+    }
+
+    const updated = await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        tipAmount: { increment: tip },
+        tipPaidAt: new Date(),
+      },
+      include: { items: true, shop: true, courier: { select: { id: true, name: true, phone: true } } },
+    });
+    audit({
+      actorId: req.user.id,
+      action: 'order.tip',
+      targetType: 'Order',
+      targetId: order.id,
+      metadata: { amount: tip, courierId: order.courierId, externalId: result.externalId },
+    });
+    res.json({ order: attachMoneyEnvelope(updated) });
   } catch (err) { next(err); }
 });
 
@@ -498,7 +698,7 @@ router.get('/mine', authMiddleware, async (req, res, next) => {
       take: 100,
       include: { items: true, shop: true, courier: { select: { id: true, name: true, phone: true, rating: true } } },
     });
-    res.json({ orders });
+    res.json({ orders: orders.map(attachMoneyEnvelope) });
   } catch (err) { next(err); }
 });
 
@@ -513,7 +713,7 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
     if (!(await canViewOrder(req.user, order))) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    res.json({ order });
+    res.json({ order: attachMoneyEnvelope(order) });
   } catch (err) { next(err); }
 });
 

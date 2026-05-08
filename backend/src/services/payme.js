@@ -133,4 +133,67 @@ function errResp(id, code, message) {
   return { id, error: { code, message } };
 }
 
-module.exports = { createInvoice, handleCallback, verifyAuthHeader, errResp };
+/**
+ * Phase 6.1 — Payme card tokenization. Payme's `cards.create` JSON-RPC method
+ * returns a temporary token that the user verifies via SMS, after which it
+ * becomes permanent and can be charged with `receipts.create` + `receipts.pay`.
+ *
+ * Mock mode short-circuits to a fake token so tests run without a provider.
+ *
+ * Returns { provider, redirectUrl, state, mockToken? }.
+ */
+async function tokenizeCard(userId) {
+  if (!userId) {
+    throw Object.assign(new Error('userId required'), { status: 400 });
+  }
+  const state = `payme_state_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const env = require('../config/env');
+  if (env.useMockPayments || !env.PAYME_MERCHANT_ID) {
+    const mockToken = `mock_payme_${userId}_${Date.now()}`;
+    return {
+      provider: 'payme',
+      redirectUrl: `tezketkaz://payment-method-result?provider=payme&state=${state}&status=success&token=${mockToken}`,
+      state,
+      mockToken,
+    };
+  }
+
+  // Real Payme flow runs as a JSON-RPC `cards.create` call from the client SDK
+  // so the PAN never touches our servers. We just hand the client the SDK
+  // params; redirectUrl is a deep link the SDK opens after success.
+  return {
+    provider: 'payme',
+    redirectUrl: `${PAYME_CHECKOUT}/card?merchant=${env.PAYME_MERCHANT_ID}&state=${state}`,
+    state,
+  };
+}
+
+/**
+ * Charge a saved Payme card token. Used for orders with paymentMethodId and
+ * for tips. Returns { ok, externalId, message }.
+ *
+ * Mock mode succeeds deterministically. Real implementation would post to
+ * `receipts.create` then `receipts.pay` using the merchant key.
+ */
+async function chargeWithToken(token, amount, orderId, currency = 'UZS') {
+  const env = require('../config/env');
+  if (!token) {
+    return { ok: false, externalId: null, message: 'token_required' };
+  }
+  if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+    return { ok: false, externalId: null, message: 'invalid_amount' };
+  }
+  if (env.useMockPayments || !env.PAYME_MERCHANT_ID) {
+    return {
+      ok: true,
+      externalId: `mock_payme_charge_${orderId || 'noorder'}_${Date.now()}`,
+      message: 'ok',
+    };
+  }
+  // Real Payme tokenized charge needs `receipts.create` + `receipts.pay`. The
+  // sandbox contract isn't wired up at launch — return a structured failure so
+  // callers can surface a meaningful error rather than silently succeeding.
+  return { ok: false, externalId: null, message: 'payme_recurring_not_configured' };
+}
+
+module.exports = { createInvoice, handleCallback, verifyAuthHeader, errResp, tokenizeCard, chargeWithToken };

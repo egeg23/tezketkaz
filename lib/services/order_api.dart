@@ -76,6 +76,10 @@ class OrderApi {
     String? couponCode,
     int? loyaltyPoints,
     DateTime? scheduledFor,
+    // Phase 6 — id of a saved card / cash entry from
+    // `GET /api/payment-methods/me`. When provided the backend uses that
+    // entry's provider/last4 instead of the legacy `paymentMethod` string.
+    String? paymentMethodId,
   }) async {
     final itemsJson = itemsPayload ??
         items.map((i) => {
@@ -90,6 +94,8 @@ class OrderApi {
       'deliveryLng': lng,
       'customerComment': customerComment,
       'paymentMethod': paymentMethod,
+      if (paymentMethodId != null && paymentMethodId.isNotEmpty)
+        'paymentMethodId': paymentMethodId,
       if (couponCode != null && couponCode.isNotEmpty) 'couponCode': couponCode,
       if (loyaltyPoints != null && loyaltyPoints > 0)
         'loyaltyPoints': loyaltyPoints,
@@ -97,6 +103,12 @@ class OrderApi {
         'scheduledFor': scheduledFor.toUtc().toIso8601String(),
     });
     return _parseOrder(res.data['order']);
+  }
+
+  /// Phase 6 — `POST /api/orders/:orderId/tip`. Adds a courier tip after
+  /// delivery. Accepts a numeric `amount` (server normalises to UZS).
+  Future<void> sendTip(String orderId, num amount) async {
+    await _api.post('/api/orders/$orderId/tip', {'amount': amount});
   }
 
   Future<List<AppOrder>> myOrders() async {

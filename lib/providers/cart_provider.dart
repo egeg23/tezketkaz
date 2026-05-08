@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../models/catalog.dart';
+import '../services/address_api.dart';
 
 /// Selected modifier set for a single cart line.
 class CartModifierSelection {
@@ -111,6 +113,14 @@ class CartEstimate {
 }
 
 class CartProvider extends ChangeNotifier {
+  CartProvider() {
+    // Restore the last-used address asynchronously — UI starts up immediately
+    // with `null` and refreshes once SharedPreferences resolves.
+    _restoreDeliveryAddress();
+  }
+
+  static const _kPrefAddressId = 'cart.lastAddressId';
+
   /// Lines keyed by `productId|sortedOptionIds`.
   final Map<String, CartLine> _lines = {};
   String? _currentShopId;
@@ -121,6 +131,40 @@ class CartProvider extends ChangeNotifier {
   String? _couponCode;
   int _loyaltyPoints = 0;
   DateTime? _scheduledFor;
+
+  // ── Phase 6 — selected delivery address (saved from address book) ─────────
+  UserAddress? _deliveryAddress;
+  UserAddress? get deliveryAddress => _deliveryAddress;
+
+  void setDeliveryAddress(UserAddress? address) {
+    _deliveryAddress = address;
+    // Persist `lastAddressId` so a fresh launch can preselect the same one.
+    // Fire-and-forget: SharedPreferences errors are non-fatal here.
+    SharedPreferences.getInstance().then((p) {
+      if (address?.id != null && address!.id.isNotEmpty) {
+        p.setString(_kPrefAddressId, address.id);
+      } else {
+        p.remove(_kPrefAddressId);
+      }
+    }).catchError((_) {});
+    notifyListeners();
+  }
+
+  Future<void> _restoreDeliveryAddress() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final id = prefs.getString(_kPrefAddressId);
+      if (id == null || id.isEmpty) return;
+      final list = await AddressApi.instance.list();
+      final match = list.where((a) => a.id == id);
+      if (match.isNotEmpty) {
+        _deliveryAddress = match.first;
+        notifyListeners();
+      }
+    } catch (_) {
+      // Silent — address restore is best-effort and shouldn't break the cart.
+    }
+  }
 
   String? get couponCode => _couponCode;
   int get loyaltyPoints => _loyaltyPoints;
