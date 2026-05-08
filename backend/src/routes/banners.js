@@ -12,6 +12,7 @@ const prisma = require('../db');
 const { authMiddleware, optionalAuth, requireAdmin } = require('../middleware/auth');
 const { audit } = require('../lib/audit');
 const logger = require('../lib/logger');
+const { putFromMulterFile } = require('../lib/storage');
 
 // ─── Upload setup (mirrors products) ────────────────────────────────────────
 const UPLOAD_ROOT = path.resolve(__dirname, '../../uploads');
@@ -183,7 +184,8 @@ router.post(
   async (req, res, next) => {
     try {
       if (!req.file) return res.status(400).json({ error: 'No file' });
-      const url = `/uploads/banners/${req.file.filename}`;
+      // Phase 9 — storage abstraction (S3-or-local).
+      const { url } = await putFromMulterFile(req.file, `banners/${req.file.filename}`);
       res.json({ url, filename: req.file.filename, size: req.file.size });
     } catch (err) { next(err); }
   },

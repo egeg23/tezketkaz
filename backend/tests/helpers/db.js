@@ -86,6 +86,10 @@ async function setupTestDb(slug) {
   try { app.use('/api', require('../../src/routes/courier-shifts')); } catch { /* noop */ }
   // Phase 8.5 — instant payout (declares absolute /couriers and /admin paths).
   try { app.use('/api', require('../../src/routes/instant-payout')); } catch { /* noop */ }
+  // Phase 9.1/9.2 — GDPR (data export + account deletion).
+  try { app.use('/api/users', require('../../src/routes/gdpr')); } catch { /* noop */ }
+  // Phase 9.3 — auth (OAuth endpoints + OTP). Some test files exercise this.
+  try { app.use('/api/auth', require('../../src/routes/auth')); } catch { /* noop */ }
   // Stub the io getter — orders.js uses `req.app.get('io')`.
   const noopIo = { to: () => ({ emit: () => {} }), emit: () => {} };
   app.set('io', noopIo);

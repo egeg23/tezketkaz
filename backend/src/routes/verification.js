@@ -18,6 +18,7 @@ const multer = require('multer');
 const prisma = require('../db');
 const { authMiddleware, requireAdmin } = require('../middleware/auth');
 const { audit } = require('../lib/audit');
+const { putFromMulterFile } = require('../lib/storage');
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
@@ -110,7 +111,8 @@ router.post(
         try { fs.unlinkSync(req.file.path); } catch { /* noop */ }
         return res.status(400).json({ error: 'invalid or missing type' });
       }
-      const url = `/uploads/verification/${req.file.filename}`;
+      // Phase 9 — storage abstraction (S3-or-local).
+      const { url } = await putFromMulterFile(req.file, `verification/${req.file.filename}`);
       const doc = await prisma.verificationDocument.create({
         data: {
           userId: req.user.id,

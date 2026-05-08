@@ -14,6 +14,7 @@ const { audit } = require('../lib/audit');
 const { sendOtp } = require('../services/sms');
 const { authMiddleware } = require('../middleware/auth');
 const country = require('../services/country');
+const socialAuth = require('../services/socialAuth');
 
 // Phase 7 — Kazakh joins the supported set on the auth /me PATCH path. This is
 // the same set as routes/users.js PATCH /me; keep them in sync.
@@ -186,6 +187,104 @@ router.post('/verify-otp', async (req, res, next) => {
     res.json({ accessToken, refreshToken, user: serializeUser(user) });
   } catch (err) { next(err); }
 });
+
+// ─── POST /api/auth/oauth/apple ──────────────────────────────────────────────
+// Body: { idToken }
+// Verifies the Apple-issued id_token, links/creates a User, returns JWT pair.
+router.post('/oauth/apple', (req, res, next) => oauthLogin(req, res, next, 'apple'));
+
+// ─── POST /api/auth/oauth/google ─────────────────────────────────────────────
+router.post('/oauth/google', (req, res, next) => oauthLogin(req, res, next, 'google'));
+
+async function oauthLogin(req, res, next, provider) {
+  try {
+    const { idToken } = req.body || {};
+    let claims;
+    try {
+      claims = provider === 'apple'
+        ? await socialAuth.verifyAppleIdToken(idToken)
+        : await socialAuth.verifyGoogleIdToken(idToken);
+    } catch (err) {
+      return errResp(res, err.status || 400, err.message || 'Invalid id_token');
+    }
+    if (!claims?.sub) return errResp(res, 400, 'Invalid id_token');
+
+    const subjectField = provider === 'apple' ? 'appleSubject' : 'googleSubject';
+    const userInclude = { shopMemberships: { include: { shop: true } } };
+
+    // 1. Look up by provider subject.
+    let user = await prisma.user.findFirst({
+      where: { [subjectField]: claims.sub },
+      include: userInclude,
+    });
+
+    let pendingPhone = false;
+
+    // 2. Not found → try email match. Phase 9: link the OAuth subject to
+    //    an existing user that signed up via OTP if email matches.
+    if (!user && claims.email) {
+      const byEmail = await prisma.user.findFirst({
+        where: { email: claims.email },
+        include: userInclude,
+      });
+      if (byEmail) {
+        user = await prisma.user.update({
+          where: { id: byEmail.id },
+          data: { [subjectField]: claims.sub },
+          include: userInclude,
+        });
+      }
+    }
+
+    // 3. Still nothing → create. We need a non-null phone (UNIQUE in
+    //    schema). Use a synthetic placeholder that can never collide with
+    //    a real E.164 phone, and mark pendingPhone=true so the client
+    //    prompts the user for their real phone immediately after.
+    if (!user) {
+      const placeholderPhone = `oauth-${provider}-${claims.sub}`;
+      user = await prisma.user.create({
+        data: {
+          phone: placeholderPhone,
+          email: claims.email || null,
+          [subjectField]: claims.sub,
+          locale: 'en',
+          country: 'UZ',
+        },
+        include: userInclude,
+      });
+      pendingPhone = true;
+    } else if (user.phone && user.phone.startsWith(`oauth-${provider}-`)) {
+      // Existing OAuth-only user that hasn't claimed a phone yet — keep
+      // surfacing pendingPhone so the client can prompt again.
+      pendingPhone = true;
+    }
+
+    if (user.deletedAt) {
+      return errResp(res, 410, 'Account is scheduled for deletion');
+    }
+
+    const userAgent = req.get('user-agent') || null;
+    const ipAddress = req.ip || null;
+
+    const { token: accessToken } = jwtLib.signAccess(user.id);
+    const { token: refreshToken } = await jwtLib.signRefresh(user.id, { userAgent, ipAddress });
+
+    await audit({
+      actorId: user.id,
+      action: `auth.oauth.${provider}`,
+      targetType: 'User',
+      targetId: user.id,
+      ipAddress,
+      metadata: { userAgent, sub: claims.sub, emailVerified: claims.emailVerified },
+    });
+
+    res.json({
+      accessToken,
+      refreshToken,
+      user: { ...serializeUser(user), email: user.email || null, pendingPhone },
+    });
+  } catch (err) { next(err); }
+}
 
 // ─── POST /api/auth/refresh ──────────────────────────────────────────────────
 router.post('/refresh', async (req, res, next) => {

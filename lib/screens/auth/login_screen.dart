@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/l10n.dart';
+import '../../models/models.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
 
@@ -23,12 +26,52 @@ class _LoginScreenState extends State<LoginScreen> {
   );
 
   bool _isLoading = false;
+  bool _isSocialLoading = false;
 
   String get _rawPhone =>
     '+998${_phoneMask.getUnmaskedText()}';
 
   bool get _isPhoneFilled =>
     _phoneMask.getUnmaskedText().length == 9;
+
+  /// Apple Sign-In is only available on iOS / macOS native runtimes.
+  /// Web sign-in-with-apple needs a server redirect we don't ship yet,
+  /// and Android requires the Google flow instead. Using
+  /// [defaultTargetPlatform] avoids importing `dart:io` (which breaks web
+  /// compilation).
+  bool get _showAppleButton {
+    if (kIsWeb) return false;
+    return defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+  }
+
+  Future<void> _socialLogin(Future<bool> Function() runner) async {
+    if (_isSocialLoading || _isLoading) return;
+    setState(() => _isSocialLoading = true);
+    final auth = context.read<AuthProvider>();
+    final ok = await runner();
+    if (!mounted) return;
+    setState(() => _isSocialLoading = false);
+    if (ok) {
+      // Same redirect logic the OTP screen uses.
+      if (auth.user?.name == null) {
+        context.go('/auth/name');
+      } else {
+        switch (auth.user?.activeRole) {
+          case UserRole.courier:
+            context.go('/courier');
+            break;
+          case UserRole.shop:
+            context.go('/shop');
+            break;
+          default:
+            context.go('/buyer');
+        }
+      }
+    } else if (auth.error != null) {
+      _showError(auth.error!);
+    }
+  }
 
   Future<void> _sendOtp() async {
     if (!_isPhoneFilled) return;
@@ -132,7 +175,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 opacity: _isPhoneFilled ? 1.0 : 0.5,
                 duration: const Duration(milliseconds: 200),
                 child: ElevatedButton(
-                  onPressed: _isPhoneFilled && !_isLoading ? _sendOtp : null,
+                  onPressed: _isPhoneFilled && !_isLoading && !_isSocialLoading
+                      ? _sendOtp
+                      : null,
                   child: _isLoading
                     ? const SizedBox(
                         width: 22, height: 22,
@@ -141,6 +186,57 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       )
                     : const Text('SMS kod olish'),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // ── Divider with "or" label ───────────────────────────────
+              Row(
+                children: [
+                  const Expanded(child: Divider(color: AppColors.border)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      t(context, 'auth.or'),
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const Expanded(child: Divider(color: AppColors.border)),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // ── Apple (iOS/macOS only) ────────────────────────────────
+              if (_showAppleButton) ...[
+                _SocialButton(
+                  label: t(context, 'auth.continue_with_apple'),
+                  icon: const Icon(Icons.apple, color: Colors.white, size: 22),
+                  background: Colors.black,
+                  foreground: Colors.white,
+                  loading: _isSocialLoading,
+                  onTap: () => _socialLogin(
+                    () => context.read<AuthProvider>().loginWithApple(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+
+              // ── Google (all platforms) ────────────────────────────────
+              _SocialButton(
+                label: t(context, 'auth.continue_with_google'),
+                icon: const _GoogleGlyph(),
+                background: Colors.white,
+                foreground: AppColors.textPrimary,
+                border: AppColors.border,
+                loading: _isSocialLoading,
+                onTap: () => _socialLogin(
+                  () => context.read<AuthProvider>().loginWithGoogle(),
                 ),
               ),
 
@@ -157,6 +253,102 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 8),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A primary-style button used for the Apple / Google entry points on the
+/// login screen. Renders a leading icon, label, and a small spinner while
+/// the social flow is in progress.
+class _SocialButton extends StatelessWidget {
+  final String label;
+  final Widget icon;
+  final Color background;
+  final Color foreground;
+  final Color? border;
+  final bool loading;
+  final VoidCallback onTap;
+
+  const _SocialButton({
+    required this.label,
+    required this.icon,
+    required this.background,
+    required this.foreground,
+    required this.onTap,
+    this.border,
+    this.loading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: Material(
+        color: background,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: loading ? null : onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: border != null ? Border.all(color: border!) : null,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (loading)
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: foreground,
+                    ),
+                  )
+                else
+                  icon,
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: foreground,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tiny Google "G" glyph drawn with `Text` to avoid shipping an extra
+/// asset. Falls back to a generic icon if the system font can't render it.
+class _GoogleGlyph extends StatelessWidget {
+  const _GoogleGlyph();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Text(
+        'G',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w900,
+          color: Color(0xFF4285F4),
         ),
       ),
     );
