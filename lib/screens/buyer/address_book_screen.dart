@@ -8,8 +8,14 @@ import '../../widgets/common.dart';
 import '../../widgets/map_picker.dart';
 
 /// Buyer address book — lists, edits and removes saved delivery addresses.
+///
+/// In Phase 6 the cart screen reuses this screen as a picker. When
+/// [picker] is true a tap on a tile pops with that [UserAddress] as result
+/// rather than navigating to the edit form. Setting / making default
+/// remains available either way.
 class AddressBookScreen extends StatefulWidget {
-  const AddressBookScreen({super.key});
+  final bool picker;
+  const AddressBookScreen({super.key, this.picker = false});
 
   @override
   State<AddressBookScreen> createState() => _AddressBookScreenState();
@@ -117,6 +123,9 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                           onEdit: () => _openEditor(existing: _addresses[i]),
                           onDelete: () => _delete(_addresses[i]),
                           onSetDefault: () => _setDefault(_addresses[i]),
+                          onPick: widget.picker
+                              ? () => Navigator.of(context).pop(_addresses[i])
+                              : null,
                         ),
                       ),
                     ),
@@ -129,16 +138,20 @@ class _AddressTile extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onSetDefault;
+  /// Non-null when the screen is opened in picker mode — tapping the tile
+  /// triggers this callback instead of editing.
+  final VoidCallback? onPick;
   const _AddressTile({
     required this.address,
     required this.onEdit,
     required this.onDelete,
     required this.onSetDefault,
+    this.onPick,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final tile = Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadii.lg),
@@ -221,6 +234,19 @@ class _AddressTile extends StatelessWidget {
         ],
       ),
     );
+    if (onPick == null) return tile;
+    // Picker mode — tap anywhere on the tile to select. We still want the
+    // inline edit / delete / set-default icon buttons to keep working,
+    // which Material's InkWell handles via hit-testing children first.
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(AppRadii.lg),
+      child: InkWell(
+        onTap: onPick,
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+        child: tile,
+      ),
+    );
   }
 }
 
@@ -280,6 +306,9 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
       MaterialPageRoute(
         builder: (_) => MapPicker(
           initial: _lat != null && _lng != null ? LatLng(_lat!, _lng!) : null,
+          // Phase 6 — let the picker auto-fill the full-address line via
+          // reverse-geocoding when the user taps "Use current location".
+          addressController: _full,
           onConfirm: (_) {},
         ),
       ),

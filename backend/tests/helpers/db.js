@@ -66,6 +66,13 @@ async function setupTestDb(slug) {
   // Phase 4 — admin + buyer disputes.
   try { app.use('/api/admin', require('../../src/routes/admin')); } catch { /* noop */ }
   try { app.use('/api', require('../../src/routes/buyer-disputes')); } catch { /* noop */ }
+  // Phase 6.5 — KYC verification (declares absolute paths under /verification
+  // and /admin/verification).
+  try { app.use('/api', require('../../src/routes/verification')); } catch { /* noop */ }
+  // Phase 6.4 — working hours (declares absolute /api/shops/:id/working-hours).
+  try { app.use('/api', require('../../src/routes/working-hours')); } catch { /* noop */ }
+  // Phase 6.1 — saved tokenized payment methods.
+  try { app.use('/api/payment-methods', require('../../src/routes/payment-methods')); } catch { /* noop */ }
   // Stub the io getter — orders.js uses `req.app.get('io')`.
   const noopIo = { to: () => ({ emit: () => {} }), emit: () => {} };
   app.set('io', noopIo);
@@ -97,6 +104,8 @@ async function createUser(prisma, overrides = {}) {
       isBuyer: overrides.isBuyer ?? true,
       isShop: overrides.isShop ?? false,
       isAdmin: overrides.isAdmin ?? false,
+      isCourier: overrides.isCourier ?? false,
+      courierStatus: overrides.courierStatus ?? 'none',
     },
   });
   const { token } = jwtLib.signAccess(user.id);

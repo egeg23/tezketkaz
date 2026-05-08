@@ -8,12 +8,48 @@ const { getRedis } = require('./redis');
 let _queues = null;
 let _workers = null;
 
+// Inline-run the dispatcher when Redis is absent so dev environments aren't
+// silently broken (orders would otherwise stay in 'pending' forever because
+// the BullMQ worker never starts).
+async function runDispatchInline(jobName, data) {
+  try {
+    // eslint-disable-next-line global-require
+    const prisma = require('../db');
+    // eslint-disable-next-line global-require
+    const dispatcher = require('../services/dispatcher');
+    const io = global.__tkk_io || null;
+    if (jobName === 'startDispatch' || data?.type === 'startDispatch') {
+      await dispatcher.offerNextBatch(prisma, io, data.orderId);
+    } else if (jobName === 'retry' || data?.type === 'retry') {
+      await dispatcher.expireOverdueOffers(prisma, data.orderId);
+      await dispatcher.offerNextBatch(prisma, io, data.orderId);
+    }
+  } catch (err) {
+    logger.warn({ err: err.message, jobName, data }, 'inline dispatch failed');
+  }
+}
+
 function makeNoopQueue(name) {
   return {
     name,
     async add(jobName, data, opts) {
-      // Silent no-op — caller doesn't need to know.
       logger.debug({ queue: name, jobName, data, opts }, 'queue noop add');
+      // dispatch is the one queue we MUST execute even without Redis,
+      // otherwise orders never reach a courier in dev. Other queues
+      // (autoCancel/scheduled/payouts) all rely on delays/cron and
+      // safely no-op in dev.
+      //
+      // In test env, skip the inline run — Jest tears down the module
+      // registry before deferred timers fire, which makes the require()
+      // calls inside `runDispatchInline` blow up. Tests that exercise
+      // dispatch call `dispatcher.offerNextBatch` directly.
+      if (name === 'dispatch' && process.env.NODE_ENV !== 'test') {
+        if (opts?.delay && opts.delay > 0) {
+          setTimeout(() => runDispatchInline(jobName, data), opts.delay);
+        } else {
+          setImmediate(() => runDispatchInline(jobName, data));
+        }
+      }
       return { id: 'noop', name: jobName, data };
     },
     async close() { /* noop */ },

@@ -86,9 +86,29 @@ async function setupSockets(io) {
       });
     }
 
-    // Order tracking — buyer/courier subscribes to specific order
-    socket.on('order:subscribe', (orderId) => {
-      if (typeof orderId === 'string' && orderId) socket.join(`order:${orderId}`);
+    // Order tracking — buyer/courier/shop-member subscribes to specific order.
+    // Without this auth check anyone with a valid token could spy on any
+    // order's status updates (PII: customer phone, courier coords, address).
+    socket.on('order:subscribe', async (orderId) => {
+      if (typeof orderId !== 'string' || !orderId) return;
+      try {
+        const order = await prisma.order.findUnique({
+          where: { id: orderId },
+          select: { id: true, buyerId: true, courierId: true, shopId: true },
+        });
+        if (!order) return;
+        let allowed = order.buyerId === user.id || order.courierId === user.id;
+        if (!allowed && user.isShop) {
+          const member = await prisma.shopMember.findUnique({
+            where: { userId_shopId: { userId: user.id, shopId: order.shopId } },
+          });
+          allowed = !!member;
+        }
+        if (!allowed && user.isAdmin) allowed = true;
+        if (allowed) socket.join(`order:${orderId}`);
+      } catch (_err) {
+        // Silently ignore — caller will just not receive updates.
+      }
     });
 
     socket.on('order:unsubscribe', (orderId) => {

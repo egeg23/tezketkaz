@@ -51,20 +51,34 @@ class _ShopOrdersScreenState extends State<ShopOrdersScreen>
           ],
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 14),
-            child: GestureDetector(
-              onTap: () => context.push('/switch-role'),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Text('⇄  Rol',
-                    style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            tooltip: 'Sozlamalar',
+            onSelected: (value) {
+              if (value == 'settings') {
+                context.push('/shop/settings');
+              } else if (value == 'switch') {
+                context.push('/switch-role');
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'settings',
+                child: Row(children: [
+                  Icon(Icons.tune, size: 18),
+                  SizedBox(width: 10),
+                  Text("Do'kon sozlamalari"),
+                ]),
               ),
-            ),
+              PopupMenuItem(
+                value: 'switch',
+                child: Row(children: [
+                  Icon(Icons.swap_horiz, size: 18),
+                  SizedBox(width: 10),
+                  Text('Rol almashish'),
+                ]),
+              ),
+            ],
           ),
         ],
         bottom: TabBar(

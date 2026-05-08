@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/l10n.dart';
+import '../../models/money.dart';
 import '../../providers/order_provider.dart';
 import '../../services/socket_service.dart';
 import '../../theme/app_theme.dart';
@@ -281,9 +284,13 @@ class _TrackingScreenState extends State<TrackingScreen> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      _TipCard(orderId: order.id, subtotal: order.subtotal),
                     ],
 
                     if (isFullyDone) ...[
+                      const SizedBox(height: 12),
+                      _TipCard(orderId: order.id, subtotal: order.subtotal),
                       const SizedBox(height: 16),
                       ElevatedButton.icon(
                         onPressed: () => context.go('/buyer'),
@@ -467,6 +474,173 @@ class _Timeline extends StatelessWidget {
           ],
         );
       }).toList(),
+    );
+  }
+}
+
+/// Phase 6 — courier tip CTA shown after the order is `delivered`.
+///
+/// Four chips (5 / 10 / 15 / Custom) feed a live total and post to
+/// `POST /api/orders/:id/tip`. Once a tip lands the button disables so a
+/// nervous tap can't double-charge.
+class _TipCard extends StatefulWidget {
+  final String orderId;
+  final double subtotal;
+  const _TipCard({required this.orderId, required this.subtotal});
+
+  @override
+  State<_TipCard> createState() => _TipCardState();
+}
+
+class _TipCardState extends State<_TipCard> {
+  static const _percentChoices = [5, 10, 15];
+  int? _selectedPercent = 10;
+  bool _custom = false;
+  final _customCtrl = TextEditingController();
+  bool _sending = false;
+  bool _sent = false;
+
+  @override
+  void dispose() {
+    _customCtrl.dispose();
+    super.dispose();
+  }
+
+  double get _amount {
+    if (_custom) {
+      return double.tryParse(_customCtrl.text.trim().replaceAll(' ', '')) ??
+          0;
+    }
+    if (_selectedPercent == null) return 0;
+    return widget.subtotal * _selectedPercent! / 100.0;
+  }
+
+  Future<void> _send() async {
+    final amount = _amount;
+    if (amount <= 0) return;
+    setState(() => _sending = true);
+    try {
+      await context
+          .read<OrderProvider>()
+          .sendTip(widget.orderId, amount.round());
+      if (!mounted) return;
+      HapticFeedback.lightImpact();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(t(context, 'tip.success')),
+      ));
+      setState(() => _sent = true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${t(context, 'common.error')}: $e'),
+      ));
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  String _money(num v) =>
+      Money(v).format(L10n.instance.locale.languageCode);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.primaryLight,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('🙏', style: TextStyle(fontSize: 22)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  t(context, 'tip.cta'),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              if (_amount > 0)
+                Text(_money(_amount),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                    )),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final p in _percentChoices)
+                ChoiceChip(
+                  label: Text('$p%'),
+                  selected: !_custom && _selectedPercent == p,
+                  onSelected: _sent
+                      ? null
+                      : (_) => setState(() {
+                            _custom = false;
+                            _selectedPercent = p;
+                          }),
+                ),
+              ChoiceChip(
+                label: Text(t(context, 'tip.custom')),
+                selected: _custom,
+                onSelected: _sent
+                    ? null
+                    : (_) => setState(() {
+                          _custom = true;
+                          _selectedPercent = null;
+                        }),
+              ),
+            ],
+          ),
+          if (_custom) ...[
+            const SizedBox(height: 10),
+            TextField(
+              controller: _customCtrl,
+              keyboardType: TextInputType.number,
+              enabled: !_sent,
+              decoration: InputDecoration(
+                hintText: t(context, 'tip.custom'),
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: (_sending || _sent || _amount <= 0) ? null : _send,
+              icon: _sending
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Icon(Icons.favorite_rounded),
+              label: Text(_sent
+                  ? t(context, 'tip.success')
+                  : t(context, 'tip.cta')),
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    _sent ? AppColors.success : AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

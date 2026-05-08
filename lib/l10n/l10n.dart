@@ -712,6 +712,99 @@ class L10n extends ChangeNotifier {
       'ru': 'Завтра',
       'en': 'Tomorrow',
     },
+
+    // ── Phase 6 — Saved payment methods ──────────────────────────────────
+    'payment.add_card': {
+      'uz': "Karta qo'shish",
+      'ru': 'Добавить карту',
+      'en': 'Add card',
+    },
+    'payment.cards_list': {
+      'uz': 'Kartalarim',
+      'ru': 'Мои карты',
+      'en': 'My cards',
+    },
+    'payment.set_default': {
+      'uz': 'Asosiy qilish',
+      'ru': 'Сделать основной',
+      'en': 'Set as default',
+    },
+    'payment.delete': {
+      'uz': "Kartani o'chirish",
+      'ru': 'Удалить карту',
+      'en': 'Delete card',
+    },
+    'payment.no_cards': {
+      'uz': "Saqlangan kartalar yo'q",
+      'ru': 'Нет сохранённых карт',
+      'en': 'No saved cards',
+    },
+    'payment.use_new_card': {
+      'uz': 'Yangi karta bilan to\'lash',
+      'ru': 'Оплатить новой картой',
+      'en': 'Pay with new card',
+    },
+
+    // ── Phase 6 — Cart address tile ──────────────────────────────────────
+    'cart.address_tile_title': {
+      'uz': 'Yetkazib berish manzili',
+      'ru': 'Адрес доставки',
+      'en': 'Delivery address',
+    },
+    'cart.address_choose': {
+      'uz': 'Manzilni tanlang',
+      'ru': 'Выберите адрес',
+      'en': 'Choose address',
+    },
+    'cart.no_address_warning': {
+      'uz': "Avval manzilni tanlang",
+      'ru': 'Сначала выберите адрес',
+      'en': 'Pick an address first',
+    },
+
+    // ── Phase 6 — Tipping ────────────────────────────────────────────────
+    'tip.cta': {
+      'uz': "Kuryerga rahmat aytish",
+      'ru': 'Поблагодарить курьера',
+      'en': 'Tip the courier',
+    },
+    'tip.5_percent': {
+      'uz': '5%',
+      'ru': '5%',
+      'en': '5%',
+    },
+    'tip.10_percent': {
+      'uz': '10%',
+      'ru': '10%',
+      'en': '10%',
+    },
+    'tip.15_percent': {
+      'uz': '15%',
+      'ru': '15%',
+      'en': '15%',
+    },
+    'tip.custom': {
+      'uz': 'Boshqa summa',
+      'ru': 'Другая сумма',
+      'en': 'Custom',
+    },
+    'tip.success': {
+      'uz': 'Rahmat yuborildi 🙏',
+      'ru': 'Чаевые отправлены 🙏',
+      'en': 'Tip sent 🙏',
+    },
+
+    // ── Phase 6 — Geolocation ────────────────────────────────────────────
+    'location.permission_denied': {
+      'uz': "Geolokatsiya yo'q",
+      'ru': 'Геолокация недоступна',
+      'en': 'Location unavailable',
+    },
+    'location.current': {
+      'uz': 'Joriy joylashuv',
+      'ru': 'Моё местоположение',
+      'en': 'Use current location',
+    },
   };
 }
 

@@ -6,13 +6,18 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../l10n/l10n.dart';
+import '../../models/catalog.dart';
+import '../../models/money.dart';
+import '../../models/payment_method.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../services/api_client.dart';
 import '../../services/dispatch_api.dart';
+import '../../services/payment_method_api.dart';
 import '../../services/promo_api.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/time_slot_picker.dart';
+import 'address_book_screen.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -21,11 +26,14 @@ class CartScreen extends StatefulWidget {
 }
 
 class _CartScreenState extends State<CartScreen> {
+  /// Phase 6 — saved-method id; falls back to legacy [_paymentMethod] string
+  /// when buyer chooses "new card / cash" without a saved entry.
   String _paymentMethod = 'click';
+  PaymentMethod? _selectedSavedMethod;
+  List<PaymentMethod> _savedMethods = const [];
+  bool _savedMethodsLoaded = false;
+
   bool _isPlacing = false;
-  final _addressCtrl = TextEditingController(
-    text: 'Toshkent, Yunusobod, 13-mavze, 28-uy',
-  );
   final _commentCtrl = TextEditingController();
   final _promoCtrl = TextEditingController();
 
@@ -39,13 +47,17 @@ class _CartScreenState extends State<CartScreen> {
   num _userLoyaltyPoints = 0;
   bool _loyaltyLoaded = false;
 
-  // Stub coordinates — buyer flow Phase 1 chooses a saved address; if a
-  // selected location is later piped through this screen, plug it in here.
-  // Falls back to Tashkent centre so the estimate API still receives valid
-  // floats.
-  double get _lat => 41.2995;
-  double get _lng => 69.2401;
+  // Coordinates come from the selected `cart.deliveryAddress`. When the
+  // buyer hasn't picked one yet we surface a CTA at the top of the screen
+  // and disable checkout instead of silently using a Tashkent fallback.
+  double? get _lat => _cartListening?.deliveryAddress?.lat;
+  double? get _lng => _cartListening?.deliveryAddress?.lng;
+  String get _addressLine =>
+      _cartListening?.deliveryAddress?.fullAddress ?? '';
 
+  // Legacy provider catalogue — kept as a fallback for the order payload's
+  // `paymentMethod` string when the buyer hasn't saved a card yet.
+  // ignore: unused_field
   static const _payments = [
     {'id': 'click',   'name': 'Click',     'emoji': '💳', 'hint': 'To\'lov kartasi'},
     {'id': 'payme',   'name': 'Payme',     'emoji': '💜', 'hint': '10M+ foydalanuvchi'},
@@ -58,7 +70,6 @@ class _CartScreenState extends State<CartScreen> {
   @override
   void initState() {
     super.initState();
-    _addressCtrl.addListener(_onInputsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _cartListening = context.read<CartProvider>();
@@ -67,18 +78,79 @@ class _CartScreenState extends State<CartScreen> {
       _isScheduled = _cartListening!.scheduledFor != null;
       _refreshEstimate(immediate: true);
       _loadLoyalty();
+      _loadSavedMethods();
     });
   }
 
   @override
   void dispose() {
     _estimateDebounce?.cancel();
-    _addressCtrl.removeListener(_onInputsChanged);
     _cartListening?.removeListener(_onInputsChanged);
-    _addressCtrl.dispose();
     _commentCtrl.dispose();
     _promoCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSavedMethods() async {
+    try {
+      final list = await PaymentMethodApi.instance.list();
+      if (!mounted) return;
+      setState(() {
+        _savedMethods = list;
+        _savedMethodsLoaded = true;
+        // Pre-select default if backend marked one — saves the buyer a tap.
+        final defaults = list.where((m) => m.isDefault);
+        _selectedSavedMethod =
+            defaults.isNotEmpty ? defaults.first : (list.isNotEmpty ? list.first : null);
+        if (_selectedSavedMethod != null) {
+          _paymentMethod = _selectedSavedMethod!.provider;
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _savedMethodsLoaded = true);
+    }
+  }
+
+  Future<void> _pickAddress() async {
+    final cart = context.read<CartProvider>();
+    final picked = await Navigator.of(context).push<UserAddress>(
+      MaterialPageRoute(
+        builder: (_) => const AddressBookScreen(picker: true),
+      ),
+    );
+    if (picked != null) {
+      cart.setDeliveryAddress(picked);
+    }
+  }
+
+  Future<void> _pickPaymentMethod() async {
+    final picked = await showModalBottomSheet<PaymentMethod>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _PaymentMethodSheet(
+        methods: _savedMethods,
+        selected: _selectedSavedMethod,
+      ),
+    );
+    if (!mounted) return;
+    if (picked == null) {
+      // Sheet was dismissed without picking — leave selection alone.
+      return;
+    }
+    if (picked.id == '__new__') {
+      // Buyer asked to add a card — push the management screen and reload
+      // when they come back.
+      await context.push('/buyer/payment-methods');
+      await _loadSavedMethods();
+      return;
+    }
+    setState(() {
+      _selectedSavedMethod = picked;
+      _paymentMethod = picked.provider;
+    });
   }
 
   Future<void> _loadLoyalty() async {
@@ -102,10 +174,6 @@ class _CartScreenState extends State<CartScreen> {
     _refreshEstimate();
   }
 
-  String _fmt(double v) => '${v.toInt()
-      .toString()
-      .replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ')} so\'m';
-
   /// Debounced (500ms) call to `dispatchApi.estimate`. Caches the result on
   /// `CartProvider.lastEstimate` so navigating away and back doesn't refetch
   /// when the inputs haven't changed.
@@ -113,10 +181,17 @@ class _CartScreenState extends State<CartScreen> {
     _estimateDebounce?.cancel();
     final cart = context.read<CartProvider>();
     if (cart.isEmpty) return;
+    // Phase 6 — without a chosen address we can't build a meaningful
+    // estimate, so just bail. The screen forces an address pick before
+    // checkout becomes enabled.
+    final lat = _lat;
+    final lng = _lng;
+    if (lat == null || lng == null) return;
     final shopId = cart.orderItems.first.product.shopId;
+    final addrLine = _addressLine;
     final key = cart.estimateKey(
       shopId: shopId,
-      addressKey: '${_addressCtrl.text.trim()}|$_lat,$_lng',
+      addressKey: '$addrLine|$lat,$lng',
       promoCode: cart.couponCode,
       loyaltyPoints: cart.loyaltyPoints,
     );
@@ -139,9 +214,9 @@ class _CartScreenState extends State<CartScreen> {
         final res = await DispatchApi.instance.estimate(
           shopId: shopId,
           address: {
-            'lat': _lat,
-            'lng': _lng,
-            'fullAddress': _addressCtrl.text.trim(),
+            'lat': lat,
+            'lng': lng,
+            'fullAddress': addrLine,
           },
           items: cart.toApiPayload(),
           couponCode: cart.couponCode,
@@ -259,6 +334,15 @@ class _CartScreenState extends State<CartScreen> {
     final cart = context.read<CartProvider>();
     final orders = context.read<OrderProvider>();
     if (cart.isEmpty) return;
+    final addr = cart.deliveryAddress;
+    if (addr == null) {
+      // Defensive guard — UI hides the CTA but a stale frame could still
+      // route here if the user clears the address mid-place.
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(t(context, 'cart.no_address_warning')),
+      ));
+      return;
+    }
     final shopId = cart.orderItems.first.product.shopId;
     setState(() => _isPlacing = true);
     HapticFeedback.mediumImpact();
@@ -268,9 +352,12 @@ class _CartScreenState extends State<CartScreen> {
         shopId: shopId,
         items: cart.orderItems,
         itemsPayload: cart.toApiPayload(),
-        deliveryAddress: _addressCtrl.text.trim(),
+        deliveryAddress: addr.fullAddress,
+        lat: addr.lat,
+        lng: addr.lng,
         customerComment: _commentCtrl.text.trim().isEmpty ? null : _commentCtrl.text.trim(),
         paymentMethod: _paymentMethod,
+        paymentMethodId: _selectedSavedMethod?.id,
         couponCode: cart.couponCode,
         loyaltyPoints: cart.loyaltyPoints > 0 ? cart.loyaltyPoints : null,
         scheduledFor: cart.scheduledFor,
@@ -287,6 +374,9 @@ class _CartScreenState extends State<CartScreen> {
       }
     }
   }
+
+  String _localeCode() => L10n.instance.locale.languageCode;
+  String _money(double v) => Money(v).format(_localeCode());
 
   @override
   Widget build(BuildContext context) {
@@ -345,17 +435,14 @@ class _CartScreenState extends State<CartScreen> {
           ),
 
           const SizedBox(height: 16),
-          _SectionLabel('Yetkazib berish manzili'),
+          _SectionLabel(t(context, 'cart.address_tile_title')),
           const SizedBox(height: 8),
           _Card(
             child: Column(
               children: [
-                _AddressField(
-                  controller: _addressCtrl,
-                  icon: Icons.location_on_rounded,
-                  iconColor: AppColors.primary,
-                  hint: "Ko'cha, uy, xonadon",
-                  maxLines: 2,
+                _AddressTileButton(
+                  address: cart.deliveryAddress,
+                  onTap: _pickAddress,
                 ),
                 const Divider(height: 1, indent: 50),
                 _AddressField(
@@ -370,29 +457,14 @@ class _CartScreenState extends State<CartScreen> {
           ),
 
           const SizedBox(height: 16),
-          _SectionLabel("To'lov usuli"),
+          _SectionLabel(t(context, 'buyer.payment_method')),
           const SizedBox(height: 8),
           _Card(
-            child: Column(
-              children: [
-                for (var i = 0; i < _payments.length; i++) ...[
-                  _PaymentRow(
-                    name: _payments[i]['name']!,
-                    emoji: _payments[i]['emoji']!,
-                    hint: _payments[i]['hint']!,
-                    selected: _paymentMethod == _payments[i]['id'],
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      setState(() => _paymentMethod = _payments[i]['id']!);
-                    },
-                  ),
-                  if (i < _payments.length - 1)
-                    const Padding(
-                      padding: EdgeInsets.only(left: 60),
-                      child: Divider(height: 1),
-                    ),
-                ],
-              ],
+            child: _PaymentMethodTile(
+              loaded: _savedMethodsLoaded,
+              method: _selectedSavedMethod,
+              fallbackMethodId: _paymentMethod,
+              onTap: _pickPaymentMethod,
             ),
           ),
 
@@ -546,14 +618,16 @@ class _CartScreenState extends State<CartScreen> {
             estimate: cart.lastEstimate,
             isLoading: _estimateLoading,
             error: _estimateError,
-            fmtMoney: _fmt,
+            fmtMoney: _money,
           ),
         ],
       ),
       bottomNavigationBar: SafeArea(
         child: Builder(builder: (_) {
           final est = cart.lastEstimate;
+          final hasAddress = cart.deliveryAddress != null;
           final canCheckout = !_isPlacing &&
+              hasAddress &&
               !(est?.outOfZone ?? false) &&
               (est?.minOrderMet ?? true);
           final total = est?.total ?? cart.total;
@@ -587,7 +661,9 @@ class _CartScreenState extends State<CartScreen> {
                         child: Text(
                           _isPlacing
                               ? 'Yuborilmoqda...'
-                              : 'Buyurtma berish · ${_fmt(total)}',
+                              : !hasAddress
+                                  ? t(context, 'cart.no_address_warning')
+                                  : 'Buyurtma berish · ${_money(total)}',
                           style: TextStyle(
                             color: canCheckout
                                 ? Colors.white
@@ -855,63 +931,6 @@ class _AddressField extends StatelessWidget {
           ),
         ),
       ],
-    ),
-  );
-}
-
-class _PaymentRow extends StatelessWidget {
-  final String name, emoji, hint;
-  final bool selected;
-  final VoidCallback onTap;
-  const _PaymentRow({
-    required this.name, required this.emoji, required this.hint,
-    required this.selected, required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: Colors.transparent,
-    child: InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              width: 40, height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceMuted,
-                borderRadius: BorderRadius.circular(AppRadii.sm),
-              ),
-              alignment: Alignment.center,
-              child: Text(emoji, style: const TextStyle(fontSize: 20)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  Text(hint, style: const TextStyle(color: AppColors.textHint, fontSize: 12)),
-                ],
-              ),
-            ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 24, height: 24,
-              decoration: BoxDecoration(
-                color: selected ? AppColors.primary : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selected ? AppColors.primary : AppColors.border,
-                  width: 2,
-                ),
-              ),
-              child: selected ? const Icon(Icons.check_rounded, color: Colors.white, size: 14) : null,
-            ),
-          ],
-        ),
-      ),
     ),
   );
 }
@@ -1275,6 +1294,209 @@ class _PlanToggleButton extends StatelessWidget {
                   )),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Phase 6 — replaces the legacy free-text address input with a tile that
+/// pushes the address book picker.
+class _AddressTileButton extends StatelessWidget {
+  final UserAddress? address;
+  final VoidCallback onTap;
+  const _AddressTileButton({required this.address, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadii.lg),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        child: Row(
+          children: [
+            const Icon(Icons.location_on_rounded,
+                color: AppColors.primary, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: address == null
+                  ? Text(
+                      t(context, 'cart.address_choose'),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(address!.label,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 14)),
+                        const SizedBox(height: 2),
+                        Text(
+                          address!.fullAddress,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: AppColors.textSecondary, fontSize: 12),
+                        ),
+                      ],
+                    ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                color: AppColors.textHint),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Phase 6 — single-row tile that opens a sheet to choose between saved
+/// payment methods (or "pay with new card" as a fallback).
+class _PaymentMethodTile extends StatelessWidget {
+  final bool loaded;
+  final PaymentMethod? method;
+  final String fallbackMethodId;
+  final VoidCallback onTap;
+  const _PaymentMethodTile({
+    required this.loaded,
+    required this.method,
+    required this.fallbackMethodId,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final m = method;
+    final emoji = m?.brandEmoji ??
+        (fallbackMethodId == 'cash'
+            ? '💵'
+            : fallbackMethodId == 'payme'
+                ? '💜'
+                : fallbackMethodId == 'uzumpay'
+                    ? '🟪'
+                    : '💳');
+    final title = m?.displayLabel ??
+        (fallbackMethodId == 'cash'
+            ? 'Naqd pul'
+            : t(context, 'payment.use_new_card'));
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadii.lg),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceMuted,
+                borderRadius: BorderRadius.circular(AppRadii.sm),
+              ),
+              child: Text(emoji, style: const TextStyle(fontSize: 20)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 14)),
+                  const SizedBox(height: 2),
+                  Text(
+                    !loaded
+                        ? t(context, 'common.loading')
+                        : (m?.providerName ?? t(context, 'buyer.payment_method')),
+                    style: const TextStyle(
+                        color: AppColors.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                color: AppColors.textHint),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom-sheet listing saved payment methods + a "pay with new card"
+/// fallback. Returns the chosen [PaymentMethod] (or a sentinel with
+/// `id == '__new__'` when buyer wants to manage their cards).
+class _PaymentMethodSheet extends StatelessWidget {
+  final List<PaymentMethod> methods;
+  final PaymentMethod? selected;
+  const _PaymentMethodSheet({required this.methods, required this.selected});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(t(context, 'buyer.payment_method'),
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            for (final m in methods)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadii.md),
+                    side: BorderSide(
+                      color: m.id == selected?.id
+                          ? AppColors.primary
+                          : AppColors.border,
+                    ),
+                  ),
+                  leading: Text(m.brandEmoji,
+                      style: const TextStyle(fontSize: 22)),
+                  title: Text(m.displayLabel,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text(m.providerName),
+                  trailing: m.id == selected?.id
+                      ? const Icon(Icons.check_circle,
+                          color: AppColors.primary)
+                      : null,
+                  onTap: () => Navigator.of(context).pop(m),
+                ),
+              ),
+            const SizedBox(height: 4),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).pop(
+                const PaymentMethod(id: '__new__', provider: 'click'),
+              ),
+              icon: const Icon(Icons.add_card_rounded),
+              label: Text(t(context, 'payment.use_new_card')),
+              style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14)),
+            ),
+          ],
         ),
       ),
     );

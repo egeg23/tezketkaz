@@ -1,6 +1,36 @@
 const router = require('express').Router();
 const prisma = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const shopHours = require('../services/shopHours');
+
+// Phase 6.4 — annotate a shop with currentlyOpen + opensAt + currency.
+// Mutates a shallow copy and returns it.
+async function enrichShop(shop, hoursById = null) {
+  if (!shop) return shop;
+  let workingHours;
+  if (hoursById) {
+    workingHours = hoursById.get(shop.id) || [];
+  } else {
+    workingHours = await prisma.shopWorkingHours.findMany({
+      where: { shopId: shop.id },
+      orderBy: [{ dayOfWeek: 'asc' }, { startsAt: 'asc' }],
+    });
+  }
+  const isOpen = shopHours.isOpenNow({ ...shop, workingHours });
+  const out = {
+    ...shop,
+    currency: shop.currency || 'UZS',
+    workingHours,
+    currentlyOpen: isOpen,
+  };
+  if (!isOpen) {
+    const next = shopHours.nextOpenAt({ ...shop, workingHours });
+    out.opensAt = next ? next.toISOString() : null;
+  } else {
+    out.opensAt = null;
+  }
+  return out;
+}
 
 // Great-circle distance in km using the haversine formula.
 function haversineKm(lat1, lng1, lat2, lng2) {
@@ -60,7 +90,23 @@ router.get('/', async (req, res, next) => {
       });
     }
 
-    res.json({ items: shops, shops, total: shops.length });
+    // Batch-load working hours for the result set so we don't do N queries.
+    let hoursById = new Map();
+    if (shops.length > 0) {
+      const ids = shops.map((s) => s.id);
+      const hours = await prisma.shopWorkingHours.findMany({
+        where: { shopId: { in: ids } },
+        orderBy: [{ dayOfWeek: 'asc' }, { startsAt: 'asc' }],
+      });
+      for (const h of hours) {
+        const arr = hoursById.get(h.shopId) || [];
+        arr.push(h);
+        hoursById.set(h.shopId, arr);
+      }
+    }
+    const enriched = await Promise.all(shops.map((s) => enrichShop(s, hoursById)));
+
+    res.json({ items: enriched, shops: enriched, total: enriched.length });
   } catch (err) { next(err); }
 });
 
@@ -72,7 +118,8 @@ router.get('/:id', async (req, res, next) => {
       include: { products: { where: { isAvailable: true } } },
     });
     if (!shop) return res.status(404).json({ error: 'Shop not found' });
-    res.json({ shop });
+    const enriched = await enrichShop(shop);
+    res.json({ shop: enriched });
   } catch (err) { next(err); }
 });
 

@@ -32,6 +32,9 @@ const loyaltyRoutes = require('./routes/loyalty');
 const reviewRoutes = require('./routes/reviews');
 const chatRoutes = require('./routes/chat');
 const buyerDisputeRoutes = require('./routes/buyer-disputes');
+const verificationRoutes = require('./routes/verification');
+const paymentMethodRoutes = require('./routes/payment-methods');
+const workingHoursRoutes = require('./routes/working-hours');
 const { setupSockets } = require('./sockets');
 
 const app = express();
@@ -146,12 +149,22 @@ const io = new Server(server, {
   cors: { origin: corsOrigins.includes('*') ? '*' : corsOrigins, credentials: true },
 });
 app.set('io', io);
+// Expose io to non-request contexts (BullMQ workers + the no-op queue's
+// inline dispatcher fallback in lib/queues.js).
+global.__tkk_io = io;
 
 // ─── API Routes ─────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/shops', shopRoutes);
 app.use('/api/products', productRoutes);
+// Phase 6.4 — working hours (declares absolute /api/shops/:id/working-hours).
+app.use('/api', workingHoursRoutes);
+// Phase 6.1 — saved tokenized payment methods.
+app.use('/api/payment-methods', paymentMethodRoutes);
+// Phase 6.5 — KYC verification (declares absolute paths under /verification
+// /* and /admin/verification/*).
+app.use('/api', verificationRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/loyalty', loyaltyRoutes);
 app.use('/api/categories', categoryRoutes);

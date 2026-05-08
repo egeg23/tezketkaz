@@ -126,4 +126,91 @@ async function verifyCallback(body) {
   };
 }
 
-module.exports = { createInvoice, verifyCallback };
+/**
+ * Phase 6.1 — saved payment methods.
+ *
+ * Initiate Click card tokenization. In production this redirects the user to
+ * Click's hosted "Save Card" page; on success Click returns a token via the
+ * existing webhook (event_type=tokenize) which the confirm endpoint persists.
+ *
+ * In dev/test mode (no CLICK_MERCHANT_ID / mock payments enabled) we return a
+ * deterministic mock token so tests can exercise the full flow without a
+ * provider round-trip.
+ *
+ * Returns { provider, redirectUrl, state, mockToken? }.
+ *   - state is an opaque string the client echoes back on /confirm; it lets
+ *     us bind the eventual webhook to the user that started the flow.
+ *   - mockToken is only set in mock mode (so tests can pass it to /confirm).
+ */
+async function tokenizeCard(userId) {
+  if (!userId) {
+    throw Object.assign(new Error('userId required'), { status: 400 });
+  }
+  const state = `click_state_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  if (env.useMockPayments || !env.CLICK_MERCHANT_ID) {
+    const mockToken = `mock_click_${userId}_${Date.now()}`;
+    return {
+      provider: 'click',
+      redirectUrl: `tezketkaz://payment-method-result?provider=click&state=${state}&status=success&token=${mockToken}`,
+      state,
+      mockToken,
+    };
+  }
+
+  // Production hosted flow. Click's card-token endpoint takes service_id +
+  // merchant_id + return_url; user enters card on their page, then Click
+  // POSTs the resulting token to our webhook. We pre-stash `state` so the
+  // webhook can map back to the originating user.
+  const params = new URLSearchParams({
+    service_id: env.CLICK_SERVICE_ID || '',
+    merchant_id: env.CLICK_MERCHANT_ID,
+    transaction_param: state,
+    return_url: `https://api.tezketkaz.uz/api/payment-methods/click/confirm?state=${state}`,
+  });
+  return {
+    provider: 'click',
+    redirectUrl: `${CLICK_BASE}/card_token?${params.toString()}`,
+    state,
+  };
+}
+
+/**
+ * Charge a previously tokenized card. Used for orders with paymentMethodId
+ * (no browser redirect) and for tipping.
+ *
+ * Returns { ok, externalId, message }.
+ *   - ok=true:  externalId is the provider-side transaction id we should
+ *               persist as paymentRef.
+ *   - ok=false: message explains the failure (insufficient_funds, etc.).
+ *
+ * In mock mode we always succeed and return a fake transaction id, so test
+ * flows are deterministic.
+ */
+async function chargeWithToken(token, amount, orderId, currency = 'UZS') {
+  if (!token) {
+    return { ok: false, externalId: null, message: 'token_required' };
+  }
+  if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+    return { ok: false, externalId: null, message: 'invalid_amount' };
+  }
+  if (env.useMockPayments || !env.CLICK_MERCHANT_ID) {
+    // Deterministic fake — surfaces enough info for tests + audit logs.
+    return {
+      ok: true,
+      externalId: `mock_click_charge_${orderId || 'noorder'}_${Date.now()}`,
+      message: 'ok',
+    };
+  }
+
+  // Real Click recurring-charge endpoint. Currently we don't have a sandbox
+  // contract so we conservatively return a NotImplemented error rather than
+  // pretending it succeeded. Production wiring lands when Click provisions
+  // the merchant account.
+  logger.warn(
+    { orderId, currency },
+    'Click chargeWithToken called without sandbox; returning failure',
+  );
+  return { ok: false, externalId: null, message: 'click_recurring_not_configured' };
+}
+
+module.exports = { createInvoice, verifyCallback, tokenizeCard, chargeWithToken };

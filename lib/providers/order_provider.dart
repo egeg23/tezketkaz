@@ -220,6 +220,8 @@ class OrderProvider extends ChangeNotifier {
     String? couponCode,
     int? loyaltyPoints,
     DateTime? scheduledFor,
+    // Phase 6 — id of a saved payment method (from /api/payment-methods/me).
+    String? paymentMethodId,
   }) async {
     final order = await OrderApi.instance.placeOrder(
       shopId: shopId,
@@ -233,12 +235,17 @@ class OrderProvider extends ChangeNotifier {
       couponCode: couponCode,
       loyaltyPoints: loyaltyPoints,
       scheduledFor: scheduledFor,
+      paymentMethodId: paymentMethodId,
     );
     _orders.insert(0, order);
     SocketService.instance.subscribeToOrder(order.id);
     notifyListeners();
     return order;
   }
+
+  /// Phase 6 — buyer adds a tip after the order has been delivered.
+  Future<void> sendTip(String orderId, num amount) =>
+      OrderApi.instance.sendTip(orderId, amount);
 
   // ─── Shop actions ──────────────────────────────────────────────────────────
   Future<void> shopAcceptOrder(String orderId) async {

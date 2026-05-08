@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../l10n/l10n.dart';
+import '../services/location_service.dart';
 import '../theme/app_theme.dart';
 
 /// A map view that lets the user place / move a single pin and confirm a
@@ -9,17 +10,25 @@ import '../theme/app_theme.dart';
 /// any platform-specific Yandex / Google keys here.
 ///
 /// Tapping the map moves the pin. The "Confirm" button at the bottom returns
-/// the picked coordinates.
+/// the picked coordinates. Phase 6 added a "Use current location" CTA + an
+/// optional [addressController] which gets filled with the reverse-geocoded
+/// address line when the user taps the GPS button.
 class MapPicker extends StatefulWidget {
   final LatLng? initial;
   final ValueChanged<LatLng> onConfirm;
   final String? title;
+
+  /// When supplied, "Use current location" auto-fills this controller with
+  /// the reverse-geocoded address line. The pickers in
+  /// `address_book_screen.dart` thread their address TextField through here.
+  final TextEditingController? addressController;
 
   const MapPicker({
     super.key,
     this.initial,
     required this.onConfirm,
     this.title,
+    this.addressController,
   });
 
   @override
@@ -32,6 +41,7 @@ class _MapPickerState extends State<MapPicker> {
 
   late LatLng _picked;
   final _mapCtrl = MapController();
+  bool _gpsLoading = false;
 
   @override
   void initState() {
@@ -43,6 +53,43 @@ class _MapPickerState extends State<MapPicker> {
   void dispose() {
     _mapCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _useCurrentLocation() async {
+    if (_gpsLoading) return;
+    setState(() => _gpsLoading = true);
+    try {
+      final loc = LocationService.instance;
+      final granted = await loc.requestPermission();
+      if (!granted) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(t(context, 'location.permission_denied')),
+        ));
+        return;
+      }
+      final pos = await loc.getCurrent();
+      if (!mounted) return;
+      if (pos == null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(t(context, 'location.permission_denied')),
+        ));
+        return;
+      }
+      final next = LatLng(pos.latitude, pos.longitude);
+      setState(() => _picked = next);
+      _mapCtrl.move(next, 16);
+      // Reverse-geocode in the background — failure here just leaves the
+      // address field as-is, never blocks the pick.
+      final line =
+          await loc.reverseGeocode(pos.latitude, pos.longitude);
+      if (!mounted) return;
+      if (line != null && widget.addressController != null) {
+        widget.addressController!.text = line;
+      }
+    } finally {
+      if (mounted) setState(() => _gpsLoading = false);
+    }
   }
 
   @override
@@ -79,6 +126,26 @@ class _MapPickerState extends State<MapPicker> {
             ],
           ),
           Positioned(
+            right: 16,
+            top: 16,
+            child: SafeArea(
+              child: FloatingActionButton.small(
+                heroTag: 'map_picker_gps',
+                onPressed: _gpsLoading ? null : _useCurrentLocation,
+                tooltip: t(context, 'location.current'),
+                backgroundColor: AppColors.surface,
+                foregroundColor: AppColors.primary,
+                child: _gpsLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.my_location_rounded),
+              ),
+            ),
+          ),
+          Positioned(
             left: 16, right: 16, bottom: 16,
             child: SafeArea(
               top: false,
@@ -112,6 +179,30 @@ class _MapPickerState extends State<MapPicker> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              _gpsLoading ? null : _useCurrentLocation,
+                          icon: _gpsLoading
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                )
+                              : const Icon(Icons.my_location_rounded),
+                          label: Text(t(context, 'location.current')),
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: AppColors.surface,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(

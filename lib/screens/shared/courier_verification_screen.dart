@@ -1,8 +1,14 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/api_client.dart';
+import '../../services/verification_api.dart';
 import '../../theme/app_theme.dart';
 
 class CourierVerificationScreen extends StatefulWidget {
@@ -25,11 +31,45 @@ class _CourierVerificationScreenState
   bool _hasSelfEmployed = false;
   bool _isLoading = false;
 
+  // Phase 6 — KYC documents.
+  final Map<String, VerificationDocument> _docs = {};
+  bool _docsLoading = true;
+  String? _docsError;
+
   bool get _step0Valid => _nameCtrl.text.trim().length >= 4;
   bool get _step1Valid =>
-    _stirCtrl.text.length == 9 &&
-    _passportCtrl.text.length >= 9;
+      _stirCtrl.text.length == 9 &&
+      _passportCtrl.text.length >= 9 &&
+      _allDocsUploaded;
   bool get _step2Valid => _hasSelfEmployed;
+
+  bool get _allDocsUploaded => VerificationDocType.all
+      .every((t) => _docs.containsKey(t));
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDocs();
+  }
+
+  Future<void> _loadDocs() async {
+    try {
+      final list = await VerificationApi.instance.myDocs();
+      if (!mounted) return;
+      setState(() {
+        _docs
+          ..clear()
+          ..addEntries(list.map((d) => MapEntry(d.type, d)));
+        _docsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _docsLoading = false;
+        _docsError = e.toString();
+      });
+    }
+  }
 
   void _next() {
     if (_step < 2) {
@@ -109,6 +149,76 @@ class _CourierVerificationScreenState
     );
   }
 
+  Future<void> _pickAndUpload(String type) async {
+    final source = await _chooseSource();
+    if (source == null) return;
+    final picked = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 80,
+      maxWidth: 1920,
+    );
+    if (picked == null) return;
+
+    final file = File(picked.path);
+    final existing = _docs[type];
+
+    setState(() {
+      // Optimistic — show "uploading" by removing the cached entry briefly.
+      _docs.remove(type);
+    });
+
+    try {
+      // Replace previous upload (delete old + insert new).
+      if (existing != null) {
+        try {
+          await VerificationApi.instance.delete(existing.id);
+        } catch (_) {
+          // Silently ignore — server may have already cleaned it up.
+        }
+      }
+      final doc = await VerificationApi.instance.upload(type, file);
+      if (!mounted) return;
+      setState(() => _docs[type] = doc);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      // Roll back optimistic removal.
+      if (existing != null) setState(() => _docs[type] = existing);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Yuklab bo\'lmadi: ${e.message}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      if (existing != null) setState(() => _docs[type] = existing);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Yuklab bo\'lmadi: $e')),
+      );
+    }
+  }
+
+  Future<ImageSource?> _chooseSource() async {
+    if (kIsWeb) return ImageSource.gallery;
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Kamera'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Galereya'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -147,7 +257,11 @@ class _CourierVerificationScreenState
                 _StepDocuments(
                   stirCtrl: _stirCtrl,
                   passportCtrl: _passportCtrl,
+                  docs: _docs,
+                  docsLoading: _docsLoading,
+                  docsError: _docsError,
                   onChanged: () => setState(() {}),
+                  onPickDoc: _pickAndUpload,
                 ),
                 _StepSelfEmployed(
                   hasStatus: _hasSelfEmployed,
@@ -231,13 +345,32 @@ class _StepPersonal extends StatelessWidget {
 class _StepDocuments extends StatelessWidget {
   final TextEditingController stirCtrl;
   final TextEditingController passportCtrl;
+  final Map<String, VerificationDocument> docs;
+  final bool docsLoading;
+  final String? docsError;
   final VoidCallback onChanged;
+  final void Function(String type) onPickDoc;
 
   const _StepDocuments({
     required this.stirCtrl,
     required this.passportCtrl,
+    required this.docs,
+    required this.docsLoading,
+    required this.docsError,
     required this.onChanged,
+    required this.onPickDoc,
   });
+
+  static const _docMeta = <String, ({String label, String emoji})>{
+    VerificationDocType.passportFront:
+        (label: 'Pasport (old tomoni)', emoji: '🪪'),
+    VerificationDocType.passportBack:
+        (label: 'Pasport (orqa tomoni)', emoji: '🪪'),
+    VerificationDocType.selfie:
+        (label: 'Selfie pasport bilan', emoji: '🤳'),
+    VerificationDocType.selfEmployedCert:
+        (label: 'Samozanyatiy ma\'lumotnomasi', emoji: '📄'),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -255,7 +388,7 @@ class _StepDocuments extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
 
           // STIR / ИНН
           TextFormField(
@@ -288,7 +421,48 @@ class _StepDocuments extends StatelessWidget {
             ),
             onChanged: (_) => onChanged(),
           ),
-          const SizedBox(height: 20),
+
+          const SizedBox(height: 24),
+          Text('Hujjat fotosuratlari',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          const Text(
+            'Har bir hujjat aniq va to\'liq ko\'rinadigan bo\'lsin',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+
+          if (docsLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (docsError != null)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.errorLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'Hujjatlarni yuklab bo\'lmadi: $docsError',
+                style: const TextStyle(color: AppColors.error, fontSize: 12),
+              ),
+            )
+          else
+            Column(
+              children: [
+                for (final type in VerificationDocType.all)
+                  _DocTile(
+                    label: _docMeta[type]!.label,
+                    emoji: _docMeta[type]!.emoji,
+                    doc: docs[type],
+                    onTap: () => onPickDoc(type),
+                  ),
+              ],
+            ),
+
+          const SizedBox(height: 18),
 
           // Info box
           Container(
@@ -315,6 +489,126 @@ class _StepDocuments extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DocTile extends StatelessWidget {
+  final String label;
+  final String emoji;
+  final VerificationDocument? doc;
+  final VoidCallback onTap;
+
+  const _DocTile({
+    required this.label,
+    required this.emoji,
+    required this.doc,
+    required this.onTap,
+  });
+
+  (String, Color, Color) get _statusInfo {
+    if (doc == null) {
+      return ('Yuklanmagan', AppColors.textHint, AppColors.surfaceMuted);
+    }
+    if (doc!.isApproved) {
+      return ('✓ Tasdiqlangan', AppColors.success, AppColors.primaryLight);
+    }
+    if (doc!.isRejected) {
+      return ('✗ Rad etilgan', AppColors.error, AppColors.errorLight);
+    }
+    return ('⏳ Tekshirilmoqda', AppColors.warning, AppColors.warningLight);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (statusLabel, color, bg) = _statusInfo;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: doc == null ? AppColors.border : color,
+                width: doc == null ? 1 : 1.5,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(emoji, style: const TextStyle(fontSize: 24)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(label,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 14,
+                              )),
+                          const SizedBox(height: 2),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: bg,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(statusLabel,
+                                style: TextStyle(
+                                    color: color,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      doc == null
+                          ? Icons.upload_outlined
+                          : Icons.refresh,
+                      color: AppColors.textHint,
+                    ),
+                  ],
+                ),
+                if (doc?.isRejected == true &&
+                    doc!.rejectionReason != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.errorLight,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline,
+                            size: 16, color: AppColors.error),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(doc!.rejectionReason!,
+                              style: const TextStyle(
+                                  color: AppColors.error, fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

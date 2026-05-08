@@ -195,9 +195,32 @@ class ApiClient {
     }
   }
 
+  Future<Response> put(String path, [dynamic data]) async {
+    try {
+      return await _dio.put(path, data: data);
+    } on DioException catch (e) {
+      throw _toException(e);
+    }
+  }
+
   Future<Response> delete(String path, {dynamic data}) async {
     try {
       return await _dio.delete(path, data: data);
+    } on DioException catch (e) {
+      throw _toException(e);
+    }
+  }
+
+  /// Multipart POST helper. `formData` should be a `FormData` instance from
+  /// `package:dio` (the same one already imported here). Returns the parsed
+  /// response on success, or throws an [ApiException] on failure.
+  Future<Response> postMultipart(String path, FormData formData) async {
+    try {
+      return await _dio.post(
+        path,
+        data: formData,
+        options: Options(contentType: 'multipart/form-data'),
+      );
     } on DioException catch (e) {
       throw _toException(e);
     }

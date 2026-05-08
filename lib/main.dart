@@ -5,7 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import 'dart:async';
+
 import 'firebase_options.dart';
+import 'services/push_service.dart';
 import 'services/sentry_service.dart';
 import 'theme/app_theme.dart';
 import 'models/models.dart';
@@ -27,6 +30,7 @@ import 'screens/buyer/tracking_screen.dart';
 import 'screens/buyer/profile_screen.dart';
 import 'screens/buyer/shops_screen.dart';
 import 'screens/buyer/address_book_screen.dart';
+import 'screens/buyer/payment_methods_screen.dart';
 import 'screens/buyer/promo_screen.dart';
 import 'screens/buyer/loyalty_screen.dart';
 import 'screens/courier/courier_shell.dart';
@@ -38,6 +42,7 @@ import 'screens/shop/shop_shell.dart';
 import 'screens/shop/shop_orders_screen.dart';
 import 'screens/shop/shop_other_screens.dart';
 import 'screens/shop/shop_products_screen.dart';
+import 'screens/shop/shop_settings_screen.dart';
 import 'screens/shared/role_switcher_screen.dart';
 import 'screens/shared/courier_verification_screen.dart';
 import 'screens/shared/chat_screen.dart';
@@ -81,6 +86,44 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
   final _orders = OrderProvider();
   final _courier = CourierStateProvider();
   late final GoRouter _router = _buildRouter(_auth);
+
+  StreamSubscription<dynamic>? _pushTapSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // Phase 6 — deep-link FCM taps into the right screen. The push service
+    // exposes `onTap` which fires for foreground / background / cold-start
+    // notifications.
+    _pushTapSub = PushService.instance.onTap.listen((msg) {
+      try {
+        final data = msg.data;
+        final type = data['type']?.toString();
+        final orderId = data['orderId']?.toString();
+        if (type == null) return;
+        if (type == 'chat_message' && orderId != null && orderId.isNotEmpty) {
+          _router.go('/order/$orderId/chat');
+        } else if (type == 'promo') {
+          _router.go('/buyer/promo');
+        } else if (type.startsWith('order_')) {
+          if (orderId != null && orderId.isNotEmpty) {
+            _router.go('/buyer/tracking/$orderId');
+          } else {
+            _router.go('/buyer/orders');
+          }
+        }
+      } catch (_) {
+        // Bad payload — silently ignore so a single malformed push doesn't
+        // crash the whole app.
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pushTapSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -180,6 +223,10 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
           GoRoute(path: '/buyer/tracking/:orderId', builder: (_, s) => TrackingScreen(orderId: s.pathParameters['orderId'] ?? '')),
           GoRoute(path: '/buyer/profile', builder: (_, __) => const ProfileScreen()),
           GoRoute(path: '/buyer/address-book', builder: (_, __) => const AddressBookScreen()),
+          GoRoute(
+            path: '/buyer/payment-methods',
+            builder: (_, __) => const PaymentMethodsScreen(),
+          ),
         ],
       ),
 
@@ -200,6 +247,7 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
           GoRoute(path: '/shop/products', builder: (_, __) => const ShopProductsScreen()),
           GoRoute(path: '/shop/history', builder: (_, __) => const ShopHistoryScreen()),
           GoRoute(path: '/shop/profile', builder: (_, __) => const ShopProfileScreen()),
+          GoRoute(path: '/shop/settings', builder: (_, __) => const ShopSettingsScreen()),
         ],
       ),
     ],

@@ -40,16 +40,47 @@ async function generateWeeklyPayouts(prisma, { weekStart } = {}) {
     select: {
       id: true, shopId: true, courierId: true,
       subtotal: true, total: true, courierReward: true, refundedAmount: true,
+      // Phase 6.9 — tipping. Aggregate tips into the courier payout. tipPaidAt
+      // is the paid-on timestamp (independent of deliveredAt) but we attribute
+      // the tip to whichever weekly payout the *order* falls into for
+      // simplicity — payouts are eventually-consistent and tips paid late are
+      // reconciled by re-running the job.
+      tipAmount: true, tipPaidAt: true,
+    },
+  });
+
+  // Also pull tips paid within the window even if the order was delivered
+  // in a previous week — covers post-delivery tipping.
+  const lateTipOrders = await prisma.order.findMany({
+    where: {
+      tipPaidAt: { gte: start, lt: end },
+      // Exclude orders already in the main set; we'll de-dup by id below.
+    },
+    select: {
+      id: true, courierId: true, tipAmount: true, tipPaidAt: true, deliveredAt: true,
     },
   });
 
   // ── Couriers: aggregate by courierId ──────────────────────────────────────
   const byCourier = new Map();
+  const seenTips = new Set();
   for (const o of orders) {
     if (!o.courierId) continue;
-    const e = byCourier.get(o.courierId) || { gross: 0, count: 0 };
+    const e = byCourier.get(o.courierId) || { gross: 0, count: 0, tips: 0 };
     e.gross += Number(o.courierReward || 0);
     e.count += 1;
+    // Only count tips whose tipPaidAt is inside the window.
+    if (o.tipAmount && o.tipPaidAt && o.tipPaidAt >= start && o.tipPaidAt < end) {
+      e.tips += Number(o.tipAmount || 0);
+      seenTips.add(o.id);
+    }
+    byCourier.set(o.courierId, e);
+  }
+  for (const o of lateTipOrders) {
+    if (!o.courierId) continue;
+    if (seenTips.has(o.id)) continue;
+    const e = byCourier.get(o.courierId) || { gross: 0, count: 0, tips: 0 };
+    e.tips += Number(o.tipAmount || 0);
     byCourier.set(o.courierId, e);
   }
 
@@ -66,12 +97,16 @@ async function generateWeeklyPayouts(prisma, { weekStart } = {}) {
 
   const results = [];
 
-  // Upsert courier payouts. Couriers don't bear refund cost.
+  // Upsert courier payouts. Couriers don't bear refund cost. Tips flow 100%
+  // to the courier and are tracked alongside the gross delivery reward; we
+  // keep them in `notes` (JSON) so we don't need a schema change just yet.
   for (const [courierId, agg] of byCourier.entries()) {
     const grossAmount = agg.gross;
     const commission = 0;
     const refundsTotal = 0;
-    const netAmount = grossAmount;
+    const tipsTotal = Number(agg.tips || 0);
+    const netAmount = grossAmount + tipsTotal;
+    const notes = JSON.stringify({ tipsTotal });
     const row = await prisma.payout.upsert({
       where: {
         recipientType_recipientId_periodStart: {
@@ -85,12 +120,14 @@ async function generateWeeklyPayouts(prisma, { weekStart } = {}) {
         periodEnd: end,
         grossAmount, commission, refundsTotal, netAmount,
         ordersCount: agg.count,
+        notes,
         status: 'pending',
       },
       update: {
         periodEnd: end,
         grossAmount, commission, refundsTotal, netAmount,
         ordersCount: agg.count,
+        notes,
       },
     });
     results.push({
@@ -98,6 +135,7 @@ async function generateWeeklyPayouts(prisma, { weekStart } = {}) {
       recipientId: courierId,
       netAmount: row.netAmount,
       ordersCount: row.ordersCount,
+      tipsTotal,
       payoutId: row.id,
     });
   }

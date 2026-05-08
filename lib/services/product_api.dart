@@ -99,17 +99,12 @@ class ProductApi {
     await _api.delete('/api/products/$id${hard ? '?hard=1' : ''}');
   }
 
-  /// Upload image (bytes) and get back a URL to put into product.imageUrl
+  /// Upload image (bytes) and get back a URL to put into product.imageUrl.
+  /// Goes through the shared [ApiClient] so 401s trigger refresh automatically.
   Future<String> uploadImage({
     required Uint8List bytes,
     required String filename,
   }) async {
-    final token = await _api.getToken();
-    // Use a dedicated Dio for multipart so we don't fight the JSON Content-Type interceptor
-    final dio = Dio(BaseOptions(
-      baseUrl: ApiConfig.baseUrl,
-      headers: {if (token != null) 'Authorization': 'Bearer $token'},
-    ));
     final form = FormData.fromMap({
       'image': MultipartFile.fromBytes(
         bytes,
@@ -117,25 +112,20 @@ class ProductApi {
         contentType: MediaType.parse(_guessMime(filename)),
       ),
     });
-    final res = await dio.post('/api/products/upload-image', data: form);
+    final res = await _api.postMultipart('/api/products/upload-image', form);
     final url = res.data['url'] as String;
     // Backend returns relative URL like "/uploads/products/foo.jpg"
     if (url.startsWith('http')) return url;
     return '${ApiConfig.baseUrl}$url';
   }
 
-  /// Bulk import from XLSX/CSV bytes
+  /// Bulk import from XLSX/CSV bytes. Routes through [ApiClient] for 401 refresh.
   Future<ImportResult> importFromFile({
     required String shopId,
     required Uint8List bytes,
     required String filename,
     bool dryRun = false,
   }) async {
-    final token = await _api.getToken();
-    final dio = Dio(BaseOptions(
-      baseUrl: ApiConfig.baseUrl,
-      headers: {if (token != null) 'Authorization': 'Bearer $token'},
-    ));
     final form = FormData.fromMap({
       'shopId': shopId,
       'dryRun': dryRun ? '1' : '0',
@@ -145,7 +135,7 @@ class ProductApi {
         contentType: MediaType.parse(_guessSheetMime(filename)),
       ),
     });
-    final res = await dio.post('/api/products/import', data: form);
+    final res = await _api.postMultipart('/api/products/import', form);
     return ImportResult.fromJson(res.data);
   }
 

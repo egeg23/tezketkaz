@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:yandex_mapkit/yandex_mapkit.dart';
 import '../theme/app_theme.dart';
@@ -51,6 +52,31 @@ class _TrackingMapState extends State<TrackingMap> {
   YandexMapController? _controller;
   bool _hasApiKey = true; // Установится false если init упадёт
 
+  // Phase 6 — cached raster pin bytes. Generating PNGs synchronously inside
+  // build() is not allowed (requires async) and would re-rasterize on every
+  // rebuild, so we render once in initState and cache.
+  Uint8List? _shopPin;
+  Uint8List? _customerPin;
+  Uint8List? _courierPin;
+
+  @override
+  void initState() {
+    super.initState();
+    _bakePins();
+  }
+
+  Future<void> _bakePins() async {
+    final shop = await _pinBytes(AppColors.error);
+    final customer = await _pinBytes(AppColors.info);
+    final courier = await _pinBytes(AppColors.success);
+    if (!mounted) return;
+    setState(() {
+      _shopPin = shop;
+      _customerPin = customer;
+      _courierPin = courier;
+    });
+  }
+
   @override
   void didUpdateWidget(covariant TrackingMap oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -63,6 +89,12 @@ class _TrackingMapState extends State<TrackingMap> {
   @override
   Widget build(BuildContext context) {
     if (!_hasApiKey) return _Placeholder(phase: widget.phase);
+    // Wait for the pins to be baked before drawing the map. Showing the
+    // placeholder briefly is harmless — `_bakePins` finishes in well under a
+    // frame on real devices.
+    if (_shopPin == null || _customerPin == null || _courierPin == null) {
+      return _Placeholder(phase: widget.phase);
+    }
 
     try {
       return YandexMap(
@@ -100,7 +132,7 @@ class _TrackingMapState extends State<TrackingMap> {
       mapId: const MapObjectId('shop'),
       point: widget.shopPoint,
       icon: PlacemarkIcon.single(PlacemarkIconStyle(
-        image: BitmapDescriptor.fromBytes(_pinBytes(AppColors.error)),
+        image: BitmapDescriptor.fromBytes(_shopPin!),
         scale: 1.5,
       )),
     ));
@@ -110,7 +142,7 @@ class _TrackingMapState extends State<TrackingMap> {
       mapId: const MapObjectId('customer'),
       point: widget.customerPoint,
       icon: PlacemarkIcon.single(PlacemarkIconStyle(
-        image: BitmapDescriptor.fromBytes(_pinBytes(AppColors.info)),
+        image: BitmapDescriptor.fromBytes(_customerPin!),
         scale: 1.5,
       )),
     ));
@@ -121,7 +153,7 @@ class _TrackingMapState extends State<TrackingMap> {
         mapId: const MapObjectId('courier'),
         point: widget.courierPoint!,
         icon: PlacemarkIcon.single(PlacemarkIconStyle(
-          image: BitmapDescriptor.fromBytes(_pinBytes(AppColors.success)),
+          image: BitmapDescriptor.fromBytes(_courierPin!),
           scale: 2.0,
         )),
       ));
@@ -172,12 +204,22 @@ class _TrackingMapState extends State<TrackingMap> {
     );
   }
 
-  Uint8List _pinBytes(Color color) {
-    // Placeholder bytes — Yandex MapKit needs an icon image, but the upstream
-    // build hasn't shipped real raster pins yet. Returning a single byte keeps
-    // the existing behaviour from Phase 0; production will swap this for
-    // proper PNGs.
-    return Uint8List.fromList([0]);
+  /// Phase 6 — generate a 96x96 raster pin (white outer ring + filled core)
+  /// at runtime so we don't need to ship binary asset files. Result is the
+  /// PNG bytes that [BitmapDescriptor.fromBytes] expects.
+  Future<Uint8List> _pinBytes(Color color) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    const size = 96.0;
+    const center = Offset(size / 2, size / 2);
+    // Outer ring (white).
+    canvas.drawCircle(center, size / 2, Paint()..color = Colors.white);
+    // Filled core.
+    canvas.drawCircle(center, size / 2 - 8, Paint()..color = color);
+    final img =
+        await recorder.endRecording().toImage(size.toInt(), size.toInt());
+    final data = await img.toByteData(format: ui.ImageByteFormat.png);
+    return data!.buffer.asUint8List();
   }
 }
 
