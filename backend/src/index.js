@@ -41,6 +41,7 @@ const favoriteRoutes = require('./routes/favorites');
 const instantPayoutRoutes = require('./routes/instant-payout');
 const courierPerformanceRoutes = require('./routes/courier-performance');
 const heatmapRoutes = require('./routes/heatmap');
+const gdprRoutes = require('./routes/gdpr');
 const { setupSockets } = require('./sockets');
 
 const app = express();
@@ -163,6 +164,9 @@ global.__tkk_io = io;
 // ─── API Routes ─────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+// Phase 9.1/9.2 — GDPR data export + account deletion. Mounted at /api/users
+// so all endpoints are scoped under /api/users/me/*.
+app.use('/api/users', gdprRoutes);
 app.use('/api/shops', shopRoutes);
 app.use('/api/products', productRoutes);
 // Phase 7.3 — banners (public list + admin CRUD; declares absolute paths
@@ -270,12 +274,18 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
     const payoutJobs = require('./jobs/payouts');
     // eslint-disable-next-line global-require
     const membershipJobs = require('./jobs/membership');
+    // eslint-disable-next-line global-require
+    const accountDeletionJobs = require('./jobs/accountDeletion');
+    // eslint-disable-next-line global-require
+    const backupJobs = require('./jobs/backup');
     startWorkers({
       dispatch: dispatchJobs.dispatchHandler,
       autoCancel: dispatchJobs.autoCancelHandler,
       scheduled: scheduledJobs.scheduledHandler,
       payouts: payoutJobs.payoutsHandler,
       membership: membershipJobs.membershipHandler,
+      accountDeletion: accountDeletionJobs.accountDeletionHandler,
+      backup: backupJobs.backupHandler,
     });
     // Schedule weekly payouts: Mondays at 03:00 UTC.
     try {
@@ -294,6 +304,24 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
       });
     } catch (err) {
       logger.warn({ err: err.message }, 'failed to schedule membership renewal cron');
+    }
+    // Phase 9.2 — daily account-deletion purge at 05:00 UTC.
+    try {
+      queues().accountDeletion.add('purge', {}, {
+        repeat: { cron: '0 5 * * *' },
+        jobId: 'account-deletion-purge-cron',
+      });
+    } catch (err) {
+      logger.warn({ err: err.message }, 'failed to schedule account deletion cron');
+    }
+    // Phase 9.4 — daily DB backup at 02:00 UTC.
+    try {
+      queues().backup.add('daily', {}, {
+        repeat: { cron: '0 2 * * *' },
+        jobId: 'daily-backup-cron',
+      });
+    } catch (err) {
+      logger.warn({ err: err.message }, 'failed to schedule daily backup cron');
     }
     logger.info('BullMQ workers started');
   } catch (err) {

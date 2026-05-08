@@ -176,6 +176,12 @@ class ProfileScreen extends StatelessWidget {
               subtitle: '${user.country ?? 'UZ'} · ${L10n.instance.locale.languageCode}',
               onTap: () => context.push('/buyer/country-settings'),
             ),
+            _Tile(
+              icon: '🔒',
+              title: t(context, 'privacy.title'),
+              subtitle: 'GDPR · Export · Delete',
+              onTap: () => context.push('/buyer/data-privacy'),
+            ),
             _Tile(icon: '❓', title: 'Yordam', onTap: () {}),
           ]),
 

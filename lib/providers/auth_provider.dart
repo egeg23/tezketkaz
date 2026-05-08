@@ -8,6 +8,7 @@ import '../services/analytics_service.dart';
 import '../services/api_client.dart';
 import '../services/membership_api.dart';
 import '../services/push_service.dart';
+import '../services/social_auth_service.dart';
 import '../services/socket_service.dart';
 
 enum AuthState { unknown, unauthenticated, authenticated }
@@ -156,41 +157,109 @@ class AuthProvider extends ChangeNotifier {
     _setLoading(true);
     try {
       final res = await _api.post('/api/auth/verify-otp', {'phone': phone, 'code': code});
-      final data = res.data as Map;
-      final access = data['accessToken'] as String?;
-      final refresh = data['refreshToken'] as String?;
-      if (access != null && refresh != null) {
-        await _api.saveTokens(access, refresh);
-      } else if (data['token'] is String) {
-        // Backwards compatibility with the legacy single-token shape.
-        if (kDebugMode) {
-          debugPrint('verify-otp returned legacy {token} shape — '
-              'no refresh token will be persisted.');
-        }
-        await _api.saveToken(data['token'] as String);
-      } else {
-        throw ApiException('Server javobi noto\'g\'ri', res.statusCode);
-      }
-      _user = _parseUser(data['user']);
-      _state = AuthState.authenticated;
-      SocketService.instance.connect();
-      unawaited(PushService.instance.init());
-      _startMembershipTimer();
-      unawaited(refreshMembership());
-      if (_user != null) {
-        unawaited(AnalyticsService.instance.setUser(_user!.id, {
-          if (_user!.country != null) 'country': _user!.country!,
-        }));
-        unawaited(AnalyticsService.instance.logEvent('login', {
-          'method': 'otp',
-        }));
-      }
+      await _ingestAuthResponse(res.data, res.statusCode, method: 'otp');
       _setLoading(false);
       return true;
     } on ApiException catch (e) {
       _error = e.message;
       _setLoading(false);
       return false;
+    }
+  }
+
+  /// Phase 9.3 — Apple Sign-In flow.
+  ///
+  /// 1. Trigger the native Apple credential prompt (returns a signed JWT).
+  /// 2. POST that JWT to `/api/auth/oauth/apple`. The backend validates
+  ///    the token against Apple's JWKS and returns our token pair + user.
+  /// 3. Run the same post-login bookkeeping as [verifyOtp].
+  Future<bool> loginWithApple() async {
+    _setLoading(true);
+    try {
+      final idToken = await SocialAuthService.instance.appleSignIn();
+      if (idToken == null) {
+        // User cancelled — not an error, just not a success.
+        _setLoading(false);
+        return false;
+      }
+      final res = await _api.post('/api/auth/oauth/apple', {'idToken': idToken});
+      await _ingestAuthResponse(res.data, res.statusCode, method: 'apple');
+      _setLoading(false);
+      return true;
+    } on ApiException catch (e) {
+      _error = e.message;
+      _setLoading(false);
+      return false;
+    } catch (e) {
+      _error = 'Apple sign-in xatosi';
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Phase 9.3 — Google Sign-In flow. Mirrors [loginWithApple].
+  Future<bool> loginWithGoogle() async {
+    _setLoading(true);
+    try {
+      final idToken = await SocialAuthService.instance.googleSignIn();
+      if (idToken == null) {
+        _setLoading(false);
+        return false;
+      }
+      final res = await _api.post('/api/auth/oauth/google', {'idToken': idToken});
+      await _ingestAuthResponse(res.data, res.statusCode, method: 'google');
+      _setLoading(false);
+      return true;
+    } on ApiException catch (e) {
+      _error = e.message;
+      _setLoading(false);
+      return false;
+    } catch (e) {
+      _error = 'Google sign-in xatosi';
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Shared post-login bookkeeping for OTP and OAuth flows.
+  ///
+  /// Persists the token pair (or legacy single token), parses the user,
+  /// flips state to authenticated, kicks off socket/push/membership/
+  /// analytics. Throws [ApiException] when the response shape is invalid.
+  Future<void> _ingestAuthResponse(
+    dynamic body,
+    int? statusCode, {
+    required String method,
+  }) async {
+    if (body is! Map) {
+      throw ApiException('Server javobi noto\'g\'ri', statusCode);
+    }
+    final access = body['accessToken'] as String?;
+    final refresh = body['refreshToken'] as String?;
+    if (access != null && refresh != null) {
+      await _api.saveTokens(access, refresh);
+    } else if (body['token'] is String) {
+      if (kDebugMode) {
+        debugPrint('$method auth returned legacy {token} shape — '
+            'no refresh token will be persisted.');
+      }
+      await _api.saveToken(body['token'] as String);
+    } else {
+      throw ApiException('Server javobi noto\'g\'ri', statusCode);
+    }
+    _user = _parseUser(body['user']);
+    _state = AuthState.authenticated;
+    SocketService.instance.connect();
+    unawaited(PushService.instance.init());
+    _startMembershipTimer();
+    unawaited(refreshMembership());
+    if (_user != null) {
+      unawaited(AnalyticsService.instance.setUser(_user!.id, {
+        if (_user!.country != null) 'country': _user!.country!,
+      }));
+      unawaited(AnalyticsService.instance.logEvent('login', {
+        'method': method,
+      }));
     }
   }
 
@@ -272,6 +341,9 @@ class AuthProvider extends ChangeNotifier {
     } catch (_) {}
 
     await _api.clearTokens();
+    // Best-effort: drop the cached Google account so the next sign-in
+    // re-prompts the picker. No-op for Apple.
+    unawaited(SocialAuthService.instance.signOut());
     SocketService.instance.disconnect();
     _stopMembershipTimer();
     unawaited(AnalyticsService.instance.setUser(null));

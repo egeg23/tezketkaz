@@ -51,6 +51,15 @@ const schema = z.object({
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   SENTRY_DSN: z.string().optional(),
+
+  // Phase 9 — Cloudflare R2 / S3-compatible storage. All optional; falls back
+  // to local /uploads/* when unset.
+  S3_BUCKET: z.string().optional(),
+  S3_ENDPOINT: z.string().optional(),
+  S3_REGION: z.string().optional(),
+  S3_ACCESS_KEY: z.string().optional(),
+  S3_SECRET_KEY: z.string().optional(),
+  S3_PUBLIC_BASE: z.string().optional(),
 });
 
 let parsed;

@@ -83,6 +83,9 @@ backend/prisma/prisma/
 backend/firebase-admin.json
 backend/uploads/products/
 backend/uploads/verification/
+backend/uploads/banners/
+backend/uploads/exports/
+backend/uploads/backups/
 !backend/uploads/.gitkeep
 
 # ─── Next.js admin ───────────────────────────────────────────────────────────

@@ -61,6 +61,10 @@ dependencies:
   # Observability
   sentry_flutter: ^8.9.0
 
+  # Phase 9.3 — social sign-in (Apple + Google)
+  sign_in_with_apple: ^6.1.0
+  google_sign_in: ^6.2.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1172,6 +1172,114 @@ class L10n extends ChangeNotifier {
       'en': 'Language',
       'kk': 'Тіл',
     },
+
+    // ── Phase 9.3 — Social sign-in ───────────────────────────────────────
+    'auth.continue_with_apple': {
+      'uz': 'Apple bilan kirish',
+      'ru': 'Войти через Apple',
+      'en': 'Continue with Apple',
+      'kk': 'Apple арқылы кіру',
+    },
+    'auth.continue_with_google': {
+      'uz': 'Google bilan kirish',
+      'ru': 'Войти через Google',
+      'en': 'Continue with Google',
+      'kk': 'Google арқылы кіру',
+    },
+    'auth.or': {
+      'uz': 'yoki',
+      'ru': 'или',
+      'en': 'or',
+      'kk': 'немесе',
+    },
+
+    // ── Phase 9.1 / 9.2 — Privacy & GDPR ─────────────────────────────────
+    'privacy.title': {
+      'uz': "Maxfiylik va ma'lumotlar",
+      'ru': 'Приватность и данные',
+      'en': 'Privacy & data',
+      'kk': 'Құпиялылық және деректер',
+    },
+    'privacy.export_data': {
+      'uz': "Ma'lumotlarimni yuklash",
+      'ru': 'Экспорт моих данных',
+      'en': 'Export my data',
+      'kk': 'Деректерімді экспорттау',
+    },
+    'privacy.export_pending': {
+      'uz': "So'rov tayyorlanmoqda. Tayyor bo'lganda email orqali xabar beramiz.",
+      'ru': 'Запрос обрабатывается. Мы пришлём email, когда архив будет готов.',
+      'en': 'Your export is being prepared. We\'ll email you when it\'s ready.',
+      'kk': 'Сұраныс өңделуде. Дайын болғанда email жібереміз.',
+    },
+    'privacy.export_ready': {
+      'uz': 'Eksport tayyor',
+      'ru': 'Экспорт готов',
+      'en': 'Export ready',
+      'kk': 'Экспорт дайын',
+    },
+    'privacy.export_expired': {
+      'uz': 'Muddati tugagan',
+      'ru': 'Срок истёк',
+      'en': 'Expires',
+      'kk': 'Мерзімі өткен',
+    },
+    'privacy.download': {
+      'uz': 'Yuklab olish',
+      'ru': 'Скачать',
+      'en': 'Download',
+      'kk': 'Жүктеп алу',
+    },
+    'privacy.delete_account': {
+      'uz': "Hisobni o'chirish",
+      'ru': 'Удалить аккаунт',
+      'en': 'Delete account',
+      'kk': 'Аккаунтты жою',
+    },
+    'privacy.delete_confirm': {
+      'uz':
+          "Hisobingiz 30 kun ichida o'chiriladi. Buyurtma tarixi qonuniy talablarga muvofiq 5 yil saqlanadi.",
+      'ru':
+          'Ваш аккаунт будет удалён через 30 дней. История заказов хранится 5 лет согласно закону.',
+      'en':
+          'Your account will be deleted after a 30-day grace period. Order history is kept 5 years for legal compliance.',
+      'kk':
+          'Аккаунтыңыз 30 күннен кейін жойылады. Тапсырыстар тарихы заң талабы бойынша 5 жыл сақталады.',
+    },
+    'privacy.delete_reason_hint': {
+      'uz': 'Sabab (ixtiyoriy)',
+      'ru': 'Причина (необязательно)',
+      'en': 'Reason (optional)',
+      'kk': 'Себеп (міндетті емес)',
+    },
+    'privacy.delete_scheduled': {
+      'uz': "Hisobingiz {date} sanasida o'chiriladi. Bu sanagacha bekor qilishingiz mumkin.",
+      'ru': 'Аккаунт будет удалён {date}. До этой даты можно отменить.',
+      'en': 'Your account will be deleted on {date}. You can cancel before then.',
+      'kk': 'Аккаунт {date} күні жойылады. Бұған дейін бас тартуға болады.',
+    },
+    'privacy.cancel_deletion': {
+      'uz': "O'chirishni bekor qilish",
+      'ru': 'Отменить удаление',
+      'en': 'Cancel deletion',
+      'kk': 'Жоюды болдырмау',
+    },
+    'privacy.no_deletion': {
+      'uz': "O'chirish so'rovi yo'q",
+      'ru': 'Запросов на удаление нет',
+      'en': 'No pending deletion request',
+      'kk': 'Жою сұранысы жоқ',
+    },
+    'privacy.legal_note': {
+      'uz':
+          "Bu Phase 9 GDPR uchun. Buyurtma tarixi qonuniy talablar tufayli 5 yil saqlanadi.",
+      'ru':
+          'Это раздел Phase 9 GDPR. История заказов хранится 5 лет согласно требованиям закона.',
+      'en':
+          'This is for Phase 9 GDPR compliance. Order history is retained 5 years for legal compliance.',
+      'kk':
+          'Бұл Phase 9 GDPR бөлімі. Тапсырыс тарихы заң бойынша 5 жыл сақталады.',
+    },
   };
 }
 

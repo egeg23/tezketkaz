@@ -5,6 +5,7 @@ const multer = require('multer');
 const xlsx = require('xlsx');
 const prisma = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const { putFromMulterFile } = require('../lib/storage');
 
 // ─── Upload setup ───────────────────────────────────────────────────────────
 const UPLOAD_ROOT = path.resolve(__dirname, '../../uploads');
@@ -287,7 +288,9 @@ router.post('/upload-image', authMiddleware, uploadImage.single('image'), async 
         return res.status(403).json({ error: 'Shop membership required' });
       }
     }
-    const url = `/uploads/products/${req.file.filename}`;
+    // Phase 9 — push through the storage abstraction. With S3 configured this
+    // returns the bucket URL; locally it returns /uploads/products/<filename>.
+    const { url } = await putFromMulterFile(req.file, `products/${req.file.filename}`);
     res.json({ url, filename: req.file.filename, size: req.file.size });
   } catch (err) { next(err); }
 });
