@@ -12,9 +12,10 @@ class BuyerShell extends StatelessWidget {
 
   int _currentIndex(BuildContext context) {
     final loc = GoRouterState.of(context).uri.toString();
-    if (loc.startsWith('/buyer/cart')) return 1;
-    if (loc.startsWith('/buyer/orders')) return 2;
-    if (loc.startsWith('/buyer/profile')) return 3;
+    if (loc.startsWith('/buyer/shops')) return 1;
+    if (loc.startsWith('/buyer/cart')) return 2;
+    if (loc.startsWith('/buyer/orders')) return 3;
+    if (loc.startsWith('/buyer/profile')) return 4;
     return 0;
   }
 
@@ -22,9 +23,10 @@ class BuyerShell extends StatelessWidget {
     HapticFeedback.lightImpact();
     switch (i) {
       case 0: context.go('/buyer'); break;
-      case 1: context.go('/buyer/cart'); break;
-      case 2: context.go('/buyer/orders'); break;
-      case 3: context.go('/buyer/profile'); break;
+      case 1: context.go('/buyer/shops'); break;
+      case 2: context.go('/buyer/cart'); break;
+      case 3: context.go('/buyer/orders'); break;
+      case 4: context.go('/buyer/profile'); break;
     }
   }
 
@@ -42,6 +44,7 @@ class BuyerShell extends StatelessWidget {
 
     final items = [
       _NavItem(icon: Icons.home_rounded, label: 'Bosh sahifa'),
+      _NavItem(icon: Icons.storefront_rounded, label: "Do'konlar"),
       _NavItem(icon: Icons.shopping_basket_rounded, label: 'Savat', badge: cart.itemCount),
       _NavItem(icon: Icons.receipt_long_rounded, label: 'Buyurtmalar', badge: activeCount, badgeColor: AppColors.courier),
       _NavItem(icon: Icons.person_rounded, label: 'Profil'),

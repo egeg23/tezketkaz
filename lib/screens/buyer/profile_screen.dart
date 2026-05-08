@@ -121,7 +121,28 @@ class ProfileScreen extends StatelessWidget {
               onTap: () => context.go('/buyer/orders'),
             ),
             _Tile(icon: '❤️', title: 'Sevimlilar', onTap: () {}),
-            _Tile(icon: '📍', title: 'Manzillarim', onTap: () {}),
+            _Tile(
+              icon: '📍',
+              title: 'Manzillarim',
+              onTap: () => context.push('/buyer/address-book'),
+            ),
+          ]),
+
+          const SizedBox(height: 10),
+
+          // ── Loyalty / promo ────────────────────────────────────────────────
+          _Card(children: [
+            _Tile(
+              icon: '⭐',
+              title: 'Bonuslar va daraja',
+              subtitle: 'Cashback · ballar · referal',
+              onTap: () => context.push('/buyer/loyalty'),
+            ),
+            _Tile(
+              icon: '🎟️',
+              title: 'Promo kodlar',
+              onTap: () => context.push('/buyer/promo'),
+            ),
           ]),
 
           const SizedBox(height: 10),

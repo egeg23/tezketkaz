@@ -21,6 +21,11 @@ model User {
   isBuyer         Boolean  @default(true)
   isCourier       Boolean  @default(false)
   isShop          Boolean  @default(false)
+  isAdmin         Boolean  @default(false)
+
+  // Localization & preferences
+  locale          String   @default("uz") // uz | ru | en
+  notificationPrefs String? // JSON: { promo: bool, orderUpdates: bool, sound: bool }
 
   // Courier verification
   courierStatus   String   @default("none") // none | pending | approved | rejected
@@ -37,13 +42,44 @@ model User {
   addresses      Address[]
   notifications  Notification[]
   otpCodes       OtpCode[]
+  fcmTokens      FcmToken[]
+  refreshTokens  RefreshToken[]
+  auditLogs      AuditLog[]
 
   // Courier stats
   rating         Float    @default(5.0)
   ordersCount    Int      @default(0)
 
+  // Courier real-time state (Phase 2). Persisted so it survives server
+  // restarts; live position is mirrored in Redis with TTL=15min.
+  isOnline       Boolean  @default(false)
+  lastSeenAt     DateTime?
+  activeOrderId  String?
+
+  // Phase 2 relations
+  shifts         CourierShift[]
+  dispatchOffers DispatchOffer[]
+
+  // Phase 3 relations
+  loyalty            LoyaltyAccount?
+  loyaltyTransactions LoyaltyTransaction[]
+  couponRedemptions  CouponRedemption[]
+  reviewsAuthored    Review[]      @relation("Reviewer")
+  chatMessagesSent   ChatMessage[] @relation("ChatSender")
+  chatMessagesRecv   ChatMessage[] @relation("ChatReceiver")
+
+  // Referral (Phase 3 loyalty)
+  referralCode   String?  @unique
+  referredById   String?
+  referredBy     User?    @relation("Referrals", fields: [referredById], references: [id])
+  referrals      User[]   @relation("Referrals")
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  @@index([isAdmin])
+  @@index([isCourier, courierStatus])
+  @@index([isOnline, courierStatus])
 }
 
 model OtpCode {
@@ -52,11 +88,71 @@ model OtpCode {
   code      String
   expiresAt DateTime
   used      Boolean  @default(false)
+  attempts  Int      @default(0)
   user      User?    @relation(fields: [userId], references: [id])
   userId    String?
   createdAt DateTime @default(now())
 
   @@index([phone])
+}
+
+model FcmToken {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  token     String   @unique
+  platform  String   // android | ios | web
+  lastSeenAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model RefreshToken {
+  id            String   @id @default(uuid())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  jti           String   @unique // unique JWT id
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  replacedById  String?  // chain: rotated tokens point to next
+  userAgent     String?
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actor      User?    @relation(fields: [actorId], references: [id])
+  actorId    String?
+  action     String   // e.g. "courier.approve", "order.refund"
+  targetType String?  // "User" | "Order" | "Shop" | etc.
+  targetId   String?
+  metadata   String?  // JSON
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
+// Idempotency table for payment webhooks — prevents double-processing
+// the same callback if a provider retries.
+model ProcessedWebhook {
+  id          String   @id @default(uuid())
+  provider    String   // "click" | "payme" | "uzum"
+  externalId  String   // provider's transaction id
+  orderId     String?
+  payload     String   // JSON snapshot of body
+  result      String   // JSON snapshot of our response
+  createdAt   DateTime @default(now())
+
+  @@unique([provider, externalId])
+  @@index([orderId])
 }
 
 model Address {
@@ -69,6 +165,13 @@ model Address {
   lng       Float?
   isDefault Boolean  @default(false)
   comment   String?
+
+  // Detailed delivery instructions (entrance, floor, apt, intercom)
+  entrance     String?
+  floor        String?
+  apartment    String?
+  intercom     String?
+  instructions String?
 }
 
 model Shop {
@@ -81,6 +184,9 @@ model Shop {
   lng         Float?
   phone       String?
 
+  // grocery | restaurant | pharmacy | electronics
+  vertical    String   @default("grocery")
+
   isActive    Boolean  @default(true)
   rating      Float    @default(5.0)
 
@@ -88,12 +194,148 @@ model Shop {
   openTime    String   @default("09:00")
   closeTime   String   @default("22:00")
 
+  // Delivery economics (override defaults from env)
+  deliveryBaseFee Float?
+  deliveryPerKm   Float?
+  freeDeliveryKm  Float?
+  minOrderAmount  Float?
+
   members     ShopMember[]
   products    Product[]
   orders      Order[]
+  zones       DeliveryZone[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([vertical])
+  @@index([isActive])
+}
+
+// Delivery zone polygon for a shop. Stored as JSON ring of [lat,lng] points
+// because we're on SQLite. Postgres+PostGIS migration replaces with
+// geometry(Polygon, 4326).
+model DeliveryZone {
+  id          String   @id @default(uuid())
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId      String
+  name        String
+
+  // JSON: [[lat1,lng1],[lat2,lng2],...]. Closed implicitly (last==first).
+  polygon     String
+
+  baseFee     Float    @default(12000)
+  perKmFee    Float    @default(2000)
+  freeKm      Float    @default(2)        // first N km included in baseFee
+  minOrder    Float    @default(0)
+
+  // Optional time-bounded availability (e.g. zone only active 8-22)
+  startsAt    String?  // "HH:MM"
+  endsAt      String?  // "HH:MM"
+
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([shopId, isActive])
+}
+
+// Courier shift (start/end of an availability session).
+model CourierShift {
+  id            String    @id @default(uuid())
+  courier       User      @relation(fields: [courierId], references: [id])
+  courierId     String
+
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+
+  // Optional zones the courier accepted to work in this shift.
+  // JSON: [zoneId1, zoneId2, ...]. Empty = any.
+  zoneIds       String?
+
+  totalEarned   Float     @default(0)
+  totalOrders   Int       @default(0)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([courierId, endedAt])
+}
+
+// Time-bounded surge / discount factor for a vertical or zone.
+model PricingRule {
+  id          String   @id @default(uuid())
+  vertical    String?  // null = global
+  zoneId      String?  // null = all zones in vertical
+
+  surgeFactor Float    @default(1.0)
+  reason      String   // "rain" | "peak_hours" | "low_supply" | "promo"
+
+  validFrom   DateTime
+  validUntil  DateTime
+
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([vertical, isActive, validFrom, validUntil])
+}
+
+// Dispatch offer ledger — every push to a courier is recorded so we can
+// retry, audit, and rank couriers by acceptance rate.
+model DispatchOffer {
+  id         String   @id @default(uuid())
+  orderId    String
+  courier    User     @relation(fields: [courierId], references: [id])
+  courierId  String
+
+  // pending | accepted | declined | timed_out | superseded
+  status     String   @default("pending")
+
+  score      Float    // composite ranking score at offer time
+  distanceKm Float?
+  expiresAt  DateTime
+
+  offeredAt  DateTime @default(now())
+  respondedAt DateTime?
+
+  @@unique([orderId, courierId])
+  @@index([orderId, status])
+  @@index([courierId, offeredAt])
+}
+
+// Hierarchical category tree. Categories can be global (shopId = null) or
+// shop-scoped. A product references at most one category.
+model Category {
+  id        String   @id @default(uuid())
+  parentId  String?
+  parent    Category? @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+
+  // grocery | restaurant | pharmacy | electronics
+  vertical  String
+
+  // Optional: when set, category belongs to a single shop's menu.
+  shopId    String?
+
+  slug      String
+  nameUz    String
+  nameRu    String
+  nameEn    String?
+  iconUrl   String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+
+  products  Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([slug, shopId])
+  @@index([vertical, isActive])
+  @@index([parentId])
+  @@index([shopId])
 }
 
 model ShopMember {
@@ -118,11 +360,24 @@ model Product {
   price         Float
   discountPrice Float?
   unit          String   // кг, шт, л
-  category      String   // produce, meat, dairy, bakery, drinks, grocery
+
+  // Legacy free-text label (produce, meat, dairy, bakery, drinks, grocery).
+  // Kept for backwards compatibility; new code uses categoryRef.
+  category      String
+
+  // Structured category (Phase 1). Optional for legacy rows.
+  categoryRef   Category? @relation(fields: [categoryId], references: [id])
+  categoryId    String?
+
   imageUrl      String
   isAvailable   Boolean  @default(true)
   stock         Int      @default(100)
 
+  // Quick lowercased copy of name+nameUz+description for LIKE-search on SQLite
+  // (and a tsvector-backed column on Postgres later).
+  searchText    String?
+
+  modifierGroups ProductModifierGroup[]
   orderItems    OrderItem[]
 
   createdAt     DateTime @default(now())
@@ -130,6 +385,49 @@ model Product {
 
   @@index([shopId])
   @@index([category])
+  @@index([categoryId])
+  @@index([isAvailable])
+}
+
+// Modifier groups attached to a product. E.g. "Size" with min=1 max=1 options
+// "Small/Medium/Large", or "Toppings" with min=0 max=5 options.
+model ProductModifierGroup {
+  id        String   @id @default(uuid())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+
+  nameUz    String
+  nameRu    String
+  nameEn    String?
+
+  // 0 = optional. Number of options the buyer must pick.
+  minSelect Int      @default(0)
+  maxSelect Int      @default(1)
+  sortOrder Int      @default(0)
+
+  options   ProductModifierOption[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+}
+
+model ProductModifierOption {
+  id        String   @id @default(uuid())
+  group     ProductModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId   String
+
+  nameUz    String
+  nameRu    String
+  nameEn    String?
+
+  // Added to the product price when this option is selected.
+  priceDelta  Float    @default(0)
+  isAvailable Boolean  @default(true)
+  sortOrder   Int      @default(0)
+
+  @@index([groupId])
 }
 
 model Order {
@@ -172,8 +470,28 @@ model Order {
   total           Float
   courierReward   Float    @default(12000)
 
+  // Phase 3 — promo + loyalty applied at checkout
+  couponCode      String?
+  discount        Float    @default(0)
+  loyaltyEarned   Int      @default(0)   // points credited on delivery
+  loyaltySpent    Int      @default(0)   // points debited at checkout
+
+  // Phase 3 — scheduled delivery (null = ASAP)
+  scheduledFor    DateTime?
+  scheduledOrder  ScheduledOrder?
+
+  // Phase 4 — refunds + disputes
+  refundedAt      DateTime?
+  refundedAmount  Float    @default(0)
+  refundReason    String?
+  dispute         Dispute?
+
   // Items
   items           OrderItem[]
+
+  // Phase 3 relations
+  reviews         Review[]
+  chatMessages    ChatMessage[]
 
   // Timestamps for analytics
   createdAt       DateTime @default(now())
@@ -184,7 +502,7 @@ model Order {
   cancelledAt     DateTime?
   cancelReason    String?
 
-  // Rating after delivery
+  // Rating after delivery (legacy quick-rating; richer reviews in Review model)
   buyerRating     Int?    // 1-5
   buyerReview     String?
   courierRating   Int?    // Курьер ставит оценку покупателю
@@ -194,6 +512,7 @@ model Order {
   @@index([shopId])
   @@index([courierId])
   @@index([status])
+  @@index([scheduledFor])
 }
 
 model OrderItem {
@@ -204,8 +523,13 @@ model OrderItem {
   productId   String
   productName String  // Snapshot at time of order
   quantity    Int
-  price       Float
+  price       Float   // Final unit price (base + modifiers) at order time
+  basePrice   Float?  // Snapshot of product price (without modifiers)
   total       Float
+
+  // JSON snapshot of selected modifiers at order time. Format:
+  // [{ groupId, groupName, optionId, optionName, priceDelta }, ...]
+  modifiers   String?
 }
 
 model Notification {
@@ -214,10 +538,227 @@ model Notification {
   userId    String
   title     String
   body      String
-  type      String   // order_update, promo, system
+  type      String   // order_update, promo, system, chat
   data      String?  // JSON payload
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@index([userId, isRead])
+}
+
+// ── Phase 3: promo, loyalty, reviews, chat, scheduled orders ────────────────
+
+// Promo codes. `code` is the human-readable identifier and primary key.
+model Coupon {
+  code         String   @id
+  // PERCENT (value is 1-100), FIXED (value is UZS amount), FREE_DELIVERY (value=0)
+  type         String
+  value        Float    @default(0)
+
+  minOrder     Float?
+  maxDiscount  Float?
+
+  validFrom    DateTime
+  validUntil   DateTime
+
+  // Total redemptions across all users; null = unlimited.
+  usageLimit   Int?
+  usagePerUser Int      @default(1)
+  usedCount    Int      @default(0)
+
+  // Optional scoping: if both null, applies globally.
+  vertical     String?
+  shopId       String?
+
+  // First-order-only flag (e.g. WELCOME20).
+  firstOrderOnly Boolean @default(false)
+
+  isActive     Boolean  @default(true)
+
+  redemptions  CouponRedemption[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive, validFrom, validUntil])
+  @@index([vertical])
+  @@index([shopId])
+}
+
+model CouponRedemption {
+  id         String   @id @default(uuid())
+  coupon     Coupon   @relation(fields: [couponCode], references: [code])
+  couponCode String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  orderId    String
+  discount   Float
+  redeemedAt DateTime @default(now())
+
+  @@unique([couponCode, orderId])
+  @@index([userId])
+  @@index([orderId])
+}
+
+// Per-user loyalty wallet. Tier upgrade rules live in src/services/loyalty.js.
+model LoyaltyAccount {
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String   @id
+
+  // bronze | silver | gold | platinum
+  tier         String   @default("bronze")
+  points       Int      @default(0)
+  cashback     Float    @default(0)
+
+  lifetimeSpent Float   @default(0)   // drives tier promotions
+
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+}
+
+model LoyaltyTransaction {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  // earn_order | spend_order | bonus_referral | refund | promo | adjustment
+  reason    String
+  delta     Int       // signed; positive earns, negative spends
+  orderId   String?
+  metadata  String?   // JSON
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([orderId])
+}
+
+// Polymorphic review: target may be a Shop, a Courier (User), or a Product.
+model Review {
+  id          String   @id @default(uuid())
+  order       Order    @relation(fields: [orderId], references: [id])
+  orderId     String
+  reviewer    User     @relation("Reviewer", fields: [reviewerId], references: [id])
+  reviewerId  String
+
+  // SHOP | COURIER | PRODUCT
+  targetType  String
+  targetId    String
+
+  rating      Int      // 1..5
+  text        String?
+  // JSON array of uploaded image URLs.
+  photos      String?
+  isVisible   Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([orderId, reviewerId, targetType, targetId])
+  @@index([targetType, targetId])
+  @@index([reviewerId])
+}
+
+// Chat messages between buyer and courier (or shop) within an order.
+model ChatMessage {
+  id          String   @id @default(uuid())
+  order       Order    @relation(fields: [orderId], references: [id])
+  orderId     String
+
+  sender      User     @relation("ChatSender", fields: [senderId], references: [id])
+  senderId    String
+  receiver    User     @relation("ChatReceiver", fields: [receiverId], references: [id])
+  receiverId  String
+
+  text        String?
+  imageUrl    String?
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+
+  createdAt   DateTime @default(now())
+
+  @@index([orderId, createdAt])
+  @@index([receiverId, isRead])
+}
+
+// Scheduled-for-later order. Dispatcher activation runs prep+ETA before the slot.
+model ScheduledOrder {
+  id              String   @id @default(uuid())
+  order           Order    @relation(fields: [orderId], references: [id])
+  orderId         String   @unique
+  scheduledFor    DateTime
+  reminderSentAt  DateTime?
+  activatedAt     DateTime?
+  // pending | activated | cancelled | completed
+  status          String   @default("pending")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([scheduledFor, status])
+}
+
+// ── Phase 4: payouts, disputes ──────────────────────────────────────────────
+
+// Weekly payout aggregate — one row per (recipient, weekStart). Generated
+// by the payouts BullMQ job; admin marks paid after manual transfer.
+model Payout {
+  id          String   @id @default(uuid())
+
+  // 'courier' | 'shop'
+  recipientType String
+  recipientId   String
+
+  // Inclusive Monday 00:00 UTC, exclusive next Monday.
+  periodStart   DateTime
+  periodEnd     DateTime
+
+  // Sum of Order.courierReward (couriers) or
+  //   sum(subtotal*(1-commission)) - refunds (shops).
+  grossAmount   Float
+  commission    Float    @default(0)
+  refundsTotal  Float    @default(0)
+  netAmount     Float
+
+  ordersCount   Int      @default(0)
+
+  // pending | paid | failed | cancelled
+  status        String   @default("pending")
+  paidAt        DateTime?
+  txnRef        String?
+  notes         String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([recipientType, recipientId, periodStart])
+  @@index([recipientType, status])
+  @@index([periodStart])
+}
+
+// Customer dispute over an order (missing items, wrong food, late, damaged).
+model Dispute {
+  id          String   @id @default(uuid())
+  order       Order    @relation(fields: [orderId], references: [id])
+  orderId     String   @unique
+
+  openedById  String
+  // 'missing_items' | 'wrong_items' | 'late' | 'damaged' | 'other'
+  reason      String
+  description String?
+  // JSON array of evidence URLs (photos/videos).
+  evidence    String?
+
+  // open | under_review | resolved | rejected
+  status      String   @default("open")
+
+  resolution  String?  // 'refund' | 'partial_refund' | 'replacement' | 'rejected' | 'no_action'
+  refundAmount Float   @default(0)
+  resolvedById String?
+  resolvedAt  DateTime?
+  resolutionNote String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@index([openedById])
 }

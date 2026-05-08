@@ -16,7 +16,9 @@ const _categoryLabels = {
 
 class CatalogScreen extends StatefulWidget {
   final String category;
-  const CatalogScreen({super.key, required this.category});
+  final String? shopId;
+  final String? shopName;
+  const CatalogScreen({super.key, required this.category, this.shopId, this.shopName});
 
   @override
   State<CatalogScreen> createState() => _CatalogScreenState();
@@ -37,9 +39,22 @@ class _CatalogScreenState extends State<CatalogScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final list = await CatalogApi.instance.list(category: widget.category);
-      if (!mounted) return;
-      setState(() { _products = list; _loading = false; });
+      // When a shopId is supplied (Phase 1 — coming from ShopsScreen) use the
+      // paginated search endpoint scoped to that shop. Otherwise keep the
+      // legacy category list.
+      if (widget.shopId != null) {
+        final res = await CatalogApi.instance.search(
+          shopId: widget.shopId,
+          categoryId: widget.category == 'all' ? null : widget.category,
+          limit: 50,
+        );
+        if (!mounted) return;
+        setState(() { _products = res.items; _loading = false; });
+      } else {
+        final list = await CatalogApi.instance.list(category: widget.category);
+        if (!mounted) return;
+        setState(() { _products = list; _loading = false; });
+      }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -63,7 +78,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
-        title: Text(_categoryLabels[widget.category] ?? widget.category),
+        title: Text(widget.shopName ?? _categoryLabels[widget.category] ?? widget.category),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(70),
           child: Padding(

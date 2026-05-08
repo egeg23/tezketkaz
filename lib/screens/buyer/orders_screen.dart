@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/order_provider.dart';
+import '../../services/review_api.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/rating_dialog.dart';
 
 class BuyerOrdersScreen extends StatelessWidget {
   const BuyerOrdersScreen({super.key});
@@ -12,9 +14,11 @@ class BuyerOrdersScreen extends StatelessWidget {
     final orders = context.watch<OrderProvider>().all;
     final active = orders.where((o) =>
       o.status != AppOrderStatus.delivered &&
+      o.status != AppOrderStatus.confirmedByBuyer &&
       o.status != AppOrderStatus.cancelled).toList();
     final history = orders.where((o) =>
       o.status == AppOrderStatus.delivered ||
+      o.status == AppOrderStatus.confirmedByBuyer ||
       o.status == AppOrderStatus.cancelled).toList();
 
     return Scaffold(
@@ -72,10 +76,79 @@ class _OrderCard extends StatelessWidget {
   String _fmt(double v) =>
     '${v.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ')} so\'m';
 
+  /// Walk through up to three rating dialogs (shop → courier → product).
+  /// Each step is independent — a cancelled dialog skips to the next target.
+  Future<void> _rateOrder(BuildContext context) async {
+    final api = ReviewApi.instance;
+    // Shop
+    final shopRes = await RatingDialog.show(
+      context,
+      title: 'Do\'konni baholang',
+      subtitle: order.shopName,
+    );
+    if (shopRes != null) {
+      try {
+        await api.create(order.id,
+            targetType: 'shop',
+            targetId: order.shopId,
+            rating: shopRes.rating,
+            text: shopRes.text,
+            photos: shopRes.photos);
+      } catch (_) {}
+    }
+    // Courier (if assigned)
+    if (order.courierId != null) {
+      if (!context.mounted) return;
+      final courierRes = await RatingDialog.show(
+        context,
+        title: 'Kuryerni baholang',
+        subtitle: order.courierName,
+        allowPhotos: false,
+      );
+      if (courierRes != null) {
+        try {
+          await api.create(order.id,
+              targetType: 'courier',
+              targetId: order.courierId!,
+              rating: courierRes.rating,
+              text: courierRes.text);
+        } catch (_) {}
+      }
+    }
+    // Optional product review for first item
+    if (order.items.isNotEmpty) {
+      if (!context.mounted) return;
+      final p = order.items.first.product;
+      final productRes = await RatingDialog.show(
+        context,
+        title: 'Mahsulotni baholang',
+        subtitle: p.name,
+      );
+      if (productRes != null) {
+        try {
+          await api.create(order.id,
+              targetType: 'product',
+              targetId: p.id,
+              rating: productRes.rating,
+              text: productRes.text,
+              photos: productRes.photos);
+        } catch (_) {}
+      }
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Rahmat! Baho yuborildi.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isActive = order.status != AppOrderStatus.delivered &&
-                     order.status != AppOrderStatus.cancelled;
+                     order.status != AppOrderStatus.cancelled &&
+                     order.status != AppOrderStatus.confirmedByBuyer;
+    final isComplete = order.status == AppOrderStatus.delivered ||
+                       order.status == AppOrderStatus.confirmedByBuyer;
 
     return GestureDetector(
       onTap: isActive ? () => context.go('/buyer/tracking/${order.id}') : null,
@@ -214,6 +287,22 @@ class _OrderCard extends StatelessWidget {
                           minimumSize: const Size(0, 40),
                           side: const BorderSide(color: AppColors.primary),
                           foregroundColor: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (isComplete) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _rateOrder(context),
+                        icon: const Icon(Icons.star_outline_rounded, size: 18),
+                        label: const Text('Buyurtmani baholash'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.warning,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(0, 40),
                         ),
                       ),
                     ),

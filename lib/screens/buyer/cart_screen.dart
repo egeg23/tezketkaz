@@ -1,12 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../../models/models.dart';
+import '../../l10n/l10n.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/order_provider.dart';
+import '../../services/api_client.dart';
+import '../../services/dispatch_api.dart';
+import '../../services/promo_api.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/time_slot_picker.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -21,6 +27,24 @@ class _CartScreenState extends State<CartScreen> {
     text: 'Toshkent, Yunusobod, 13-mavze, 28-uy',
   );
   final _commentCtrl = TextEditingController();
+  final _promoCtrl = TextEditingController();
+
+  Timer? _estimateDebounce;
+  bool _estimateLoading = false;
+  String? _estimateError;
+  String? _lastRequestedKey;
+  bool _promoValidating = false;
+  String? _promoError;
+  bool _isScheduled = false;
+  num _userLoyaltyPoints = 0;
+  bool _loyaltyLoaded = false;
+
+  // Stub coordinates — buyer flow Phase 1 chooses a saved address; if a
+  // selected location is later piped through this screen, plug it in here.
+  // Falls back to Tashkent centre so the estimate API still receives valid
+  // floats.
+  double get _lat => 41.2995;
+  double get _lng => 69.2401;
 
   static const _payments = [
     {'id': 'click',   'name': 'Click',     'emoji': '💳', 'hint': 'To\'lov kartasi'},
@@ -29,9 +53,207 @@ class _CartScreenState extends State<CartScreen> {
     {'id': 'cash',    'name': 'Naqd pul',  'emoji': '💵', 'hint': 'Yetkazib berishda'},
   ];
 
+  CartProvider? _cartListening;
+
+  @override
+  void initState() {
+    super.initState();
+    _addressCtrl.addListener(_onInputsChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _cartListening = context.read<CartProvider>();
+      _cartListening!.addListener(_onInputsChanged);
+      _promoCtrl.text = _cartListening!.couponCode ?? '';
+      _isScheduled = _cartListening!.scheduledFor != null;
+      _refreshEstimate(immediate: true);
+      _loadLoyalty();
+    });
+  }
+
+  @override
+  void dispose() {
+    _estimateDebounce?.cancel();
+    _addressCtrl.removeListener(_onInputsChanged);
+    _cartListening?.removeListener(_onInputsChanged);
+    _addressCtrl.dispose();
+    _commentCtrl.dispose();
+    _promoCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadLoyalty() async {
+    try {
+      final acc = await LoyaltyApi.instance.me();
+      if (!mounted) return;
+      setState(() {
+        _userLoyaltyPoints = acc.points;
+        _loyaltyLoaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loyaltyLoaded = true);
+    }
+  }
+
+  void _onInputsChanged() {
+    // Listener fires for every cart mutation including our own
+    // `setEstimate(...)`. The fingerprint check inside `_refreshEstimate`
+    // dedupes redundant work, so a no-op refetch is just a fast string
+    // compare here.
+    _refreshEstimate();
+  }
+
   String _fmt(double v) => '${v.toInt()
       .toString()
       .replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ')} so\'m';
+
+  /// Debounced (500ms) call to `dispatchApi.estimate`. Caches the result on
+  /// `CartProvider.lastEstimate` so navigating away and back doesn't refetch
+  /// when the inputs haven't changed.
+  void _refreshEstimate({bool immediate = false}) {
+    _estimateDebounce?.cancel();
+    final cart = context.read<CartProvider>();
+    if (cart.isEmpty) return;
+    final shopId = cart.orderItems.first.product.shopId;
+    final key = cart.estimateKey(
+      shopId: shopId,
+      addressKey: '${_addressCtrl.text.trim()}|$_lat,$_lng',
+      promoCode: cart.couponCode,
+      loyaltyPoints: cart.loyaltyPoints,
+    );
+    // Skip when the cached estimate matches and is fresh.
+    if (cart.lastEstimateKey == key &&
+        cart.lastEstimate != null &&
+        DateTime.now().difference(cart.lastEstimate!.fetchedAt) <
+            const Duration(seconds: 30) &&
+        !immediate) {
+      return;
+    }
+    Future<void> run() async {
+      if (!mounted) return;
+      setState(() {
+        _estimateLoading = true;
+        _estimateError = null;
+        _lastRequestedKey = key;
+      });
+      try {
+        final res = await DispatchApi.instance.estimate(
+          shopId: shopId,
+          address: {
+            'lat': _lat,
+            'lng': _lng,
+            'fullAddress': _addressCtrl.text.trim(),
+          },
+          items: cart.toApiPayload(),
+          couponCode: cart.couponCode,
+          loyaltyPoints: cart.loyaltyPoints > 0 ? cart.loyaltyPoints : null,
+        );
+        if (!mounted || _lastRequestedKey != key) return;
+        final est = CartEstimate.fromJson(res);
+        cart.setEstimate(est, key: key);
+        setState(() => _estimateLoading = false);
+      } on ApiException catch (e) {
+        if (!mounted || _lastRequestedKey != key) return;
+        // 400 + out_of_zone body → flag the cached estimate as out-of-zone.
+        final msg = e.message.toLowerCase();
+        if (e.statusCode == 400 && msg.contains('out_of_zone')) {
+          final stub = CartEstimate(
+            subtotal: cart.subtotal,
+            deliveryFee: 0,
+            total: cart.subtotal,
+            minOrder: 0,
+            minOrderMet: true,
+            outOfZone: true,
+            fetchedAt: DateTime.now(),
+          );
+          cart.setEstimate(stub, key: key);
+          setState(() {
+            _estimateLoading = false;
+            _estimateError = null;
+          });
+        } else {
+          setState(() {
+            _estimateLoading = false;
+            _estimateError = e.message;
+          });
+        }
+      } catch (e) {
+        if (!mounted || _lastRequestedKey != key) return;
+        setState(() {
+          _estimateLoading = false;
+          _estimateError = e.toString();
+        });
+      }
+    }
+
+    if (immediate) {
+      run();
+    } else {
+      _estimateDebounce =
+          Timer(const Duration(milliseconds: 500), run);
+    }
+  }
+
+  Future<void> _applyPromo() async {
+    final cart = context.read<CartProvider>();
+    if (cart.couponCode != null) {
+      // Tap acts as cancel when a code is already applied.
+      cart.setCouponCode(null);
+      _promoCtrl.clear();
+      setState(() => _promoError = null);
+      return;
+    }
+    final code = _promoCtrl.text.trim();
+    if (code.isEmpty) return;
+    if (cart.isEmpty) return;
+    final shopId = cart.orderItems.first.product.shopId;
+    final subtotal = cart.lastEstimate?.subtotal ?? cart.subtotal;
+    setState(() {
+      _promoValidating = true;
+      _promoError = null;
+    });
+    try {
+      final result = await PromoApi.instance.validate(
+        code: code,
+        shopId: shopId,
+        subtotal: subtotal,
+      );
+      if (!mounted) return;
+      if (result.valid) {
+        cart.setCouponCode(code);
+        setState(() => _promoError = null);
+        HapticFeedback.lightImpact();
+      } else {
+        setState(() => _promoError = result.reason ?? 'Promo kod yaroqsiz');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _promoError = e.toString());
+    } finally {
+      if (mounted) setState(() => _promoValidating = false);
+    }
+  }
+
+  Future<void> _openPromoList() async {
+    final cart = context.read<CartProvider>();
+    if (cart.isEmpty) return;
+    final shopId = cart.orderItems.first.product.shopId;
+    final subtotal = cart.lastEstimate?.subtotal ?? cart.subtotal;
+    final code = await context.push<String>(
+      '/buyer/promo',
+      extra: {'shopId': shopId, 'subtotal': subtotal},
+    );
+    if (!mounted || code == null || code.isEmpty) return;
+    _promoCtrl.text = code;
+    await _applyPromo();
+  }
+
+  String _fmtSlot(DateTime dt) {
+    final today = DateTime.now();
+    final isTomorrow = dt.day != today.day;
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    return isTomorrow ? 'Ertaga $hh:$mm' : 'Bugun $hh:$mm';
+  }
 
   Future<void> _placeOrder() async {
     final cart = context.read<CartProvider>();
@@ -45,9 +267,13 @@ class _CartScreenState extends State<CartScreen> {
       final order = await orders.placeOrder(
         shopId: shopId,
         items: cart.orderItems,
+        itemsPayload: cart.toApiPayload(),
         deliveryAddress: _addressCtrl.text.trim(),
         customerComment: _commentCtrl.text.trim().isEmpty ? null : _commentCtrl.text.trim(),
         paymentMethod: _paymentMethod,
+        couponCode: cart.couponCode,
+        loyaltyPoints: cart.loyaltyPoints > 0 ? cart.loyaltyPoints : null,
+        scheduledFor: cart.scheduledFor,
       );
       cart.clear();
       if (mounted) {
@@ -106,9 +332,9 @@ class _CartScreenState extends State<CartScreen> {
             ),
             child: Column(
               children: [
-                for (var i = 0; i < cart.orderItems.length; i++) ...[
-                  _ItemRow(item: cart.orderItems[i]),
-                  if (i < cart.orderItems.length - 1)
+                for (var i = 0; i < cart.lines.length; i++) ...[
+                  _ItemRow(line: cart.lines[i]),
+                  if (i < cart.lines.length - 1)
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 12),
                       child: Divider(height: 1),
@@ -171,81 +397,225 @@ class _CartScreenState extends State<CartScreen> {
           ),
 
           const SizedBox(height: 16),
-          _SectionLabel('Hisob'),
+          _SectionLabel(t(context, 'cart.promo_code')),
           const SizedBox(height: 8),
           _Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _SumRow('Mahsulotlar (${cart.itemCount})', _fmt(cart.subtotal)),
-                  const SizedBox(height: 10),
-                  _SumRow(
-                    'Yetkazib berish',
-                    cart.deliveryFee == 0 ? 'Bepul' : _fmt(cart.deliveryFee),
-                    accent: cart.deliveryFee == 0,
-                    sub: cart.deliveryFee > 0 ? "100 000 so'mdan bepul" : null,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.local_offer_outlined,
+                          color: AppColors.primary, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _promoCtrl,
+                          textCapitalization: TextCapitalization.characters,
+                          decoration: InputDecoration(
+                            hintText: t(context, 'cart.promo_hint'),
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _promoValidating ? null : _applyPromo,
+                        child: _promoValidating
+                            ? const SizedBox(
+                                width: 16, height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2))
+                            : Text(cart.couponCode == null
+                                ? t(context, 'promo.apply')
+                                : t(context, 'common.cancel')),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.list_rounded,
+                            color: AppColors.textSecondary),
+                        tooltip: t(context, 'promo.title'),
+                        onPressed: _openPromoList,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 14),
-                  Container(height: 1, color: AppColors.borderLight),
-                  const SizedBox(height: 14),
-                  _SumRow('Jami', _fmt(cart.total), bold: true),
-                ],
-              ),
+                ),
+                if (_promoError != null)
+                  Padding(
+                    padding:
+                        const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                    child: Text(_promoError!,
+                        style: const TextStyle(
+                            color: AppColors.error, fontSize: 12)),
+                  )
+                else if (cart.couponCode != null)
+                  Padding(
+                    padding:
+                        const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                    child: Text(
+                      '${t(context, 'cart.promo_applied')}: ${cart.couponCode}',
+                      style: const TextStyle(
+                          color: AppColors.success, fontSize: 12,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+              ],
             ),
+          ),
+
+          if (_loyaltyLoaded && _userLoyaltyPoints > 0) ...[
+            const SizedBox(height: 16),
+            _SectionLabel(t(context, 'cart.loyalty_points')),
+            const SizedBox(height: 8),
+            _LoyaltyPointsCard(
+              available: _userLoyaltyPoints.toInt(),
+              currentSubtotal:
+                  cart.lastEstimate?.subtotal ?? cart.subtotal,
+              selected: cart.loyaltyPoints,
+              onChanged: (v) {
+                cart.setLoyaltyPoints(v);
+              },
+            ),
+          ],
+
+          const SizedBox(height: 16),
+          _SectionLabel(t(context, 'cart.plan_delivery')),
+          const SizedBox(height: 8),
+          _Card(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _PlanToggleButton(
+                          label: t(context, 'cart.plan_asap'),
+                          icon: Icons.flash_on_rounded,
+                          selected: !_isScheduled,
+                          onTap: () {
+                            setState(() => _isScheduled = false);
+                            cart.setScheduledFor(null);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _PlanToggleButton(
+                          label: t(context, 'cart.plan_schedule'),
+                          icon: Icons.schedule_rounded,
+                          selected: _isScheduled,
+                          onTap: () =>
+                              setState(() => _isScheduled = true),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_isScheduled) ...[
+                  const Divider(height: 16),
+                  TimeSlotPicker(
+                    selected: cart.scheduledFor,
+                    onSelected: (when) {
+                      cart.setScheduledFor(when);
+                    },
+                  ),
+                  if (cart.scheduledFor != null)
+                    Padding(
+                      padding:
+                          const EdgeInsets.fromLTRB(14, 4, 14, 12),
+                      child: Text(
+                        '${t(context, 'cart.scheduled_for')}: '
+                        '${_fmtSlot(cart.scheduledFor!)}',
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+          _SectionLabel('Hisob'),
+          const SizedBox(height: 8),
+          _PricingBreakdown(
+            cart: cart,
+            estimate: cart.lastEstimate,
+            isLoading: _estimateLoading,
+            error: _estimateError,
+            fmtMoney: _fmt,
           ),
         ],
       ),
       bottomNavigationBar: SafeArea(
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(AppRadii.md),
-            boxShadow: AppShadows.button,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: _isPlacing ? null : _placeOrder,
+        child: Builder(builder: (_) {
+          final est = cart.lastEstimate;
+          final canCheckout = !_isPlacing &&
+              !(est?.outOfZone ?? false) &&
+              (est?.minOrderMet ?? true);
+          final total = est?.total ?? cart.total;
+          return Container(
+            margin: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            decoration: BoxDecoration(
+              color: canCheckout ? AppColors.primary : AppColors.border,
               borderRadius: BorderRadius.circular(AppRadii.md),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-                child: Row(
-                  children: [
-                    if (_isPlacing) ...[
-                      const SizedBox(
-                        width: 22, height: 22,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+              boxShadow: canCheckout ? AppShadows.button : null,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: canCheckout ? _placeOrder : null,
+                borderRadius: BorderRadius.circular(AppRadii.md),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                  child: Row(
+                    children: [
+                      if (_isPlacing) ...[
+                        const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2.5),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      Expanded(
+                        child: Text(
+                          _isPlacing
+                              ? 'Yuborilmoqda...'
+                              : 'Buyurtma berish · ${_fmt(total)}',
+                          style: TextStyle(
+                            color: canCheckout
+                                ? Colors.white
+                                : AppColors.textSecondary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
                       ),
-                      const SizedBox(width: 12),
+                      if (!_isPlacing && canCheckout)
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.22),
+                            borderRadius:
+                                BorderRadius.circular(AppRadii.pill),
+                          ),
+                          child: const Icon(Icons.arrow_forward_rounded,
+                              color: Colors.white, size: 18),
+                        ),
                     ],
-                    Expanded(
-                      child: Text(
-                        _isPlacing
-                            ? 'Yuborilmoqda...'
-                            : 'Buyurtma berish · ${_fmt(cart.total)}',
-                        style: const TextStyle(
-                          color: Colors.white, fontSize: 16,
-                          fontWeight: FontWeight.w800, letterSpacing: 0.1,
-                        ),
-                      ),
-                    ),
-                    if (!_isPlacing)
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.22),
-                          borderRadius: BorderRadius.circular(AppRadii.pill),
-                        ),
-                        child: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
-                      ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
+          );
+        }),
       ),
     );
   }
@@ -298,8 +668,8 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _ItemRow extends StatelessWidget {
-  final OrderItem item;
-  const _ItemRow({required this.item});
+  final CartLine line;
+  const _ItemRow({required this.line});
 
   String _fmt(double v) => '${v.toInt()
       .toString()
@@ -308,6 +678,11 @@ class _ItemRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cart = context.read<CartProvider>();
+    final modifierText = line.snapshot.isEmpty
+        ? null
+        : line.snapshot
+            .expand((s) => s.options.map((o) => o.name))
+            .join(' · ');
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Row(
@@ -316,9 +691,9 @@ class _ItemRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppRadii.sm),
             child: SizedBox(
               width: 64, height: 64,
-              child: item.product.imageUrl.isNotEmpty
+              child: line.product.imageUrl.isNotEmpty
                   ? CachedNetworkImage(
-                      imageUrl: item.product.imageUrl, fit: BoxFit.cover,
+                      imageUrl: line.product.imageUrl, fit: BoxFit.cover,
                       placeholder: (_, __) => Container(color: AppColors.surfaceMuted),
                       errorWidget: (_, __, ___) => Container(
                         color: AppColors.surfaceMuted,
@@ -336,10 +711,16 @@ class _ItemRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.product.name,
+                Text(line.product.name,
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                if (modifierText != null) ...[
+                  const SizedBox(height: 2),
+                  Text(modifierText,
+                      style: const TextStyle(
+                          color: AppColors.textSecondary, fontSize: 12)),
+                ],
                 const SizedBox(height: 4),
-                Text(_fmt(item.product.effectivePrice),
+                Text(_fmt(line.unitPrice),
                     style: const TextStyle(color: AppColors.textHint, fontSize: 12)),
               ],
             ),
@@ -355,16 +736,30 @@ class _ItemRow extends StatelessWidget {
               children: [
                 _CartStep(
                   icon: Icons.remove_rounded,
-                  onTap: () => cart.remove(item.product.id),
+                  onTap: () => cart.removeLine(line.key),
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text('${item.quantity}',
+                  child: Text('${line.quantity}',
                       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                 ),
                 _CartStep(
                   icon: Icons.add_rounded,
-                  onTap: () => cart.add(item.product),
+                  // Re-add with the same modifier set so quantity grows on
+                  // the existing line rather than spawning a new one.
+                  onTap: () {
+                    if (line.modifiers.isEmpty) {
+                      cart.add(line.product);
+                    } else {
+                      cart.addWithModifiers(
+                        line.product,
+                        1,
+                        line.modifiers,
+                        line.unitPrice,
+                        snapshot: line.snapshot,
+                      );
+                    }
+                  },
                 ),
               ],
             ),
@@ -521,6 +916,210 @@ class _PaymentRow extends StatelessWidget {
   );
 }
 
+/// Pricing breakdown — wraps subtotal/delivery/total/ETA/distance plus the
+/// out-of-zone & min-order banners. Driven by the latest `CartEstimate`
+/// cached on `CartProvider`.
+class _PricingBreakdown extends StatelessWidget {
+  final CartProvider cart;
+  final CartEstimate? estimate;
+  final bool isLoading;
+  final String? error;
+  final String Function(double) fmtMoney;
+
+  const _PricingBreakdown({
+    required this.cart,
+    required this.estimate,
+    required this.isLoading,
+    required this.error,
+    required this.fmtMoney,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final est = estimate;
+
+    final subtotal = est?.subtotal ?? cart.subtotal;
+    final deliveryFee = est?.deliveryFee ?? cart.deliveryFee;
+    final total = est?.total ?? cart.total;
+
+    final children = <Widget>[];
+
+    if (est?.outOfZone == true) {
+      children.add(_Banner(
+        emoji: '⚠️',
+        bg: AppColors.errorLight,
+        fg: AppColors.error,
+        title: "Adresga yetkazib bo'lmaydi",
+        subtitle: 'Доставка не доступна',
+      ));
+    }
+
+    if (est != null && !est.minOrderMet) {
+      final missing = est.minOrder - est.subtotal;
+      children.add(_Banner(
+        emoji: '🛒',
+        bg: AppColors.warningLight,
+        fg: AppColors.warning,
+        title:
+            "Yana ${fmtMoney(missing < 0 ? 0 : missing)} qo'shing",
+        subtitle: "Minimal buyurtma ${fmtMoney(est.minOrder)}",
+      ));
+    }
+
+    children.add(_Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                    child: _SumRow('Mahsulotlar (${cart.itemCount})',
+                        fmtMoney(subtotal))),
+                if (isLoading)
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _SumRow(
+                    'Yetkazib berish',
+                    deliveryFee == 0 ? 'Bepul' : fmtMoney(deliveryFee),
+                    accent: deliveryFee == 0,
+                    sub: est?.surgeReason,
+                  ),
+                ),
+                if ((est?.surgeFactor ?? 1.0) > 1.0)
+                  Container(
+                    margin: const EdgeInsets.only(left: 8),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: AppColors.warningLight,
+                        borderRadius: BorderRadius.circular(8)),
+                    child: Text(
+                        '×${est!.surgeFactor.toStringAsFixed(1)} surge',
+                        style: const TextStyle(
+                            color: AppColors.warning,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700)),
+                  ),
+              ],
+            ),
+            if (est?.etaMinutes != null || est?.distanceKm != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  if (est?.etaMinutes != null) ...[
+                    const Icon(Icons.timer_outlined,
+                        size: 14, color: AppColors.textSecondary),
+                    const SizedBox(width: 4),
+                    Text('Доставка через ~${est!.etaMinutes} мин',
+                        style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary)),
+                  ],
+                  if (est?.distanceKm != null) ...[
+                    const SizedBox(width: 12),
+                    const Icon(Icons.place_outlined,
+                        size: 14, color: AppColors.textSecondary),
+                    const SizedBox(width: 4),
+                    Text('${est!.distanceKm!.toStringAsFixed(1)} км',
+                        style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary)),
+                  ],
+                ],
+              ),
+            ],
+            if ((est?.couponDiscount ?? 0) > 0) ...[
+              const SizedBox(height: 10),
+              _SumRow('Promo',
+                  '−${fmtMoney(est!.couponDiscount)}',
+                  accent: true),
+            ],
+            if ((est?.loyaltyDiscount ?? 0) > 0) ...[
+              const SizedBox(height: 10),
+              _SumRow('Bonuslar',
+                  '−${fmtMoney(est!.loyaltyDiscount)}',
+                  accent: true),
+            ],
+            const SizedBox(height: 14),
+            Container(height: 1, color: AppColors.borderLight),
+            const SizedBox(height: 14),
+            _SumRow('Jami', fmtMoney(total), bold: true),
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              Text(error!,
+                  style: const TextStyle(
+                      color: AppColors.error, fontSize: 12)),
+            ],
+          ],
+        ),
+      ),
+    ));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          children[i],
+        ],
+      ],
+    );
+  }
+}
+
+class _Banner extends StatelessWidget {
+  final String emoji, title, subtitle;
+  final Color bg, fg;
+  const _Banner({
+    required this.emoji,
+    required this.title,
+    required this.subtitle,
+    required this.bg,
+    required this.fg,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(AppRadii.md),
+            border: Border.all(color: fg.withValues(alpha: 0.4))),
+        child: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 22)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          color: fg,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          color: AppColors.textSecondary, fontSize: 12)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
 class _SumRow extends StatelessWidget {
   final String label, value;
   final bool bold, accent;
@@ -555,4 +1154,129 @@ class _SumRow extends StatelessWidget {
       ],
     ],
   );
+}
+
+/// Phase 3 — slider for spending loyalty points.
+///
+/// Cap at min(available points, floor(subtotal / 100)) so we never let the
+/// buyer drop below 0 — backend re-validates anyway.
+class _LoyaltyPointsCard extends StatelessWidget {
+  final int available;
+  final double currentSubtotal;
+  final int selected;
+  final ValueChanged<int> onChanged;
+
+  const _LoyaltyPointsCard({
+    required this.available,
+    required this.currentSubtotal,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cap = (currentSubtotal / 100).floor();
+    final maxPts = cap < available ? cap : available;
+    final clamped = selected > maxPts ? maxPts : selected;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+        boxShadow: AppShadows.card,
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.workspace_premium_rounded,
+                  color: AppColors.warning, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${t(context, 'cart.points_available')}: $available',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+              ),
+              Text('-$clamped',
+                  style: const TextStyle(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16)),
+            ],
+          ),
+          if (maxPts == 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                t(context, 'cart.points_too_small'),
+                style: const TextStyle(
+                    color: AppColors.textHint, fontSize: 12),
+              ),
+            )
+          else
+            Slider(
+              value: clamped.toDouble(),
+              min: 0,
+              max: maxPts.toDouble(),
+              divisions: maxPts > 0 ? maxPts : 1,
+              label: '$clamped',
+              onChanged: (v) => onChanged(v.round()),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tab-style toggle for ASAP vs Schedule planning.
+class _PlanToggleButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+  const _PlanToggleButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.primary : Colors.transparent,
+      borderRadius: BorderRadius.circular(AppRadii.md),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadii.md),
+            border: Border.all(
+              color: selected ? AppColors.primary : AppColors.border,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon,
+                  size: 18,
+                  color: selected ? Colors.white : AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Text(label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: selected ? Colors.white : AppColors.textPrimary,
+                  )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

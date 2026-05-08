@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/api_client.dart';
+import '../services/push_service.dart';
 import '../services/socket_service.dart';
 
 enum AuthState { unknown, unauthenticated, authenticated }
@@ -21,10 +24,11 @@ class AuthProvider extends ChangeNotifier {
 
   final _api = ApiClient.instance;
 
-  /// On app start — try to restore session from saved token
+  /// On app start — try to restore session from saved tokens
   Future<void> tryRestoreSession() async {
     try {
-      final token = await _api.getToken().timeout(const Duration(seconds: 3));
+      final token =
+          await _api.getAccessToken().timeout(const Duration(seconds: 3));
       if (token == null) {
         _state = AuthState.unauthenticated;
         notifyListeners();
@@ -34,8 +38,10 @@ class AuthProvider extends ChangeNotifier {
       _user = _parseUser(res.data['user']);
       _state = AuthState.authenticated;
       SocketService.instance.connect();
+      // Fire-and-forget — push will silently degrade if Firebase not configured.
+      unawaited(PushService.instance.init());
     } catch (_) {
-      try { await _api.clearToken(); } catch (_) {}
+      try { await _api.clearTokens(); } catch (_) {}
       _state = AuthState.unauthenticated;
     }
     notifyListeners();
@@ -58,10 +64,25 @@ class AuthProvider extends ChangeNotifier {
     _setLoading(true);
     try {
       final res = await _api.post('/api/auth/verify-otp', {'phone': phone, 'code': code});
-      await _api.saveToken(res.data['token']);
-      _user = _parseUser(res.data['user']);
+      final data = res.data as Map;
+      final access = data['accessToken'] as String?;
+      final refresh = data['refreshToken'] as String?;
+      if (access != null && refresh != null) {
+        await _api.saveTokens(access, refresh);
+      } else if (data['token'] is String) {
+        // Backwards compatibility with the legacy single-token shape.
+        if (kDebugMode) {
+          debugPrint('verify-otp returned legacy {token} shape — '
+              'no refresh token will be persisted.');
+        }
+        await _api.saveToken(data['token'] as String);
+      } else {
+        throw ApiException('Server javobi noto\'g\'ri', res.statusCode);
+      }
+      _user = _parseUser(data['user']);
       _state = AuthState.authenticated;
       SocketService.instance.connect();
+      unawaited(PushService.instance.init());
       _setLoading(false);
       return true;
     } on ApiException catch (e) {
@@ -135,7 +156,20 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await _api.clearToken();
+    // Best-effort: unregister FCM token before clearing auth.
+    try {
+      await PushService.instance.dispose();
+    } catch (_) {}
+
+    // Best-effort: tell backend to invalidate the refresh token.
+    try {
+      final refresh = await _api.getRefreshToken();
+      if (refresh != null) {
+        await _api.post('/api/auth/logout', {'refreshToken': refresh});
+      }
+    } catch (_) {}
+
+    await _api.clearTokens();
     SocketService.instance.disconnect();
     _user = null;
     _state = AuthState.unauthenticated;

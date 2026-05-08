@@ -83,6 +83,13 @@ class _TrackingScreenState extends State<TrackingScreen> {
           onPressed: () => context.go('/buyer'),
         ),
         title: Text('Buyurtma ${order.orderNumber ?? '#${order.id.substring(order.id.length - 4)}'}'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline_rounded),
+            tooltip: 'Chat',
+            onPressed: () => context.push('/order/${order.id}/chat'),
+          ),
+        ],
       ),
       body: Column(
         children: [

@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../providers/cart_provider.dart';
+import '../screens/buyer/product_detail_screen.dart';
 import '../theme/app_theme.dart';
 
 String _formatPrice(double price) {
@@ -37,6 +38,14 @@ class ProductCard extends StatelessWidget {
     }
   }
 
+  void _openDetail(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProductDetailScreen(product: product),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartProvider>();
@@ -50,7 +59,9 @@ class ProductCard extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadii.lg),
-        child: Column(
+        child: InkWell(
+          onTap: () => _openDetail(context),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Image with overlay controls
@@ -160,6 +171,7 @@ class ProductCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

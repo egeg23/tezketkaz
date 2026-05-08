@@ -1,12 +1,17 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import 'firebase_options.dart';
+import 'services/sentry_service.dart';
 import 'theme/app_theme.dart';
 import 'models/models.dart';
 import 'providers/auth_provider.dart';
 import 'providers/cart_provider.dart';
+import 'providers/courier_state_provider.dart';
 import 'providers/order_provider.dart';
 
 import 'screens/auth/splash_screen.dart';
@@ -20,6 +25,10 @@ import 'screens/buyer/cart_screen.dart';
 import 'screens/buyer/orders_screen.dart';
 import 'screens/buyer/tracking_screen.dart';
 import 'screens/buyer/profile_screen.dart';
+import 'screens/buyer/shops_screen.dart';
+import 'screens/buyer/address_book_screen.dart';
+import 'screens/buyer/promo_screen.dart';
+import 'screens/buyer/loyalty_screen.dart';
 import 'screens/courier/courier_shell.dart';
 import 'screens/courier/courier_home_screen.dart';
 import 'screens/courier/active_order_screen.dart';
@@ -31,15 +40,33 @@ import 'screens/shop/shop_other_screens.dart';
 import 'screens/shop/shop_products_screen.dart';
 import 'screens/shared/role_switcher_screen.dart';
 import 'screens/shared/courier_verification_screen.dart';
+import 'screens/shared/chat_screen.dart';
+import 'screens/shared/reviews_screen.dart';
 
-void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.dark,
-  ));
-  runApp(const TezKetKazApp());
+Future<void> main() async {
+  // SENTRY_DSN is optional. When omitted (local dev) SentryService.init becomes
+  // a pass-through and just runs the app directly.
+  const sentryDsn = String.fromEnvironment('SENTRY_DSN');
+
+  await SentryService.init(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      } catch (e) {
+        debugPrint('Firebase init skipped: $e');
+      }
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+      ));
+      runApp(const TezKetKazApp());
+    },
+    dsn: sentryDsn.isEmpty ? null : sentryDsn,
+  );
 }
 
 class TezKetKazApp extends StatefulWidget {
@@ -52,6 +79,7 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
   final _auth = AuthProvider();
   final _cart = CartProvider();
   final _orders = OrderProvider();
+  final _courier = CourierStateProvider();
   late final GoRouter _router = _buildRouter(_auth);
 
   @override
@@ -61,6 +89,7 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
         ChangeNotifierProvider.value(value: _auth),
         ChangeNotifierProvider.value(value: _cart),
         ChangeNotifierProvider.value(value: _orders),
+        ChangeNotifierProvider.value(value: _courier),
       ],
       child: MaterialApp.router(
         title: 'TezKetKaz',
@@ -93,15 +122,64 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       GoRoute(path: '/switch-role', builder: (_, __) => const RoleSwitcherScreen()),
       GoRoute(path: '/courier-verification', builder: (_, __) => const CourierVerificationScreen()),
 
+      // Phase 3 — chat / reviews / loyalty / promo (modal screens, no shell).
+      GoRoute(
+        path: '/order/:orderId/chat',
+        builder: (_, s) => ChatScreen(
+          orderId: s.pathParameters['orderId'] ?? '',
+          receiverName: s.extra is Map
+              ? (s.extra as Map)['receiverName'] as String?
+              : null,
+        ),
+      ),
+      GoRoute(
+        path: '/reviews/:targetType/:targetId',
+        builder: (_, s) => ReviewsScreen(
+          targetType: s.pathParameters['targetType'] ?? 'shop',
+          targetId: s.pathParameters['targetId'] ?? '',
+          title: s.extra is String ? s.extra as String : null,
+        ),
+      ),
+      GoRoute(
+        path: '/buyer/promo',
+        builder: (_, s) {
+          final extra = s.extra is Map<String, dynamic>
+              ? s.extra as Map<String, dynamic>
+              : const <String, dynamic>{};
+          return PromoScreen(
+            shopId: extra['shopId'] as String?,
+            subtotal: extra['subtotal'] as num?,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/buyer/loyalty',
+        builder: (_, __) => const LoyaltyScreen(),
+      ),
+
       ShellRoute(
         builder: (_, __, child) => BuyerShell(child: child),
         routes: [
           GoRoute(path: '/buyer', builder: (_, __) => const HomeScreen()),
-          GoRoute(path: '/buyer/catalog/:category', builder: (_, s) => CatalogScreen(category: s.pathParameters['category'] ?? 'all')),
+          GoRoute(path: '/buyer/shops', builder: (_, __) => const ShopsScreen()),
+          GoRoute(
+            path: '/buyer/catalog/:category',
+            builder: (_, s) {
+              final extra = s.extra is Map<String, dynamic>
+                  ? s.extra as Map<String, dynamic>
+                  : const <String, dynamic>{};
+              return CatalogScreen(
+                category: s.pathParameters['category'] ?? 'all',
+                shopId: extra['shopId'] as String?,
+                shopName: extra['shopName'] as String?,
+              );
+            },
+          ),
           GoRoute(path: '/buyer/cart', builder: (_, __) => const CartScreen()),
           GoRoute(path: '/buyer/orders', builder: (_, __) => const BuyerOrdersScreen()),
           GoRoute(path: '/buyer/tracking/:orderId', builder: (_, s) => TrackingScreen(orderId: s.pathParameters['orderId'] ?? '')),
           GoRoute(path: '/buyer/profile', builder: (_, __) => const ProfileScreen()),
+          GoRoute(path: '/buyer/address-book', builder: (_, __) => const AddressBookScreen()),
         ],
       ),
 

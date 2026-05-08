@@ -1,8 +1,30 @@
+// Auth routes: OTP send/verify, token refresh, logout, /me.
+// Issues an access + refresh pair; refresh rotation revokes the previous DB row.
+// Logout blacklists the access JWT (in Redis with ttl) and revokes the refresh.
+
 const router = require('express').Router();
 const jwt = require('jsonwebtoken');
+
 const prisma = require('../db');
+const env = require('../config/env');
+const logger = require('../lib/logger');
+const redis = require('../lib/redis');
+const jwtLib = require('../lib/jwt');
+const { audit } = require('../lib/audit');
 const { sendOtp } = require('../services/sms');
 const { authMiddleware } = require('../middleware/auth');
+
+const VALID_LOCALES = new Set(['uz', 'ru', 'en']);
+const OTP_RATE_KEY = (phone) => `otp:rate:${phone}`;
+const OTP_FAIL_KEY = (phone) => `otp:fail:${phone}`;
+const OTP_RATE_WINDOW_S = 3600;     // 1 hour
+const OTP_RATE_MAX = 5;             // max OTPs per phone per hour
+const OTP_FAIL_WINDOW_S = 600;      // 10 min
+const OTP_FAIL_MAX = 5;             // max failed verify per 10 min
+
+function errResp(res, status, message) {
+  return res.status(status).json({ error: message });
+}
 
 function genCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -10,7 +32,7 @@ function genCode() {
 
 function normalizePhone(phone) {
   // Always +998XXXXXXXXX
-  const digits = phone.replace(/\D/g, '');
+  const digits = String(phone || '').replace(/\D/g, '');
   return '+' + digits;
 }
 
@@ -19,29 +41,39 @@ router.post('/send-otp', async (req, res, next) => {
   try {
     const phone = normalizePhone(req.body.phone || '');
     if (!phone.match(/^\+998\d{9}$/)) {
-      return res.status(400).json({ error: 'Invalid Uzbek phone number' });
+      return errResp(res, 400, 'Invalid Uzbek phone number');
     }
 
-    // Limit: 1 OTP per minute
+    // Per-phone hourly rate limit (max 5 / hour)
+    const count = await redis.incrWithTtl(OTP_RATE_KEY(phone), OTP_RATE_WINDOW_S);
+    if (count > OTP_RATE_MAX) {
+      return errResp(res, 429, 'Too many OTP requests, try again later');
+    }
+
+    // 60-second per-phone debounce via DB
     const recent = await prisma.otpCode.findFirst({
       where: { phone, createdAt: { gt: new Date(Date.now() - 60_000) } },
     });
     if (recent) {
-      return res.status(429).json({ error: 'Too many requests, wait 60s' });
+      return errResp(res, 429, 'Too many requests, wait 60s');
     }
 
-    // In dev: always 123456 for testing
-    const code = process.env.NODE_ENV === 'production' ? genCode() : '123456';
+    // In dev / mock SMS: always 123456 for testing
+    const code = env.isProd && !env.useMockSms ? genCode() : '123456';
 
     await prisma.otpCode.create({
       data: {
-        phone, code,
+        phone,
+        code,
         expiresAt: new Date(Date.now() + 5 * 60_000), // 5 min
       },
     });
 
     await sendOtp(phone, code);
-    res.json({ success: true, devCode: process.env.NODE_ENV !== 'production' ? code : undefined });
+    res.json({
+      success: true,
+      devCode: !env.isProd || env.useMockSms ? code : undefined,
+    });
   } catch (err) { next(err); }
 });
 
@@ -50,6 +82,16 @@ router.post('/verify-otp', async (req, res, next) => {
   try {
     const phone = normalizePhone(req.body.phone || '');
     const { code } = req.body;
+    if (!phone.match(/^\+998\d{9}$/) || !code) {
+      return errResp(res, 400, 'Invalid phone or code');
+    }
+
+    // Lockout if too many failed attempts in last 10 min
+    const failKey = OTP_FAIL_KEY(phone);
+    const fails = Number(await redis.get(failKey)) || 0;
+    if (fails >= OTP_FAIL_MAX) {
+      return errResp(res, 429, 'Too many failed attempts, try again later');
+    }
 
     const otp = await prisma.otpCode.findFirst({
       where: { phone, code, used: false, expiresAt: { gt: new Date() } },
@@ -57,30 +99,154 @@ router.post('/verify-otp', async (req, res, next) => {
     });
 
     if (!otp) {
-      return res.status(400).json({ error: 'Invalid or expired code' });
+      // Track failed attempts (if there's a latest unused OTP, also bump its `attempts`)
+      await redis.incrWithTtl(failKey, OTP_FAIL_WINDOW_S);
+      const latest = await prisma.otpCode.findFirst({
+        where: { phone, used: false },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (latest) {
+        await prisma.otpCode.update({
+          where: { id: latest.id },
+          data: { attempts: { increment: 1 } },
+        });
+      }
+      return errResp(res, 400, 'Invalid or expired code');
     }
 
     await prisma.otpCode.update({ where: { id: otp.id }, data: { used: true } });
+    // Reset fail counter on success
+    await redis.del(failKey);
 
-    // Find or create user
+    // Find or create user (default locale 'uz')
     let user = await prisma.user.findUnique({
       where: { phone },
       include: { shopMemberships: { include: { shop: true } } },
     });
     if (!user) {
       user = await prisma.user.create({
-        data: { phone },
+        data: { phone, locale: 'uz' },
         include: { shopMemberships: { include: { shop: true } } },
       });
     }
 
-    const token = jwt.sign(
-      { userId: user.id },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' },
-    );
+    const userAgent = req.get('user-agent') || null;
+    const ipAddress = req.ip || null;
 
-    res.json({ token, user: serializeUser(user) });
+    const { token: accessToken } = jwtLib.signAccess(user.id);
+    const { token: refreshToken } = await jwtLib.signRefresh(user.id, { userAgent, ipAddress });
+
+    await audit({
+      actorId: user.id,
+      action: 'auth.login',
+      targetType: 'User',
+      targetId: user.id,
+      ipAddress,
+      metadata: { userAgent },
+    });
+
+    res.json({ accessToken, refreshToken, user: serializeUser(user) });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/auth/refresh ──────────────────────────────────────────────────
+router.post('/refresh', async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body || {};
+    if (!refreshToken || typeof refreshToken !== 'string') {
+      return errResp(res, 400, 'Missing refreshToken');
+    }
+
+    let result;
+    try {
+      result = await jwtLib.verifyRefresh(refreshToken);
+    } catch (err) {
+      logger.warn({ err: err.message }, 'refresh token rejected');
+      return errResp(res, 401, 'Invalid refresh token');
+    }
+    const { decoded, dbToken } = result;
+
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+    if (!user) return errResp(res, 401, 'User not found');
+
+    const userAgent = req.get('user-agent') || null;
+    const ipAddress = req.ip || null;
+
+    // Rotate: revoke old, issue new pair
+    const { token: newRefresh } = await jwtLib.rotateRefresh(dbToken, { userAgent, ipAddress });
+    const { token: newAccess } = jwtLib.signAccess(user.id);
+
+    // If a stale access token was sent in Authorization header, blacklist it.
+    const header = req.headers.authorization;
+    if (header && header.startsWith('Bearer ')) {
+      await jwtLib.blacklistAccessToken(header.substring(7));
+    }
+
+    await audit({
+      actorId: user.id,
+      action: 'auth.refresh',
+      targetType: 'User',
+      targetId: user.id,
+      ipAddress,
+      metadata: { userAgent, oldJti: decoded.jti },
+    });
+
+    res.json({ accessToken: newAccess, refreshToken: newRefresh });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/auth/logout ───────────────────────────────────────────────────
+router.post('/logout', authMiddleware, async (req, res, next) => {
+  try {
+    // Blacklist current access (must be done before we lose req.user)
+    const header = req.headers.authorization;
+    if (header && header.startsWith('Bearer ')) {
+      await jwtLib.blacklistAccessToken(header.substring(7));
+    }
+
+    // Revoke refresh token if provided
+    const { refreshToken } = req.body || {};
+    if (refreshToken && typeof refreshToken === 'string') {
+      try {
+        const decoded = jwt.decode(refreshToken);
+        if (decoded?.jti) await jwtLib.revokeRefresh(decoded.jti);
+      } catch (err) {
+        logger.warn({ err: err.message }, 'logout: could not decode refresh token');
+      }
+    }
+
+    await audit({
+      actorId: req.user.id,
+      action: 'auth.logout',
+      targetType: 'User',
+      targetId: req.user.id,
+      ipAddress: req.ip || null,
+      metadata: { userAgent: req.get('user-agent') || null },
+    });
+
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/auth/logout-all ───────────────────────────────────────────────
+router.post('/logout-all', authMiddleware, async (req, res, next) => {
+  try {
+    const header = req.headers.authorization;
+    if (header && header.startsWith('Bearer ')) {
+      await jwtLib.blacklistAccessToken(header.substring(7));
+    }
+    await jwtLib.revokeAllUserRefresh(req.user.id);
+
+    await audit({
+      actorId: req.user.id,
+      action: 'auth.logout_all',
+      targetType: 'User',
+      targetId: req.user.id,
+      ipAddress: req.ip || null,
+      metadata: { userAgent: req.get('user-agent') || null },
+    });
+
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
@@ -92,10 +258,35 @@ router.get('/me', authMiddleware, async (req, res) => {
 // ─── PATCH /api/auth/me ──────────────────────────────────────────────────────
 router.patch('/me', authMiddleware, async (req, res, next) => {
   try {
-    const { name } = req.body;
+    const { name, locale, notificationPrefs } = req.body || {};
+    const data = {};
+
+    if (typeof name === 'string') data.name = name.trim() || null;
+
+    if (locale !== undefined) {
+      if (typeof locale !== 'string' || !VALID_LOCALES.has(locale)) {
+        return errResp(res, 400, 'Invalid locale (allowed: uz, ru, en)');
+      }
+      data.locale = locale;
+    }
+
+    if (notificationPrefs !== undefined) {
+      if (notificationPrefs === null) {
+        data.notificationPrefs = null;
+      } else if (typeof notificationPrefs === 'object') {
+        try {
+          data.notificationPrefs = JSON.stringify(notificationPrefs);
+        } catch {
+          return errResp(res, 400, 'Invalid notificationPrefs');
+        }
+      } else {
+        return errResp(res, 400, 'Invalid notificationPrefs');
+      }
+    }
+
     const user = await prisma.user.update({
       where: { id: req.user.id },
-      data: { name },
+      data,
       include: { shopMemberships: { include: { shop: true } } },
     });
     res.json({ user: serializeUser(user) });
@@ -103,6 +294,10 @@ router.patch('/me', authMiddleware, async (req, res, next) => {
 });
 
 function serializeUser(user) {
+  let prefs = null;
+  if (user.notificationPrefs) {
+    try { prefs = JSON.parse(user.notificationPrefs); } catch { prefs = null; }
+  }
   return {
     id: user.id,
     phone: user.phone,
@@ -111,10 +306,13 @@ function serializeUser(user) {
     isBuyer: user.isBuyer,
     isCourier: user.isCourier,
     isShop: user.isShop,
+    isAdmin: user.isAdmin,
+    locale: user.locale,
+    notificationPrefs: prefs,
     courierStatus: user.courierStatus,
     rating: user.rating,
     ordersCount: user.ordersCount,
-    shops: user.shopMemberships?.map(m => ({
+    shops: user.shopMemberships?.map((m) => ({
       id: m.shop.id,
       name: m.shop.name,
       role: m.role,

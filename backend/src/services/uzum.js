@@ -1,10 +1,18 @@
 // Uzum Pay integration
 // Documentation: https://docs.business.uzum.uz/
-const USE_MOCK = process.env.USE_MOCK_PAYMENTS === 'true';
-const MERCHANT_ID = process.env.UZUM_MERCHANT_ID;
+//
+// NOTE on auth: Uzum signs webhook bodies with HMAC-SHA256 hex over the raw
+// request bytes, sent in the `X-Uzum-Signature` header. We must compute the
+// HMAC over the *exact* bytes the provider sent — re-serializing JSON would
+// produce a different byte sequence and break verification. The route handler
+// is responsible for capturing rawBody.
+
+const crypto = require('crypto');
+const env = require('../config/env');
+const logger = require('../lib/logger');
 
 async function createInvoice(order) {
-  if (USE_MOCK) {
+  if (env.useMockPayments) {
     const prisma = require('../db');
     setTimeout(async () => {
       await prisma.order.update({
@@ -17,14 +25,54 @@ async function createInvoice(order) {
 
   // Real Uzum Pay flow — POST to their checkout endpoint, get redirect URL
   // (требует партнёрский API ключ)
-  return `https://checkout.uzum.uz/?merchantId=${MERCHANT_ID}&orderId=${order.id}&amount=${order.total}`;
+  return `https://checkout.uzum.uz/?merchantId=${env.UZUM_MERCHANT_ID}&orderId=${order.id}&amount=${order.total}`;
 }
 
-async function handleCallback(body) {
-  // Uzum шлёт webhook с подписью HMAC-SHA256
-  // TODO: проверка подписи когда получите production ключи
+/**
+ * Verify HMAC-SHA256 hex signature of the raw webhook body.
+ *
+ * @param {Buffer|string} rawBody  Raw request bytes (NOT re-serialized JSON).
+ * @param {string}        signatureHex  Value of `X-Uzum-Signature`.
+ * @returns {boolean}
+ *
+ * Why timing-safe: signature comparison is the canonical timing-attack target.
+ * Why we equalize lengths first: `crypto.timingSafeEqual` throws on length
+ * mismatch, which itself can leak timing information; short-circuit instead.
+ */
+function verifySignature(rawBody, signatureHex) {
+  if (!env.UZUM_SECRET_KEY) return false;
+  if (!signatureHex || typeof signatureHex !== 'string') return false;
+  if (rawBody == null) return false;
+
+  const body = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(String(rawBody), 'utf8');
+  const expectedHex = crypto
+    .createHmac('sha256', env.UZUM_SECRET_KEY)
+    .update(body)
+    .digest('hex');
+
+  if (expectedHex.length !== signatureHex.length) return false;
+
+  const a = Buffer.from(expectedHex, 'utf8');
+  const b = Buffer.from(signatureHex, 'utf8');
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+/**
+ * Handle a verified Uzum webhook.
+ *
+ * @param {object} body                       Parsed JSON body.
+ * @param {{signatureValid: boolean}} ctx     Caller MUST verify the signature
+ *                                            first and pass the result here.
+ *                                            We refuse to mutate state otherwise.
+ */
+async function handleCallback(body, { signatureValid } = {}) {
+  if (!signatureValid) {
+    return { ok: false, error: 'invalid_signature' };
+  }
+
   const prisma = require('../db');
-  if (body.status === 'paid') {
+  if (body && body.status === 'paid' && body.orderId) {
     await prisma.order.update({
       where: { id: body.orderId },
       data: { isPaid: true, paymentRef: body.transactionId },
@@ -33,4 +81,19 @@ async function handleCallback(body) {
   return { ok: true };
 }
 
-module.exports = { createInvoice, handleCallback };
+/**
+ * Stub for future status polling. Real Uzum credentials are not yet
+ * provisioned; throw NotImplemented until they are. In mock mode we return a
+ * benign placeholder so the surrounding code paths can be exercised.
+ */
+async function getStatusFromUzum(externalRef) {
+  if (env.useMockPayments) {
+    return { externalRef, status: 'pending', mock: true };
+  }
+  const err = new Error('NotImplemented: Uzum status polling pending production keys');
+  err.code = 'NOT_IMPLEMENTED';
+  logger.warn({ externalRef }, 'Uzum getStatusFromUzum called without keys');
+  throw err;
+}
+
+module.exports = { createInvoice, handleCallback, verifySignature, getStatusFromUzum };

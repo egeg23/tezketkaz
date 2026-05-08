@@ -1,11 +1,8 @@
 // Click.uz integration
 // Documentation: https://docs.click.uz/click-api-request-shop/
 const crypto = require('crypto');
-
-const MERCHANT_ID  = process.env.CLICK_MERCHANT_ID;
-const SERVICE_ID   = process.env.CLICK_SERVICE_ID;
-const SECRET_KEY   = process.env.CLICK_SECRET_KEY;
-const USE_MOCK     = process.env.USE_MOCK_PAYMENTS === 'true';
+const env = require('../config/env');
+const logger = require('../lib/logger');
 
 const CLICK_BASE = 'https://my.click.uz/services/pay';
 
@@ -14,7 +11,7 @@ const CLICK_BASE = 'https://my.click.uz/services/pay';
  * Возвращает URL, на который нужно перенаправить пользователя.
  */
 async function createInvoice(order) {
-  if (USE_MOCK) {
+  if (env.useMockPayments) {
     // В mock-режиме сразу помечаем как оплачено и возвращаем deep link обратно в app
     const prisma = require('../db');
     setTimeout(async () => {
@@ -28,8 +25,8 @@ async function createInvoice(order) {
 
   // Real Click integration
   const params = new URLSearchParams({
-    service_id: SERVICE_ID,
-    merchant_id: MERCHANT_ID,
+    service_id: env.CLICK_SERVICE_ID,
+    merchant_id: env.CLICK_MERCHANT_ID,
     amount: order.total.toString(),
     transaction_param: order.id,
     return_url: `https://api.tezketkaz.uz/api/payments/click/return?order=${order.id}`,
@@ -39,7 +36,31 @@ async function createInvoice(order) {
 }
 
 /**
+ * Constant-time hex string compare. Buffers must already be hex-encoded
+ * strings; we decode them and compare byte-by-byte. Length mismatch ⇒ false
+ * without invoking timingSafeEqual (which throws on length mismatch).
+ *
+ * Why timing-safe: signature comparison is the canonical timing-attack target.
+ */
+function safeEqualHex(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  const bufA = Buffer.from(a, 'hex');
+  const bufB = Buffer.from(b, 'hex');
+  if (bufA.length === 0 || bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+/**
  * Проверить callback от Click — он шлёт sign_string, который надо валидировать.
+ *
+ * Click sign formula (MD5 — required by their API; we cannot upgrade):
+ *   md5(click_trans_id + service_id + SECRET_KEY + merchant_trans_id + amount + action + sign_time)
+ *
+ * Returns:
+ *   { valid: false }                                            — bad request / bad signature
+ *   { valid: true, complete: false }                            — prepare phase (action=0)
+ *   { valid: true, complete: true, orderId, buyerId, transactionId, amount }  — completion (action=1)
  */
 async function verifyCallback(body) {
   const {
@@ -51,21 +72,45 @@ async function verifyCallback(body) {
     action,
     sign_time,
     sign_string,
-  } = body;
+  } = body || {};
 
-  // Click sign formula:
-  // md5(click_trans_id + service_id + SECRET_KEY + merchant_trans_id + amount + action + sign_time)
+  // Reject early if any required field is missing — never trust the body shape.
+  if (
+    click_trans_id == null ||
+    service_id == null ||
+    sign_string == null ||
+    sign_time == null
+  ) {
+    return { valid: false };
+  }
+
+  // Optional binding to our service_id to fend off cross-service replay.
+  // Only enforced in prod when CLICK_SERVICE_ID is configured.
+  if (env.isProd && env.CLICK_SERVICE_ID && String(service_id) !== String(env.CLICK_SERVICE_ID)) {
+    logger.warn({ click_trans_id, service_id }, 'Click sig mismatch');
+    return { valid: false };
+  }
+
+  if (!env.CLICK_SECRET_KEY) {
+    // Without a secret we cannot verify; refuse rather than accept blindly.
+    logger.warn({ click_trans_id }, 'Click sig mismatch');
+    return { valid: false };
+  }
+
   const expected = crypto
     .createHash('md5')
-    .update(`${click_trans_id}${service_id}${SECRET_KEY}${merchant_trans_id}${amount}${action}${sign_time}`)
+    .update(
+      `${click_trans_id}${service_id}${env.CLICK_SECRET_KEY}${merchant_trans_id}${amount}${action}${sign_time}`,
+    )
     .digest('hex');
 
-  if (expected !== sign_string) {
+  if (!safeEqualHex(expected, String(sign_string))) {
+    logger.warn({ click_trans_id, service_id }, 'Click sig mismatch');
     return { valid: false };
   }
 
   // action 0 = prepare, 1 = complete
-  if (action !== '1') return { valid: true, complete: false };
+  if (String(action) !== '1') return { valid: true, complete: false };
 
   const prisma = require('../db');
   const order = await prisma.order.findUnique({ where: { id: merchant_trans_id } });
@@ -77,6 +122,7 @@ async function verifyCallback(body) {
     orderId: order.id,
     buyerId: order.buyerId,
     transactionId: click_paydoc_id,
+    amount,
   };
 }
 
