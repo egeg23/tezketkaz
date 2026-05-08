@@ -11,7 +11,7 @@ const presence = require('../services/redis-state');
 
 const LOCATION_MIN_INTERVAL_MS = 1000; // max 1 update / second per courier socket
 
-function setupSockets(io) {
+async function setupSockets(io) {
   // Expose the io instance to background workers (jobs/dispatch.js etc.).
   module.exports.io = io;
   // Optional Redis adapter for cross-instance pub/sub

@@ -1,4 +1,5 @@
 // Centralized env validation. Fails fast on startup if required vars are missing.
+require('dotenv').config();
 const { z } = require('zod');
 
 const isProd = process.env.NODE_ENV === 'production';
