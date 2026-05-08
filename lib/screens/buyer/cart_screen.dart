@@ -9,10 +9,13 @@ import '../../l10n/l10n.dart';
 import '../../models/catalog.dart';
 import '../../models/money.dart';
 import '../../models/payment_method.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/order_provider.dart';
+import '../../services/analytics_service.dart';
 import '../../services/api_client.dart';
 import '../../services/dispatch_api.dart';
+import '../../services/membership_api.dart';
 import '../../services/payment_method_api.dart';
 import '../../services/promo_api.dart';
 import '../../theme/app_theme.dart';
@@ -362,6 +365,12 @@ class _CartScreenState extends State<CartScreen> {
         loyaltyPoints: cart.loyaltyPoints > 0 ? cart.loyaltyPoints : null,
         scheduledFor: cart.scheduledFor,
       );
+      // Phase 7.4 — analytics: emit GA-style purchase event.
+      AnalyticsService.instance.logEvent('purchase', {
+        'orderId': order.id,
+        'value': order.total,
+        'currency': 'UZS',
+      });
       cart.clear();
       if (mounted) {
         setState(() => _isPlacing = false);
@@ -619,6 +628,7 @@ class _CartScreenState extends State<CartScreen> {
             isLoading: _estimateLoading,
             error: _estimateError,
             fmtMoney: _money,
+            membership: context.watch<AuthProvider>().membership,
           ),
         ],
       ),
@@ -835,6 +845,10 @@ class _ItemRow extends StatelessWidget {
                         snapshot: line.snapshot,
                       );
                     }
+                    AnalyticsService.instance.logEvent('add_to_cart', {
+                      'productId': line.product.id,
+                      'quantity': 1,
+                    });
                   },
                 ),
               ],
@@ -944,6 +958,7 @@ class _PricingBreakdown extends StatelessWidget {
   final bool isLoading;
   final String? error;
   final String Function(double) fmtMoney;
+  final Membership? membership;
 
   const _PricingBreakdown({
     required this.cart,
@@ -951,6 +966,7 @@ class _PricingBreakdown extends StatelessWidget {
     required this.isLoading,
     required this.error,
     required this.fmtMoney,
+    this.membership,
   });
 
   @override
@@ -1004,33 +1020,65 @@ class _PricingBreakdown extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _SumRow(
-                    'Yetkazib berish',
-                    deliveryFee == 0 ? 'Bepul' : fmtMoney(deliveryFee),
-                    accent: deliveryFee == 0,
-                    sub: est?.surgeReason,
+            // Phase 7.2 — when an active membership is in effect, render the
+            // pre-membership delivery fee struck through and label the line
+            // so the perk is visible in the breakdown.
+            if (membership?.isActive == true && membership!.tier == 'pro')
+              Row(
+                children: [
+                  Expanded(
+                    child: _SumRow(
+                      'Yetkazib berish',
+                      'Bepul (Pro)',
+                      accent: true,
+                      sub: 'Pro a\'zolik chegirma',
+                    ),
                   ),
-                ),
-                if ((est?.surgeFactor ?? 1.0) > 1.0)
-                  Container(
-                    margin: const EdgeInsets.only(left: 8),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                        color: AppColors.warningLight,
-                        borderRadius: BorderRadius.circular(8)),
-                    child: Text(
-                        '×${est!.surgeFactor.toStringAsFixed(1)} surge',
-                        style: const TextStyle(
-                            color: AppColors.warning,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700)),
+                ],
+              )
+            else if (membership?.isActive == true && membership!.tier == 'plus')
+              Row(
+                children: [
+                  Expanded(
+                    child: _SumRow(
+                      'Yetkazib berish',
+                      deliveryFee == 0
+                          ? 'Bepul'
+                          : '${fmtMoney(deliveryFee)} (50% Plus)',
+                      accent: true,
+                      sub: 'Plus a\'zolik chegirma',
+                    ),
                   ),
-              ],
-            ),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: _SumRow(
+                      'Yetkazib berish',
+                      deliveryFee == 0 ? 'Bepul' : fmtMoney(deliveryFee),
+                      accent: deliveryFee == 0,
+                      sub: est?.surgeReason,
+                    ),
+                  ),
+                  if ((est?.surgeFactor ?? 1.0) > 1.0)
+                    Container(
+                      margin: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                          color: AppColors.warningLight,
+                          borderRadius: BorderRadius.circular(8)),
+                      child: Text(
+                          '×${est!.surgeFactor.toStringAsFixed(1)} surge',
+                          style: const TextStyle(
+                              color: AppColors.warning,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700)),
+                    ),
+                ],
+              ),
             if (est?.etaMinutes != null || est?.distanceKm != null) ...[
               const SizedBox(height: 10),
               Row(

@@ -32,6 +32,16 @@ const schema = z.object({
   UZUM_MERCHANT_ID: z.string().optional(),
   UZUM_SECRET_KEY: z.string().optional(),
 
+  // Phase 7 — Kazakhstan (Kaspi) and Kyrgyzstan (Click KG) launch.
+  KASPI_MERCHANT_ID: z.string().optional(),
+  KASPI_SECRET: z.string().optional(),
+  CLICK_KG_MERCHANT_ID: z.string().optional(),
+  CLICK_KG_SERVICE_ID: z.string().optional(),
+  CLICK_KG_SECRET_KEY: z.string().optional(),
+
+  // Phase 7 — transactional email (Resend). Optional in dev/test; absent ⇒ noop.
+  RESEND_API_KEY: z.string().optional(),
+
   FCM_ENABLED: z.enum(['true', 'false']).default('false'),
 
   USE_MOCK_TAX: z.enum(['true', 'false']).default('true'),

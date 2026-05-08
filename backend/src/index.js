@@ -35,6 +35,9 @@ const buyerDisputeRoutes = require('./routes/buyer-disputes');
 const verificationRoutes = require('./routes/verification');
 const paymentMethodRoutes = require('./routes/payment-methods');
 const workingHoursRoutes = require('./routes/working-hours');
+const membershipRoutes = require('./routes/membership');
+const bannerRoutes = require('./routes/banners');
+const favoriteRoutes = require('./routes/favorites');
 const { setupSockets } = require('./sockets');
 
 const app = express();
@@ -70,7 +73,8 @@ app.use(cors({
 // Uzum callback needs raw bytes for HMAC verification — leave body as Buffer
 // for that path and let the route handler parse it. Everything else gets the
 // global JSON parser.
-const RAW_PATHS = ['/api/payments/uzum/callback'];
+// Phase 7 — Kaspi (KZ) also HMAC-signs raw bytes; same carve-out applies.
+const RAW_PATHS = ['/api/payments/uzum/callback', '/api/payments/kaspi/callback'];
 app.use((req, res, next) => {
   if (RAW_PATHS.includes(req.path)) {
     return express.raw({ type: '*/*', limit: '256kb' })(req, res, next);
@@ -158,6 +162,11 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/shops', shopRoutes);
 app.use('/api/products', productRoutes);
+// Phase 7.3 — banners (public list + admin CRUD; declares absolute paths
+// under /banners and /admin/banners).
+app.use('/api', bannerRoutes);
+// Phase 7.3 — buyer favorites (products + shops).
+app.use('/api/favorites', favoriteRoutes);
 // Phase 6.4 — working hours (declares absolute /api/shops/:id/working-hours).
 app.use('/api', workingHoursRoutes);
 // Phase 6.1 — saved tokenized payment methods.
@@ -171,6 +180,8 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api', modifierRoutes); // modifier groups/options use absolute paths
 app.use('/api', zoneRoutes); // zones routes use absolute /api/shops/:id/zones, /api/zones/:id
 app.use('/api/orders', orderRoutes);
+// Phase 7.2 — Wolt+/Yandex Plus membership.
+app.use('/api/membership', membershipRoutes);
 app.use('/api/couriers', courierRoutes);
 // Phase 2 routes mounted at /api so they can declare absolute paths under
 // /couriers/me/... and /orders/:id/dispatch/...
@@ -246,11 +257,14 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
     const scheduledJobs = require('./jobs/scheduled');
     // eslint-disable-next-line global-require
     const payoutJobs = require('./jobs/payouts');
+    // eslint-disable-next-line global-require
+    const membershipJobs = require('./jobs/membership');
     startWorkers({
       dispatch: dispatchJobs.dispatchHandler,
       autoCancel: dispatchJobs.autoCancelHandler,
       scheduled: scheduledJobs.scheduledHandler,
       payouts: payoutJobs.payoutsHandler,
+      membership: membershipJobs.membershipHandler,
     });
     // Schedule weekly payouts: Mondays at 03:00 UTC.
     try {
@@ -260,6 +274,15 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
       });
     } catch (err) {
       logger.warn({ err: err.message }, 'failed to schedule weekly payouts cron');
+    }
+    // Phase 7.2 — daily membership renewal sweep at 04:00 UTC.
+    try {
+      queues().membership.add('renew', {}, {
+        repeat: { cron: '0 4 * * *' },
+        jobId: 'membership-renew-cron',
+      });
+    } catch (err) {
+      logger.warn({ err: err.message }, 'failed to schedule membership renewal cron');
     }
     logger.info('BullMQ workers started');
   } catch (err) {

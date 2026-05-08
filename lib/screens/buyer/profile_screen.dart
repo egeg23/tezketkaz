@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/l10n.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../theme/app_theme.dart';
@@ -120,11 +121,31 @@ class ProfileScreen extends StatelessWidget {
                 : null,
               onTap: () => context.go('/buyer/orders'),
             ),
-            _Tile(icon: '❤️', title: 'Sevimlilar', onTap: () {}),
+            _Tile(
+              icon: '❤️',
+              title: t(context, 'profile.favorites'),
+              onTap: () => context.push('/buyer/favorites'),
+            ),
             _Tile(
               icon: '📍',
               title: 'Manzillarim',
               onTap: () => context.push('/buyer/address-book'),
+            ),
+          ]),
+
+          const SizedBox(height: 10),
+
+          // ── Phase 7.2 — subscription tile ──────────────────────────────────
+          _Card(children: [
+            _Tile(
+              icon: '⭐',
+              title: t(context, 'subscription.tile_title'),
+              subtitle: auth.membership?.isActive == true
+                  ? (auth.membership!.tier == 'pro'
+                      ? t(context, 'subscription.tier_pro')
+                      : t(context, 'subscription.tier_plus'))
+                  : t(context, 'subscription.tile_subtitle'),
+              onTap: () => context.push('/buyer/subscription'),
             ),
           ]),
 
@@ -149,7 +170,12 @@ class ProfileScreen extends StatelessWidget {
 
           _Card(children: [
             _Tile(icon: '🔔', title: 'Bildirishnomalar', onTap: () {}),
-            _Tile(icon: '🌐', title: 'Til', subtitle: 'O\'zbek / Русский', onTap: () {}),
+            _Tile(
+              icon: '🌐',
+              title: t(context, 'settings.country_locale'),
+              subtitle: '${user.country ?? 'UZ'} · ${L10n.instance.locale.languageCode}',
+              onTap: () => context.push('/buyer/country-settings'),
+            ),
             _Tile(icon: '❓', title: 'Yordam', onTap: () {}),
           ]),
 

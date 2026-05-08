@@ -605,3 +605,94 @@ export function useRejectKYC() {
     },
   });
 }
+
+// ---------- Phase 7.3 — Banners ----------
+
+export interface Banner {
+  id: string;
+  titleUz: string;
+  titleRu: string;
+  titleEn?: string | null;
+  subtitleUz?: string | null;
+  subtitleRu?: string | null;
+  subtitleEn?: string | null;
+  imageUrl: string;
+  deepLink?: string | null;
+  vertical: string;
+  country?: string | null;
+  priority: number;
+  isActive: boolean;
+  validFrom?: string | null;
+  validUntil?: string | null;
+  viewsCount?: number;
+  clicksCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BannerListResponse {
+  banners: Banner[];
+  nextCursor?: string | null;
+}
+
+export interface BannerStats {
+  views: number;
+  clicks: number;
+  ctr: number;
+  last30dayDailyViews: { day: string; count: number }[];
+}
+
+export function useBanners() {
+  return useQuery<BannerListResponse>({
+    queryKey: ["admin-banners"],
+    queryFn: () => api<BannerListResponse>(`/api/admin/banners`),
+  });
+}
+
+export function useCreateBanner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<Banner>) =>
+      api(`/api/admin/banners`, { method: "POST", body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-banners"] }),
+  });
+}
+
+export function useUpdateBanner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; body: Partial<Banner> }) =>
+      api(`/api/admin/banners/${vars.id}`, { method: "PATCH", body: vars.body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-banners"] }),
+  });
+}
+
+export function useDeleteBanner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/admin/banners/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-banners"] }),
+  });
+}
+
+export function useBannerStats(id: string | undefined) {
+  return useQuery<BannerStats>({
+    queryKey: ["admin-banner-stats", id],
+    queryFn: () => api<BannerStats>(`/api/admin/banners/${id}/stats`),
+    enabled: !!id,
+  });
+}
+
+export function useUploadBannerImage() {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("image", file);
+      return api<{ url: string; filename: string; size: number }>(
+        `/api/admin/banners/upload-image`,
+        { method: "POST", body: fd }
+      );
+    },
+  });
+}

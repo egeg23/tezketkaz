@@ -14,6 +14,7 @@ class L10n extends ChangeNotifier {
     Locale('uz'),
     Locale('ru'),
     Locale('en'),
+    Locale('kk'),
   ];
 
   Future<void> load() async {
@@ -32,7 +33,14 @@ class L10n extends ChangeNotifier {
 
   String t(String key) {
     final lang = _locale.languageCode;
-    return _strings[key]?[lang] ?? _strings[key]?['uz'] ?? key;
+    final entry = _strings[key];
+    if (entry == null) return key;
+    // Kazakh shares Cyrillic with Russian, so Russian is a sensible fallback
+    // when a `kk` translation is missing. Other locales fall back to uz then en.
+    if (lang == 'kk') {
+      return entry['kk'] ?? entry['ru'] ?? entry['uz'] ?? entry['en'] ?? key;
+    }
+    return entry[lang] ?? entry['uz'] ?? entry['en'] ?? key;
   }
 
   static const _strings = <String, Map<String, String>>{
@@ -804,6 +812,240 @@ class L10n extends ChangeNotifier {
       'uz': 'Joriy joylashuv',
       'ru': 'Моё местоположение',
       'en': 'Use current location',
+    },
+
+    // ── Phase 7.2 — Subscription ─────────────────────────────────────────
+    'subscription.title': {
+      'uz': 'Obuna',
+      'ru': 'Подписка',
+      'en': 'Subscription',
+      'kk': 'Жазылым',
+    },
+    'subscription.tile_title': {
+      'uz': 'Plus / Pro obuna',
+      'ru': 'Plus / Pro подписка',
+      'en': 'Plus / Pro membership',
+      'kk': 'Plus / Pro жазылым',
+    },
+    'subscription.tile_subtitle': {
+      'uz': 'Bepul yetkazib berish va cashback',
+      'ru': 'Бесплатная доставка и кешбэк',
+      'en': 'Free delivery and cashback',
+      'kk': 'Тегін жеткізу және кешбэк',
+    },
+    'subscription.become_plus': {
+      'uz': 'Plus a\'zo bo\'ling',
+      'ru': 'Станьте Plus-участником',
+      'en': 'Become a Plus member',
+      'kk': 'Plus мүшесі болыңыз',
+    },
+    'subscription.become_subtitle': {
+      'uz': 'Tejamkor obuna · har oy bekor qilish mumkin',
+      'ru': 'Выгодная подписка · отмена в любое время',
+      'en': 'Save more every order · cancel anytime',
+      'kk': 'Үнемді жазылым · кез келген уақытта тоқтату',
+    },
+    'subscription.tier_plus': {
+      'uz': 'Plus',
+      'ru': 'Plus',
+      'en': 'Plus',
+      'kk': 'Plus',
+    },
+    'subscription.tier_pro': {
+      'uz': 'Pro',
+      'ru': 'Pro',
+      'en': 'Pro',
+      'kk': 'Pro',
+    },
+    'subscription.feat_free_delivery': {
+      'uz': 'Bepul yetkazib berish',
+      'ru': 'Бесплатная доставка',
+      'en': 'Free delivery',
+      'kk': 'Тегін жеткізу',
+    },
+    'subscription.feat_free_delivery_50': {
+      'uz': 'Yetkazib berish 50% chegirma',
+      'ru': '50% скидка на доставку',
+      'en': '50% off delivery',
+      'kk': 'Жеткізуге 50% жеңілдік',
+    },
+    'subscription.feat_cashback_2x': {
+      'uz': '2× cashback',
+      'ru': '2× кешбэк',
+      'en': '2× cashback',
+      'kk': '2× кешбэк',
+    },
+    'subscription.feat_cashback_5x': {
+      'uz': '5× cashback',
+      'ru': '5× кешбэк',
+      'en': '5× cashback',
+      'kk': '5× кешбэк',
+    },
+    'subscription.feat_priority_support': {
+      'uz': 'Tezkor qo\'llab-quvvatlash',
+      'ru': 'Приоритетная поддержка',
+      'en': 'Priority support',
+      'kk': 'Бірінші кезектегі қолдау',
+    },
+    'subscription.feat_exclusive_promo': {
+      'uz': 'Maxsus aksiyalar',
+      'ru': 'Эксклюзивные акции',
+      'en': 'Exclusive promos',
+      'kk': 'Эксклюзивті акциялар',
+    },
+    'subscription.period_monthly': {
+      'uz': 'Oylik',
+      'ru': 'Месяц',
+      'en': 'Monthly',
+      'kk': 'Айлық',
+    },
+    'subscription.period_yearly': {
+      'uz': 'Yillik',
+      'ru': 'Год',
+      'en': 'Yearly',
+      'kk': 'Жылдық',
+    },
+    'subscription.save_17': {
+      'uz': '17% tejash',
+      'ru': '−17%',
+      'en': 'Save 17%',
+      'kk': '17% үнемдеу',
+    },
+    'subscription.subscribe_cta': {
+      'uz': 'Obuna bo\'lish',
+      'ru': 'Оформить подписку',
+      'en': 'Subscribe',
+      'kk': 'Жазылу',
+    },
+    'subscription.cancel_cta': {
+      'uz': 'Obunani bekor qilish',
+      'ru': 'Отменить подписку',
+      'en': 'Cancel subscription',
+      'kk': 'Жазылымнан бас тарту',
+    },
+    'subscription.cancel_title': {
+      'uz': 'Obunani bekor qilamizmi?',
+      'ru': 'Отменить подписку?',
+      'en': 'Cancel subscription?',
+      'kk': 'Жазылымды тоқтату керек пе?',
+    },
+    'subscription.cancel_confirm': {
+      'uz': 'Joriy davr oxirigacha foydalanishingiz mumkin.',
+      'ru': 'Подписка будет действовать до конца оплаченного периода.',
+      'en': 'You can keep using it until the end of the current period.',
+      'kk': 'Ағымдағы кезеңнің соңына дейін қолдана аласыз.',
+    },
+    'subscription.reactivate_cta': {
+      'uz': 'Yana faollashtirish',
+      'ru': 'Возобновить',
+      'en': 'Reactivate',
+      'kk': 'Қайта іске қосу',
+    },
+    'subscription.renews_on': {
+      'uz': 'Yangilanadi:',
+      'ru': 'Продление:',
+      'en': 'Renews on',
+      'kk': 'Жаңартылады:',
+    },
+    'subscription.expires_on': {
+      'uz': 'Tugaydi:',
+      'ru': 'Истекает:',
+      'en': 'Expires on',
+      'kk': 'Аяқталады:',
+    },
+    'subscription.activated': {
+      'uz': 'Obuna faollashtirildi 🎉',
+      'ru': 'Подписка активирована 🎉',
+      'en': 'Subscription activated 🎉',
+      'kk': 'Жазылым іске қосылды 🎉',
+    },
+
+    // ── Phase 7.3 — Favourites ───────────────────────────────────────────
+    'favorites.title': {
+      'uz': 'Sevimli mahsulotlar',
+      'ru': 'Избранное',
+      'en': 'Favorites',
+      'kk': 'Таңдаулылар',
+    },
+    'favorites.tab_products': {
+      'uz': 'Mahsulotlar',
+      'ru': 'Товары',
+      'en': 'Products',
+      'kk': 'Тауарлар',
+    },
+    'favorites.tab_shops': {
+      'uz': "Do'konlar",
+      'ru': 'Магазины',
+      'en': 'Shops',
+      'kk': 'Дүкендер',
+    },
+    'favorites.empty_products_title': {
+      'uz': "Sevimli mahsulotlar yo'q",
+      'ru': 'Нет избранных товаров',
+      'en': 'No favourite products',
+      'kk': 'Таңдаулы тауарлар жоқ',
+    },
+    'favorites.empty_products_desc': {
+      'uz': "Mahsulotni saqlash uchun yurakcha tugmasini bosing",
+      'ru': 'Нажмите сердечко, чтобы добавить товар',
+      'en': 'Tap the heart on a product to save it here',
+      'kk': 'Тауарды қосу үшін жүрекшені басыңыз',
+    },
+    'favorites.empty_shops_title': {
+      'uz': "Sevimli do'konlar yo'q",
+      'ru': 'Нет избранных магазинов',
+      'en': 'No favourite shops',
+      'kk': 'Таңдаулы дүкендер жоқ',
+    },
+    'favorites.empty_shops_desc': {
+      'uz': "Do'konlar ro'yxatida yurakcha tugmasini bosing",
+      'ru': 'Нажмите сердечко рядом с магазином',
+      'en': 'Tap the heart next to a shop to save it',
+      'kk': 'Дүкенге жанындағы жүрекшені басыңыз',
+    },
+    'profile.favorites': {
+      'uz': 'Sevimli mahsulotlar',
+      'ru': 'Избранное',
+      'en': 'Favorites',
+      'kk': 'Таңдаулылар',
+    },
+
+    // ── Phase 7.3 — Referral share ───────────────────────────────────────
+    'loyalty.share_cta': {
+      'uz': "Do'stlarga yuborish",
+      'ru': 'Поделиться с друзьями',
+      'en': 'Share with friends',
+      'kk': 'Достарға жіберу',
+    },
+    'loyalty.share_text': {
+      'uz':
+          "TezKetKaz'ga qo'shiling! Kodim {code} bilan birinchi buyurtmaga 5000 UZS chegirma. Yuklab oling: https://tezketkaz.uz/r/{code}",
+      'ru':
+          'Присоединяйтесь к TezKetKaz! Используйте код {code} и получите 5000 UZS на первый заказ. Скачать: https://tezketkaz.uz/r/{code}',
+      'en':
+          'Join TezKetKaz! Use my code {code} for 5000 UZS off your first order. Download: https://tezketkaz.uz/r/{code}',
+      'kk':
+          'TezKetKaz-ға қосылыңыз! Менің {code} кодыммен бірінші тапсырысқа 5000 UZS жеңілдік. Жүктеп алыңыз: https://tezketkaz.uz/r/{code}',
+    },
+
+    // ── Phase 7.1 — Country / locale picker ──────────────────────────────
+    'settings.country_locale': {
+      'uz': 'Mamlakat va til',
+      'ru': 'Страна и язык',
+      'en': 'Country & language',
+      'kk': 'Ел және тіл',
+    },
+    'settings.country': {
+      'uz': 'Mamlakat',
+      'ru': 'Страна',
+      'en': 'Country',
+      'kk': 'Ел',
+    },
+    'settings.locale': {
+      'uz': 'Til',
+      'ru': 'Язык',
+      'en': 'Language',
+      'kk': 'Тіл',
     },
   };
 }

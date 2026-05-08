@@ -1,4 +1,5 @@
 import '../models/models.dart';
+import '../providers/cart_provider.dart';
 import '../providers/order_provider.dart';
 import 'api_client.dart';
 
@@ -123,6 +124,20 @@ class OrderApi {
 
   Future<void> rate(String orderId, int rating, [String? review]) async {
     await _api.post('/api/orders/$orderId/rate', {'rating': rating, 'review': review});
+  }
+
+  /// Phase 7.3 — `POST /api/orders/:id/reorder`. Returns a `CartDraft`
+  /// describing items the buyer can re-add (with availability flags so the
+  /// UI can skip discontinued products with a friendly snackbar).
+  Future<CartDraft> reorder(String orderId) async {
+    final res = await _api.post('/api/orders/$orderId/reorder');
+    final data = res.data;
+    final payload = data is Map && data['draft'] is Map
+        ? Map<String, dynamic>.from(data['draft'] as Map)
+        : data is Map<String, dynamic>
+            ? data
+            : Map<String, dynamic>.from(data as Map);
+    return CartDraft.fromJson(payload);
   }
 
   // ── Shop actions ─────────────────────────────────────────────────────────

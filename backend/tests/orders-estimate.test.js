@@ -56,7 +56,12 @@ describe('POST /api/orders/estimate', () => {
     expect(res.status).toBe(200);
     expect(res.body.subtotal).toBe(50000);
     expect(res.body.deliveryFee).toBeGreaterThanOrEqual(12000);
-    expect(res.body.total).toBe(res.body.subtotal + res.body.deliveryFee);
+    // Phase 7 — VAT (12% in UZ) is added on top of subtotal-discount.
+    // total = subtotal + deliveryFee - discount + taxAmount.
+    expect(res.body.taxAmount).toBe(Math.round(res.body.subtotal * res.body.taxRate));
+    expect(res.body.total).toBe(
+      res.body.subtotal + res.body.deliveryFee - res.body.discount + res.body.taxAmount,
+    );
     expect(res.body.minOrder).toBe(30000);
     expect(res.body.minOrderMet).toBe(true);
     expect(res.body.zoneId).toBeTruthy();

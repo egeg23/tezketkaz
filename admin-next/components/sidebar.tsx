@@ -12,6 +12,7 @@ import {
   Settings,
   Wallet,
   AlertCircle,
+  Image as ImageIcon,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ const NAV: { href: string; label: string; icon: React.ComponentType<{ className?
   { href: "/couriers", label: "Couriers", icon: Truck },
   { href: "/users", label: "Users", icon: Users },
   { href: "/coupons", label: "Coupons", icon: Tag },
+  { href: "/banners", label: "Banners", icon: ImageIcon },
   { href: "/pricing-rules", label: "Pricing", icon: Settings },
   { href: "/finance", label: "Finance", icon: Wallet },
   { href: "/disputes", label: "Disputes", icon: AlertCircle },

@@ -21,6 +21,11 @@ class User {
   final String? passportSeries; // AA 1234567
   final String? selfEmployedCertUrl; // Справка о самозанятости
 
+  // Phase 7.1 — multi-country: ISO-3166 alpha-2 ('UZ' | 'KZ' | 'KG' | 'RU').
+  // Backend auto-derives the default from the phone prefix on signup but the
+  // user can override it from the country-settings screen.
+  final String? country;
+
   User({
     required this.id,
     required this.phone,
@@ -34,6 +39,7 @@ class User {
     this.selfEmployedCertUrl,
     this.shopId,
     this.shopName,
+    this.country,
   });
 
   User copyWith({
@@ -47,6 +53,7 @@ class User {
     String? selfEmployedCertUrl,
     String? shopId,
     String? shopName,
+    String? country,
   }) => User(
     id: id,
     phone: phone,
@@ -60,6 +67,7 @@ class User {
     selfEmployedCertUrl: selfEmployedCertUrl ?? this.selfEmployedCertUrl,
     shopId: shopId ?? this.shopId,
     shopName: shopName ?? this.shopName,
+    country: country ?? this.country,
   );
 
   // Shop data

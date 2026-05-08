@@ -13,8 +13,11 @@ const jwtLib = require('../lib/jwt');
 const { audit } = require('../lib/audit');
 const { sendOtp } = require('../services/sms');
 const { authMiddleware } = require('../middleware/auth');
+const country = require('../services/country');
 
-const VALID_LOCALES = new Set(['uz', 'ru', 'en']);
+// Phase 7 — Kazakh joins the supported set on the auth /me PATCH path. This is
+// the same set as routes/users.js PATCH /me; keep them in sync.
+const VALID_LOCALES = new Set(['uz', 'ru', 'en', 'kk']);
 const OTP_RATE_KEY = (phone) => `otp:rate:${phone}`;
 const OTP_FAIL_KEY = (phone) => `otp:fail:${phone}`;
 const OTP_RATE_WINDOW_S = 3600;     // 1 hour
@@ -31,17 +34,34 @@ function genCode() {
 }
 
 function normalizePhone(phone) {
-  // Always +998XXXXXXXXX
+  // E.164: +<countrycode><number>. UZ stays the default; Phase 7 also allows
+  // KZ (+7), KG (+996), and RU (+7) phones — see isAllowedPhone below.
   const digits = String(phone || '').replace(/\D/g, '');
   return '+' + digits;
+}
+
+// Phase 7 — accept E.164 phones from any TezKetKaz market.
+//   UZ: +998 + 9 digits  (12 chars total incl. +)
+//   KZ: +77  + 9 digits  (12)
+//   KG: +996 + 9 digits  (13)
+//   RU: +7   + 10 digits (12) — but +77... is KZ, so prefer +7[0-689]...
+// We keep this lenient: any +<digits> with 11–14 chars passes. Production OTP
+// rate limits + provider-side validity catch garbage.
+function isAllowedPhone(p) {
+  if (!p || typeof p !== 'string') return false;
+  if (!/^\+\d{10,14}$/.test(p)) return false;
+  if (p.startsWith('+998') && p.length === 13) return true;   // UZ
+  if (p.startsWith('+996') && p.length === 13) return true;   // KG
+  if (p.startsWith('+7') && p.length === 12) return true;     // KZ (+77...) or RU
+  return false;
 }
 
 // ─── POST /api/auth/send-otp ─────────────────────────────────────────────────
 router.post('/send-otp', async (req, res, next) => {
   try {
     const phone = normalizePhone(req.body.phone || '');
-    if (!phone.match(/^\+998\d{9}$/)) {
-      return errResp(res, 400, 'Invalid Uzbek phone number');
+    if (!isAllowedPhone(phone)) {
+      return errResp(res, 400, 'Invalid phone number');
     }
 
     // Per-phone hourly rate limit (max 5 / hour)
@@ -82,7 +102,7 @@ router.post('/verify-otp', async (req, res, next) => {
   try {
     const phone = normalizePhone(req.body.phone || '');
     const { code } = req.body;
-    if (!phone.match(/^\+998\d{9}$/) || !code) {
+    if (!isAllowedPhone(phone) || !code) {
       return errResp(res, 400, 'Invalid phone or code');
     }
 
@@ -124,10 +144,28 @@ router.post('/verify-otp', async (req, res, next) => {
       include: { shopMemberships: { include: { shop: true } } },
     });
     if (!user) {
+      // Phase 7 — auto-detect country + locale from phone prefix at signup.
+      // (User can override later via PATCH /me.)
+      const detectedCountry = country.fromPhone(phone);
+      const detectedLocale = country.info(detectedCountry).locale || 'uz';
       user = await prisma.user.create({
-        data: { phone, locale: 'uz' },
+        data: { phone, locale: detectedLocale, country: detectedCountry },
         include: { shopMemberships: { include: { shop: true } } },
       });
+    } else if (!user.country) {
+      // Backfill: existing accounts created before Phase 7 had no country.
+      // Set once on first verify after upgrade so downstream tax/provider
+      // logic has a value to dispatch on. Existing locale is preserved.
+      const detectedCountry = country.fromPhone(phone);
+      try {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { country: detectedCountry },
+          include: { shopMemberships: { include: { shop: true } } },
+        });
+      } catch (err) {
+        logger.warn({ err: err.message, userId: user.id }, 'country backfill failed');
+      }
     }
 
     const userAgent = req.get('user-agent') || null;
@@ -265,7 +303,7 @@ router.patch('/me', authMiddleware, async (req, res, next) => {
 
     if (locale !== undefined) {
       if (typeof locale !== 'string' || !VALID_LOCALES.has(locale)) {
-        return errResp(res, 400, 'Invalid locale (allowed: uz, ru, en)');
+        return errResp(res, 400, 'Invalid locale (allowed: uz, ru, en, kk)');
       }
       data.locale = locale;
     }
@@ -308,6 +346,7 @@ function serializeUser(user) {
     isShop: user.isShop,
     isAdmin: user.isAdmin,
     locale: user.locale,
+    country: user.country || 'UZ',
     notificationPrefs: prefs,
     courierStatus: user.courierStatus,
     rating: user.rating,

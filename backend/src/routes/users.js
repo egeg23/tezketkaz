@@ -3,6 +3,69 @@ const prisma = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { audit } = require('../lib/audit');
 const logger = require('../lib/logger');
+const country = require('../services/country');
+
+// Phase 7 — supported locales (mirror auth.js).
+const VALID_LOCALES = new Set(['uz', 'ru', 'en', 'kk']);
+
+// ─── PATCH /api/users/me — Phase 7 multi-country profile update ─────────────
+// Body: { country?, locale?, name? }
+//   • country must be a key of services/country.js COUNTRIES (UZ, KZ, KG, RU)
+//   • locale must be uz | ru | en | kk
+//   • name is trimmed; empty string → null
+// Returns the patched user.
+router.patch('/me', authMiddleware, async (req, res, next) => {
+  try {
+    const { country: countryCode, locale, name } = req.body || {};
+    const data = {};
+
+    if (countryCode !== undefined) {
+      if (typeof countryCode !== 'string' || !Object.prototype.hasOwnProperty.call(country.COUNTRIES, countryCode)) {
+        return res.status(400).json({
+          error: 'Invalid country',
+          allowed: Object.keys(country.COUNTRIES),
+        });
+      }
+      data.country = countryCode;
+    }
+
+    if (locale !== undefined) {
+      if (typeof locale !== 'string' || !VALID_LOCALES.has(locale)) {
+        return res.status(400).json({
+          error: 'Invalid locale',
+          allowed: ['uz', 'ru', 'en', 'kk'],
+        });
+      }
+      data.locale = locale;
+    }
+
+    if (name !== undefined) {
+      if (typeof name !== 'string') {
+        return res.status(400).json({ error: 'Invalid name' });
+      }
+      data.name = name.trim() || null;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    const user = await prisma.user.update({
+      where: { id: req.user.id },
+      data,
+    });
+
+    res.json({
+      user: {
+        id: user.id,
+        phone: user.phone,
+        name: user.name,
+        locale: user.locale,
+        country: user.country || 'UZ',
+      },
+    });
+  } catch (err) { next(err); }
+});
 
 // ─── GET /api/users/me/stats — buyer stats ───────────────────────────────────
 router.get('/me/stats', authMiddleware, async (req, res, next) => {
