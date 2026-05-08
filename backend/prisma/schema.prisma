@@ -81,6 +81,26 @@ model User {
   favorites      Favorite[]
   bannerImpressions BannerImpression[]
 
+  // Phase 9 — optional email for transactional emails / GDPR exports.
+  // Auto-populated when user signs in via Apple (using the Apple-provided
+  // email at first link) and editable via PATCH /users/me.
+  email          String?
+
+  // Phase 9 — OAuth identity linkage. Subject = the provider's stable user
+  // id. Distinct columns instead of a join table because we only support
+  // two providers and one identity per provider per user.
+  appleSubject   String?  @unique
+  googleSubject  String?  @unique
+
+  // Phase 9 — soft delete. When set, user is treated as deleted for
+  // purposes of auth/orders/etc. but data still exists for the 30-day
+  // grace period before the BullMQ purge job runs.
+  deletedAt      DateTime?
+
+  // Phase 9 GDPR relations
+  deletionRequests AccountDeletionRequest[]
+  dataExports    DataExport[]
+
   // Referral (Phase 3 loyalty)
   referralCode   String?  @unique
   referredById   String?
@@ -1061,4 +1081,51 @@ model OrderBatch {
 
   @@index([courierId, status])
   @@index([status])
+}
+
+// ── Phase 9: GDPR / data privacy ────────────────────────────────────────────
+
+// User-initiated account deletion request. Soft-deleted on creation
+// (User.deletedAt set), hard-purged after `scheduledFor` by a daily BullMQ
+// job. Buyer can cancel within the grace period.
+model AccountDeletionRequest {
+  id            String   @id @default(uuid())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+
+  // 'pending' | 'cancelled' | 'completed' (hard-purge done)
+  status        String   @default("pending")
+  reason        String?
+
+  requestedAt   DateTime @default(now())
+  scheduledFor  DateTime  // requestedAt + 30 days
+  completedAt   DateTime?
+  cancelledAt   DateTime?
+
+  @@index([status, scheduledFor])
+  @@index([userId])
+}
+
+// User-initiated GDPR data export. Backend renders a JSON archive of the
+// user's data, uploads to storage, and emails a one-time download link.
+model DataExport {
+  id            String   @id @default(uuid())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+
+  // 'pending' | 'ready' | 'expired' | 'failed'
+  status        String   @default("pending")
+
+  // URL to the rendered archive (valid until expiresAt). Null while pending.
+  fileUrl       String?
+
+  // 7-day expiry on the download link.
+  expiresAt     DateTime?
+  completedAt   DateTime?
+  failedReason  String?
+
+  requestedAt   DateTime @default(now())
+
+  @@index([userId, status])
+  @@index([status, expiresAt])
 }
