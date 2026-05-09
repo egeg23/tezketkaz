@@ -756,7 +756,8 @@ export interface SupportTicketsQuery {
 }
 
 export interface SupportTicketListResponse {
-  data: SupportTicket[];
+  // Backend returns `{ tickets, nextCursor }` (backend/src/routes/support.js:137).
+  tickets: SupportTicket[];
   nextCursor?: string | null;
 }
 
@@ -785,9 +786,10 @@ export function useSupportTickets(params: SupportTicketsQuery = {}) {
 }
 
 export function useSupportTicket(id: string | undefined) {
-  return useQuery<SupportTicketDetail>({
+  // Backend wraps the entity as `{ ticket: SupportTicketDetail }`.
+  return useQuery<{ ticket: SupportTicketDetail }>({
     queryKey: ["support-ticket", id],
-    queryFn: () => api<SupportTicketDetail>(`/api/admin/support/tickets/${id}`),
+    queryFn: () => api<{ ticket: SupportTicketDetail }>(`/api/admin/support/tickets/${id}`),
     enabled: !!id,
   });
 }
@@ -901,7 +903,8 @@ export interface PushCampaign {
 }
 
 export interface CampaignListResponse {
-  data: PushCampaign[];
+  // Backend returns `{ campaigns, nextCursor }` (backend/src/routes/push-campaigns.js:85).
+  campaigns: PushCampaign[];
   nextCursor?: string | null;
 }
 
@@ -934,9 +937,11 @@ export function useCampaigns(params: CampaignsQuery = {}) {
 }
 
 export function useCampaign(id: string | undefined) {
-  return useQuery<PushCampaign>({
+  // Backend wraps as `{ campaign: PushCampaign }` — see backend/src/routes/
+  // push-campaigns.js:134/150/171/194.
+  return useQuery<{ campaign: PushCampaign }>({
     queryKey: ["push-campaign", id],
-    queryFn: () => api<PushCampaign>(`/api/admin/push-campaigns/${id}`),
+    queryFn: () => api<{ campaign: PushCampaign }>(`/api/admin/push-campaigns/${id}`),
     enabled: !!id,
   });
 }

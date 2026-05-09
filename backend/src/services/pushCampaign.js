@@ -47,11 +47,17 @@ async function send(prisma, campaignId, opts = {}) {
     throw new Error('Campaign is cancelled');
   }
 
-  // Lock to 'sending' first so concurrent triggers no-op.
-  await prisma.pushCampaign.update({
-    where: { id: campaign.id },
+  // Compare-and-set claim. Two callers can both pass the status checks above
+  // and both proceed without this guard, double-sending the campaign.
+  // updateMany returns count=0 when another caller claimed first.
+  const claim = await prisma.pushCampaign.updateMany({
+    where: { id: campaign.id, status: { in: ['draft', 'scheduled'] } },
     data: { status: 'sending' },
   });
+  if (claim.count !== 1) {
+    // Already claimed (race) or status changed underneath us.
+    return { ok: false, reason: 'not_claimable', campaignId: campaign.id };
+  }
 
   let users = [];
   try {

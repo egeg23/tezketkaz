@@ -47,9 +47,14 @@ class _SupportThreadScreenState extends State<SupportThreadScreen> {
             : Map<String, dynamic>.from(raw);
         final msg = SupportMessage.fromJson(m);
         if (!mounted) return;
+        final existing = _ticket;
+        if (existing == null) return;
+        // The backend broadcasts every new message to the room without
+        // excluding the sender — so a buyer-sent message arrives both via
+        // the REST response (already appended in _send) and via this socket
+        // event. Dedupe on id so we don't render it twice.
+        if (existing.messages.any((x) => x.id == msg.id)) return;
         setState(() {
-          final existing = _ticket;
-          if (existing == null) return;
           _ticket = SupportTicket(
             id: existing.id,
             subject: existing.subject,

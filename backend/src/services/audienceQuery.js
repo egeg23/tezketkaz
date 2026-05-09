@@ -33,11 +33,19 @@ function compile(rawSpec) {
   // Always exclude soft-deleted users from campaigns.
   where.deletedAt = null;
 
+  // Build up `some` and `none` predicates for `buyerOrders` separately so a
+  // later-evaluated branch can't overwrite an earlier one (e.g.,
+  // lastOrderWithinDays + vertical previously dropped the date constraint).
+  // Each branch merges into the local `someParts`/`nonePart` and we assemble
+  // `where.buyerOrders` once at the end.
+  const someParts = [];
+  let nonePart = null;
+
   // hasOrders=true   → at least one Order. hasOrders=false → no orders.
   if (spec.hasOrders === true) {
-    where.buyerOrders = { some: {} };
+    someParts.push({});
   } else if (spec.hasOrders === false) {
-    where.buyerOrders = { none: {} };
+    nonePart = {};
   }
 
   // lastOrderWithinDays=N — at least one order created within N days.
@@ -45,33 +53,35 @@ function compile(rawSpec) {
     const days = Number(spec.lastOrderWithinDays);
     if (days > 0) {
       const cutoff = new Date(Date.now() - days * 86400 * 1000);
-      where.buyerOrders = {
-        ...(where.buyerOrders || {}),
-        some: { createdAt: { gte: cutoff } },
-      };
+      someParts.push({ createdAt: { gte: cutoff } });
     }
   }
 
-  // noOrdersInDays=N — no order in last N days. (Combines with hasOrders if set.)
+  // noOrdersInDays=N — no order in last N days.
   if (Number.isFinite(Number(spec.noOrdersInDays))) {
     const days = Number(spec.noOrdersInDays);
     if (days > 0) {
       const cutoff = new Date(Date.now() - days * 86400 * 1000);
-      // Prisma's `none` accepts a filter; a user matches if no Order with
-      // createdAt >= cutoff exists.
-      where.buyerOrders = {
-        ...(where.buyerOrders || {}),
-        none: { createdAt: { gte: cutoff } },
-      };
+      nonePart = { createdAt: { gte: cutoff } };
     }
   }
 
   // vertical filter — any order in shop with vertical=X.
   if (spec.vertical) {
-    where.buyerOrders = {
-      ...(where.buyerOrders || {}),
-      some: { shop: { vertical: String(spec.vertical) } },
-    };
+    someParts.push({ shop: { vertical: String(spec.vertical) } });
+  }
+
+  if (someParts.length || nonePart !== null) {
+    where.buyerOrders = {};
+    if (someParts.length === 1) {
+      where.buyerOrders.some = someParts[0];
+    } else if (someParts.length > 1) {
+      // Multi-`some` predicates require at least one matching Order PER
+      // predicate. Merge into a single object that ANDs the conditions so
+      // the same row must satisfy all of them.
+      where.buyerOrders.some = Object.assign({}, ...someParts);
+    }
+    if (nonePart !== null) where.buyerOrders.none = nonePart;
   }
 
   // City filter — best-effort substring against addresses.fullAddress or

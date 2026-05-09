@@ -146,6 +146,24 @@ adminRouter.patch('/:id', authMiddleware, requireAdmin, async (req, res, next) =
     const data = pickCampaignFields(req.body || {});
     if (data.scheduledFor) data.status = 'scheduled';
     if (data.scheduledFor === null && existing.status === 'scheduled') data.status = 'draft';
+
+    // Merge the incoming patch with the existing row so we can validate the
+    // FINAL state. Without this, a PATCH that nulls titleUz/Ru/bodyUz/Ru can
+    // land the campaign in 'scheduled' status with required fields missing,
+    // which makes send() crash later.
+    const merged = { ...existing, ...data };
+    const finalStatus = merged.status;
+    if (finalStatus === 'scheduled') {
+      const required = ['titleUz', 'titleRu', 'bodyUz', 'bodyRu'];
+      const missing = required.filter((k) => !merged[k] || !String(merged[k]).trim());
+      if (missing.length) {
+        return res.status(400).json({
+          error: 'Required fields missing for scheduled campaign',
+          fields: missing,
+        });
+      }
+    }
+
     const campaign = await prisma.pushCampaign.update({ where: { id: existing.id }, data });
     res.json({ campaign });
   } catch (err) { next(err); }

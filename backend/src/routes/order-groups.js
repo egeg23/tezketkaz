@@ -13,12 +13,15 @@ const logger = require('../lib/logger');
 const { queues } = require('../lib/queues');
 const orderGroup = require('../services/orderGroup');
 
-// Translate service-layer errors (with `status`) into JSON responses.
+// Translate service-layer errors (with `status`) into JSON responses. Charge
+// failures from the payment provider come back via service `err({ message })`
+// — surface that message to the UI so the buyer sees the actual reason
+// (e.g. "insufficient funds") rather than just `charge_failed`.
 function send(res, err) {
   const status = err.status || err.statusCode || 500;
   const body = { error: err.message || 'Server error' };
-  if (err.message && /charge_failed/.test(err.message) && err.message_) {
-    body.message = err.message_;
+  if (err.message && /charge_failed/.test(err.message) && err.extra?.message) {
+    body.message = err.extra.message;
   }
   return res.status(status).json(body);
 }
@@ -212,7 +215,7 @@ router.post('/:groupId/leave', authMiddleware, async (req, res) => {
     try {
       const io = req.app.get('io');
       if (io) {
-        io.to(`orderGroup:${group.id}`).emit('orderGroup:memberJoined', {
+        io.to(`orderGroup:${group.id}`).emit('orderGroup:memberLeft', {
           member: updated,
         });
       }

@@ -71,7 +71,11 @@ class SupportApi {
       }
       return Map<String, dynamic>.from(data);
     }
-    return Map<String, dynamic>.from(data as Map);
+    // Non-Map response (error string, list, null) — surface a clear
+    // FormatException with the runtime type instead of a raw TypeError.
+    throw FormatException(
+      'Support API: expected a JSON object, got ${data.runtimeType}: $data',
+    );
   }
 }
 

@@ -132,7 +132,9 @@ async function setupSockets(io) {
           const m = await prisma.orderGroupMember.findUnique({
             where: { groupId_userId: { groupId, userId: user.id } },
           }).catch(() => null);
-          allowed = !!m;
+          // Reject members who already declined/left so they can't keep
+          // watching cart updates after dropping from the group.
+          allowed = !!m && m.status !== 'declined';
         }
         if (!allowed && user.isAdmin) allowed = true;
         if (allowed) socket.join(`orderGroup:${groupId}`);
@@ -142,6 +144,29 @@ async function setupSockets(io) {
     });
     socket.on('orderGroup:unsubscribe', (groupId) => {
       if (typeof groupId === 'string' && groupId) socket.leave(`orderGroup:${groupId}`);
+    });
+
+    // Phase 10.2 — support ticket room. Only the ticket's author, its
+    // assigned admin, or any admin user may join. Without this handler the
+    // backend's `support:message`/`support:reply` emits had no subscribers
+    // and live updates never reached buyers.
+    socket.on('support:subscribe', async (ticketId) => {
+      if (typeof ticketId !== 'string' || !ticketId) return;
+      try {
+        const ticket = await prisma.supportTicket.findUnique({
+          where: { id: ticketId },
+          select: { id: true, authorId: true, assigneeId: true },
+        });
+        if (!ticket) return;
+        let allowed = ticket.authorId === user.id || ticket.assigneeId === user.id;
+        if (!allowed && user.isAdmin) allowed = true;
+        if (allowed) socket.join(`support:${ticketId}`);
+      } catch (err) {
+        logger.warn({ err: err.message, ticketId }, 'support:subscribe failed');
+      }
+    });
+    socket.on('support:unsubscribe', (ticketId) => {
+      if (typeof ticketId === 'string' && ticketId) socket.leave(`support:${ticketId}`);
     });
 
     // Phase 3: chat join — validate participant before subscribing.

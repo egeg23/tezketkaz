@@ -46,6 +46,18 @@ export default function SupportPage() {
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [history, setHistory] = useState<(string | undefined)[]>([undefined]);
 
+  // Wrap the four filter setters so any filter change rewinds pagination to
+  // page 1. Without this, an admin on page 2 who switches the status filter
+  // keeps the old cursor — which is invalid for the new query and returns an
+  // empty/wrong page.
+  function resetCursor() {
+    setCursor(undefined);
+    setHistory([undefined]);
+  }
+  function onFilter<T>(setter: (v: T) => void): (v: T) => void {
+    return (v: T) => { setter(v); resetCursor(); };
+  }
+
   const { data: stats } = useSupportStats();
   const { data: adminsResp } = useUsers({ role: "admin", limit: 100 });
   const admins = adminsResp?.users ?? [];
@@ -59,7 +71,7 @@ export default function SupportPage() {
     limit: 25,
   });
 
-  const tickets: SupportTicket[] = data?.data ?? [];
+  const tickets: SupportTicket[] = data?.tickets ?? [];
 
   return (
     <div className="space-y-4">
@@ -77,7 +89,7 @@ export default function SupportPage() {
         <CardContent className="flex flex-wrap items-end gap-3 pt-6">
           <div className="grid gap-1">
             <label className="text-xs text-muted-foreground">Status</label>
-            <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <Select value={status} onChange={(e) => onFilter(setStatus)(e.target.value)}>
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s || "All"}
@@ -87,7 +99,7 @@ export default function SupportPage() {
           </div>
           <div className="grid gap-1">
             <label className="text-xs text-muted-foreground">Priority</label>
-            <Select value={priority} onChange={(e) => setPriority(e.target.value)}>
+            <Select value={priority} onChange={(e) => onFilter(setPriority)(e.target.value)}>
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>
                   {p || "All"}
@@ -99,7 +111,7 @@ export default function SupportPage() {
             <label className="text-xs text-muted-foreground">Assignee</label>
             <Select
               value={assigneeId}
-              onChange={(e) => setAssigneeId(e.target.value)}
+              onChange={(e) => onFilter(setAssigneeId)(e.target.value)}
             >
               <option value="">All</option>
               <option value="unassigned">Unassigned</option>
@@ -114,7 +126,7 @@ export default function SupportPage() {
             <label className="text-xs text-muted-foreground">Search</label>
             <Input
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => onFilter(setQ)(e.target.value)}
               placeholder="Subject, phone, body..."
             />
           </div>

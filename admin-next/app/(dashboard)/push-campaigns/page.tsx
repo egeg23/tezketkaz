@@ -77,7 +77,7 @@ export default function PushCampaignsPage() {
   const cancel = useCancelCampaign();
   const remove = useDeleteCampaign();
 
-  const list: PushCampaign[] = data?.data ?? [];
+  const list: PushCampaign[] = data?.campaigns ?? [];
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();

@@ -81,9 +81,18 @@ function fromCampaign(c: PushCampaign): FormState {
     deepLink: c.deepLink ?? "",
     audienceQuery: c.audienceQuery ?? null,
     scheduledFor: c.scheduledFor
-      ? new Date(c.scheduledFor).toISOString().slice(0, 16)
+      ? formatLocalDateTime(new Date(c.scheduledFor))
       : "",
   };
+}
+
+// `<input type="datetime-local">` interprets values without a timezone suffix
+// as LOCAL time. `toISOString()` always returns UTC (with `Z`), which causes
+// the input to render shifted (UTC+5 admins see 10:00 UTC labelled as 10:00
+// local — actually 15:00). Format from local-time getters instead.
+function formatLocalDateTime(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export default function PushCampaignDetailPage() {
@@ -91,7 +100,8 @@ export default function PushCampaignDetailPage() {
   const router = useRouter();
   const id = params?.id;
 
-  const { data: campaign, isLoading, error } = useCampaign(id);
+  const { data: campaignResp, isLoading, error } = useCampaign(id);
+  const campaign = campaignResp?.campaign;
   const update = useUpdateCampaign();
   const send = useSendCampaign();
   const cancel = useCancelCampaign();

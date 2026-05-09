@@ -94,11 +94,14 @@ class _GroupOrderJoinScreenState extends State<GroupOrderJoinScreen> {
                   letterSpacing: 6,
                 ),
                 inputFormatters: [
-                  LengthLimitingTextInputFormatter(8),
-                  FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+                  // Backend codes are "XXXX-XX" (7 chars including the dash).
+                  // The previous regex stripped the dash so users couldn't
+                  // paste real codes — backend would 404 every join.
+                  LengthLimitingTextInputFormatter(7),
+                  FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\-]')),
                 ],
                 decoration: const InputDecoration(
-                  hintText: 'ABCD12',
+                  hintText: 'ABCD-12',
                 ),
               ),
               if (_error != null) ...[

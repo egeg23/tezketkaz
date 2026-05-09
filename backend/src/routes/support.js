@@ -30,6 +30,10 @@ const logger = require('../lib/logger');
 const VALID_STATUSES = new Set(['open', 'in_progress', 'awaiting_user', 'closed', 'resolved']);
 const VALID_PRIORITIES = new Set(['low', 'normal', 'high', 'urgent']);
 const VALID_CATEGORIES = new Set(['order', 'payment', 'delivery', 'account', 'other']);
+// Terminal states — replies/closures can't be appended once a ticket lands here.
+// To re-open the conversation, admins must transition the status back via PATCH
+// (e.g. 'closed' → 'open' or 'awaiting_user').
+const TERMINAL_STATES = ['closed', 'resolved'];
 
 function clampStr(v, max) {
   if (v == null) return null;
@@ -161,8 +165,8 @@ router.post('/tickets/:ticketId/messages', authMiddleware, async (req, res, next
     if (ticket.authorId !== req.user.id) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    if (ticket.status === 'closed') {
-      return res.status(400).json({ error: 'Ticket is closed' });
+    if (TERMINAL_STATES.includes(ticket.status)) {
+      return res.status(400).json({ error: 'Ticket is in a terminal state' });
     }
 
     const { body, attachments } = req.body || {};
@@ -405,6 +409,9 @@ adminRouter.post('/tickets/:ticketId/messages', authMiddleware, requireAdmin, as
   try {
     const ticket = await loadTicket(req.params.ticketId, false);
     if (!ticket) return res.status(404).json({ error: 'Not found' });
+    if (TERMINAL_STATES.includes(ticket.status)) {
+      return res.status(400).json({ error: 'Ticket is in a terminal state' });
+    }
     const { body, attachments } = req.body || {};
     const cleanBody = clampStr(body, 8000);
     if (!cleanBody) return res.status(400).json({ error: 'body required' });

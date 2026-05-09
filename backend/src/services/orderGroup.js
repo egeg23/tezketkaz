@@ -289,13 +289,28 @@ async function lock(prisma, { groupId, hostUserId }) {
 
   // Price each member's cart. Any individual member's pricing failure aborts
   // the lock so the host can ask them to fix it (or remove the offending item).
+  // In split mode we drop members who priced to 0 (e.g. host with empty cart)
+  // because memberPay rejects amount<=0 and the group would never finalise.
+  // In host-pay mode we keep everyone — host's single charge covers all.
   let groupSubtotal = 0;
   const updates = [];
   for (const m of activeMembers) {
     const items = safeParseCart(m.cartJson);
     const { subtotal } = await priceMemberCart(prisma, items, group.shopId);
+    if (group.paymentMode === 'split' && subtotal <= 0) {
+      // Mark this member as 'declined' so the active-set / allPaid logic in
+      // memberPay doesn't wait on them and the socket UI shows them dropped.
+      updates.push({ id: m.id, amountOwed: 0, decline: true });
+      continue;
+    }
     groupSubtotal += subtotal;
     updates.push({ id: m.id, amountOwed: subtotal });
+  }
+  // After dropping zero-owed members, ensure at least one payable member
+  // remains in split mode (otherwise no one can pay → infinite lock).
+  if (group.paymentMode === 'split' &&
+      updates.filter((u) => !u.decline).length === 0) {
+    throw err(400, 'no_payable_members');
   }
 
   // Transactional update: lock + per-member amounts. Keeps a partial-lock
@@ -304,7 +319,9 @@ async function lock(prisma, { groupId, hostUserId }) {
     for (const u of updates) {
       await tx.orderGroupMember.update({
         where: { id: u.id },
-        data: { amountOwed: u.amountOwed },
+        data: u.decline
+          ? { amountOwed: 0, status: 'declined', declinedAt: new Date() }
+          : { amountOwed: u.amountOwed },
       });
     }
     const g = await tx.orderGroup.update({
@@ -343,7 +360,7 @@ async function _chargeMember(prisma, member, amount, groupId) {
 
 // Mint the shared Order from a finalised, fully-paid group. Runs inside a
 // $transaction so we either get a clean Order + group flip, or nothing at all.
-async function _finaliseOrder(prisma, group, queuesFn, paymentRef) {
+async function _finaliseOrder(prisma, group, queuesFn, paymentRef, paymentProvider) {
   const groupWithMembers = await prisma.orderGroup.findUnique({
     where: { id: group.id },
     include: { members: true, host: true },
@@ -391,7 +408,11 @@ async function _finaliseOrder(prisma, group, queuesFn, paymentRef) {
         total,
         deliveryFee: 0,
         currency: shop?.currency || 'UZS',
-        paymentMethod: 'click',
+        // Persist the actual provider that completed the charge so payment
+        // history + downstream reconciliation are correct for non-Click
+        // payments. Falls back to 'click' only when the caller didn't pass
+        // anything (legacy compatibility).
+        paymentMethod: paymentProvider || 'click',
         isPaid: true,
         paymentRef,
         status: 'pending',
@@ -484,7 +505,7 @@ async function memberPay(prisma, opts = {}) {
       });
     });
 
-    const order = await _finaliseOrder(prisma, group, queuesFn, result.externalId);
+    const order = await _finaliseOrder(prisma, group, queuesFn, result.externalId, method.provider);
 
     const refreshed = await prisma.orderGroup.findUnique({
       where: { id: group.id },
@@ -545,7 +566,28 @@ async function memberPay(prisma, opts = {}) {
 
   let order = null;
   if (allPaid) {
-    order = await _finaliseOrder(prisma, refreshed, queuesFn, result.externalId);
+    // Atomic claim — concurrent payers each see allPaid=true after their own
+    // memberPay flips status, so without this guard two of them race into
+    // _finaliseOrder and create duplicate Orders + double-dispatch. The
+    // updateMany only succeeds for one caller; the loser exits early.
+    const claim = await prisma.orderGroup.updateMany({
+      where: { id: group.id, status: 'locked' },
+      data: { status: 'finalising' },
+    });
+    if (claim.count === 0) {
+      // Another payer already started or finished finalisation.
+      return { member: updatedMember, group: refreshed, order: null };
+    }
+    try {
+      order = await _finaliseOrder(prisma, refreshed, queuesFn, result.externalId, method.provider);
+    } catch (err) {
+      // Roll back so a retry can claim again.
+      await prisma.orderGroup.updateMany({
+        where: { id: group.id, status: 'finalising' },
+        data: { status: 'locked' },
+      }).catch(() => {});
+      throw err;
+    }
     const finalised = await prisma.orderGroup.findUnique({
       where: { id: group.id },
       include: { members: true },

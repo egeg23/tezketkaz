@@ -42,7 +42,8 @@ export default function TicketDetailPage() {
   const id = params?.ticketId;
 
   const { user: me } = useAuth();
-  const { data: ticket, isLoading, error } = useSupportTicket(id);
+  const { data: ticketResp, isLoading, error } = useSupportTicket(id);
+  const ticket = ticketResp?.ticket;
   const { data: adminsResp } = useUsers({ role: "admin", limit: 100 });
   const admins = adminsResp?.users ?? [];
 

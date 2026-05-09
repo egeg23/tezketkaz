@@ -110,6 +110,9 @@ class OrderGroupApi {
   }
 
   /// Backend may wrap the entity under `group`/`orderGroup` or return it bare.
+  /// The non-Map fallback used to be `Map.from(data as Map)` which throws a
+  /// raw TypeError on error/HTML responses; surface a descriptive
+  /// FormatException instead so the UI can show the actual problem.
   Map<String, dynamic> _unwrap(dynamic data) {
     if (data is Map) {
       if (data['group'] is Map) {
@@ -120,7 +123,9 @@ class OrderGroupApi {
       }
       return Map<String, dynamic>.from(data);
     }
-    return Map<String, dynamic>.from(data as Map);
+    throw FormatException(
+      'OrderGroup API: expected a JSON object, got ${data.runtimeType}: $data',
+    );
   }
 }
 
