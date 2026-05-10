@@ -107,6 +107,9 @@ void main() {
   group('CartProvider scheduling + promo', () {
     test('setCouponCode treats empty string as null', () {
       final cart = CartProvider(autoLoad: false);
+      // Phase 11 — couponCode lives on per-shop meta, so the cart needs at
+      // least one active shop before the setter has anywhere to write to.
+      cart.add(_product());
       cart.setCouponCode('PROMO');
       expect(cart.couponCode, 'PROMO');
       cart.setCouponCode('');
@@ -115,6 +118,7 @@ void main() {
 
     test('setLoyaltyPoints clamps negative input to 0', () {
       final cart = CartProvider(autoLoad: false);
+      cart.add(_product());
       cart.setLoyaltyPoints(-10);
       expect(cart.loyaltyPoints, 0);
       cart.setLoyaltyPoints(50);

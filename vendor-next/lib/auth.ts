@@ -63,7 +63,19 @@ export const useAuth = create<AuthState>()(
       clear: () =>
         set({ accessToken: null, refreshToken: null, user: null, currentShopId: null }),
     }),
-    { name: "tkk-vendor-auth" }
+    {
+      name: "tkk-vendor-auth",
+      // Keep refreshToken OUT of localStorage. Persisting it dramatically
+      // increases the blast radius of any XSS — an attacker who gets a
+      // token can keep refreshing forever. Access token + user profile +
+      // shop id are still persisted so a tab reload keeps the user signed
+      // in for the lifetime of the access JWT.
+      partialize: (state) => ({
+        accessToken: state.accessToken,
+        user: state.user,
+        currentShopId: state.currentShopId,
+      }),
+    }
   )
 );
 

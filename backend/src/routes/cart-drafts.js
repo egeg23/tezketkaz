@@ -53,6 +53,12 @@ function summarisePayload(payload, productMap) {
   let subtotal = 0;
   let staleItems = 0;
   for (const line of payload) {
+    // parsePayload() tolerates corrupt rows; guard here too so a persisted
+    // `null` or scalar entry doesn't 500 the GET endpoint.
+    if (!line || typeof line !== 'object' || !line.productId) {
+      staleItems += 1;
+      continue;
+    }
     const product = productMap.get(line.productId);
     const qty = Math.max(1, Math.min(99, Number(line.quantity) || 1));
     if (!product || !product.isAvailable) {

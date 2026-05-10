@@ -56,14 +56,24 @@ export default function WorkingHoursPage() {
   const [drafts, setDrafts] = useState<Record<number, DayDraft>>(() =>
     rowsToDrafts([])
   );
+  // Don't clobber in-progress edits when react-query refetches in the
+  // background (focus/online events trigger refetches by default).
+  const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    if (data?.items) {
+    if (data?.items && !isDirty) {
       setDrafts(rowsToDrafts(data.items));
     }
-  }, [data]);
+  }, [data, isDirty]);
+
+  // Switching shops should reset the dirty flag so the new shop's data
+  // populates the form even if the previous shop had unsaved edits.
+  useEffect(() => {
+    setIsDirty(false);
+  }, [shopId]);
 
   function update(dow: number, patch: Partial<DayDraft>) {
+    setIsDirty(true);
     setDrafts((prev) => ({
       ...prev,
       [dow]: { ...(prev[dow] ?? { isClosed: true, startsAt: "09:00", endsAt: "21:00" }), ...patch },
@@ -83,6 +93,7 @@ export default function WorkingHoursPage() {
     });
     try {
       await save.mutateAsync({ shopId, items });
+      setIsDirty(false);
       toast.success("Schedule saved");
     } catch (err) {
       toast.error((err as Error).message);
@@ -163,7 +174,10 @@ export default function WorkingHoursPage() {
           )}
 
           <div className="flex justify-end pt-2">
-            <Button onClick={onSave} disabled={save.isPending}>
+            <Button
+              onClick={onSave}
+              disabled={save.isPending || isLoading || !shopId}
+            >
               {save.isPending ? "Saving..." : "Save schedule"}
             </Button>
           </div>

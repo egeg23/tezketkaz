@@ -115,10 +115,17 @@ export async function api<T = unknown>(
 
 export async function apiBlob(path: string): Promise<Blob> {
   const url = path.startsWith("http") ? path : `${API_URL}${path}`;
-  const { accessToken } = useAuth.getState();
-  const r = await fetch(url, {
-    headers: accessToken ? { authorization: `Bearer ${accessToken}` } : undefined,
+  let token = useAuth.getState().accessToken;
+  let r = await fetch(url, {
+    headers: token ? { authorization: `Bearer ${token}` } : undefined,
   });
+  // Mirror api()'s 401 → refresh → retry flow so blob downloads (CSV exports
+  // etc.) don't fail spuriously when the access token has expired.
+  if (r.status === 401) {
+    token = await refreshAccessToken();
+    if (!token) throw new ApiError(401, "Unauthorized", null);
+    r = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  }
   if (!r.ok) throw new ApiError(r.status, `Download failed: ${r.status}`, null);
   return r.blob();
 }

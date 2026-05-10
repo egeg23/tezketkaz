@@ -29,9 +29,12 @@ export default function SettingsPage() {
   const [deliveryPerKm, setDeliveryPerKm] = useState("");
   const [freeDeliveryKm, setFreeDeliveryKm] = useState("");
   const [minOrderAmount, setMinOrderAmount] = useState("");
+  // Track whether the user has edited the form so a background refetch can't
+  // clobber in-progress changes.
+  const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    if (shop) {
+    if (shop && !isDirty) {
       setName(shop.name || "");
       setDescription(shop.description || "");
       setAddress(shop.address || "");
@@ -50,11 +53,42 @@ export default function SettingsPage() {
         shop.minOrderAmount != null ? String(shop.minOrderAmount) : ""
       );
     }
-  }, [shop]);
+  }, [shop, isDirty]);
+
+  // Reset the dirty flag when the user switches to a different shop so the
+  // form repopulates from the new row.
+  useEffect(() => {
+    setIsDirty(false);
+  }, [shopId]);
+
+  // Parse a string field as a non-negative number, returning null when empty
+  // and throwing on negative / NaN so the user sees a clear toast.
+  function parseOptionalNonNegative(value: string, label: string): number | null {
+    const v = value.trim();
+    if (!v) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new Error(`${label} must be a non-negative number`);
+    }
+    return n;
+  }
 
   async function onSave(e: React.FormEvent) {
     e.preventDefault();
     if (!shopId) return;
+    let baseFee: number | null;
+    let perKm: number | null;
+    let freeKm: number | null;
+    let minOrder: number | null;
+    try {
+      baseFee = parseOptionalNonNegative(deliveryBaseFee, "Base delivery fee");
+      perKm = parseOptionalNonNegative(deliveryPerKm, "Fee per km");
+      freeKm = parseOptionalNonNegative(freeDeliveryKm, "Free delivery within");
+      minOrder = parseOptionalNonNegative(minOrderAmount, "Minimum order");
+    } catch (err) {
+      toast.error((err as Error).message);
+      return;
+    }
     try {
       await update.mutateAsync({
         id: shopId,
@@ -64,16 +98,13 @@ export default function SettingsPage() {
           address: address.trim(),
           phone: phone.trim() || null,
           currency: currency.trim() || "UZS",
-          deliveryBaseFee: deliveryBaseFee.trim()
-            ? Number(deliveryBaseFee)
-            : null,
-          deliveryPerKm: deliveryPerKm.trim() ? Number(deliveryPerKm) : null,
-          freeDeliveryKm: freeDeliveryKm.trim() ? Number(freeDeliveryKm) : null,
-          minOrderAmount: minOrderAmount.trim()
-            ? Number(minOrderAmount)
-            : null,
+          deliveryBaseFee: baseFee,
+          deliveryPerKm: perKm,
+          freeDeliveryKm: freeKm,
+          minOrderAmount: minOrder,
         },
       });
+      setIsDirty(false);
       toast.success("Shop settings saved");
     } catch (err) {
       toast.error((err as Error).message);
@@ -104,7 +135,7 @@ export default function SettingsPage() {
               <Input
                 id="name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => { setIsDirty(true); setName(e.target.value); }}
                 required
               />
             </div>
@@ -113,7 +144,7 @@ export default function SettingsPage() {
               <Textarea
                 id="description"
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => { setIsDirty(true); setDescription(e.target.value); }}
               />
             </div>
             <div className="grid gap-4 md:grid-cols-2">
@@ -122,7 +153,7 @@ export default function SettingsPage() {
                 <Input
                   id="address"
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  onChange={(e) => { setIsDirty(true); setAddress(e.target.value); }}
                   required
                 />
               </div>
@@ -132,7 +163,7 @@ export default function SettingsPage() {
                   id="phone"
                   type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => { setIsDirty(true); setPhone(e.target.value); }}
                 />
               </div>
             </div>
@@ -154,7 +185,7 @@ export default function SettingsPage() {
                 <Input
                   id="currency"
                   value={currency}
-                  onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                  onChange={(e) => { setIsDirty(true); setCurrency(e.target.value.toUpperCase()); }}
                 />
               </div>
               <div className="space-y-2">
@@ -164,7 +195,7 @@ export default function SettingsPage() {
                   type="number"
                   min="0"
                   value={minOrderAmount}
-                  onChange={(e) => setMinOrderAmount(e.target.value)}
+                  onChange={(e) => { setIsDirty(true); setMinOrderAmount(e.target.value); }}
                 />
               </div>
             </div>
@@ -176,7 +207,7 @@ export default function SettingsPage() {
                   type="number"
                   min="0"
                   value={deliveryBaseFee}
-                  onChange={(e) => setDeliveryBaseFee(e.target.value)}
+                  onChange={(e) => { setIsDirty(true); setDeliveryBaseFee(e.target.value); }}
                 />
               </div>
               <div className="space-y-2">
@@ -186,7 +217,7 @@ export default function SettingsPage() {
                   type="number"
                   min="0"
                   value={deliveryPerKm}
-                  onChange={(e) => setDeliveryPerKm(e.target.value)}
+                  onChange={(e) => { setIsDirty(true); setDeliveryPerKm(e.target.value); }}
                 />
               </div>
               <div className="space-y-2">
@@ -196,7 +227,7 @@ export default function SettingsPage() {
                   type="number"
                   min="0"
                   value={freeDeliveryKm}
-                  onChange={(e) => setFreeDeliveryKm(e.target.value)}
+                  onChange={(e) => { setIsDirty(true); setFreeDeliveryKm(e.target.value); }}
                 />
               </div>
             </div>

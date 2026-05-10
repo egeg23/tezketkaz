@@ -314,14 +314,22 @@ export function useShopProducts(shopId: string | null | undefined) {
   });
 }
 
-export function useProduct(id: string | null | undefined) {
-  // The backend has no GET /api/products/:id endpoint; we list+find instead.
-  // Pages can pull the row from the list cache. This helper is here so call
-  // sites stay symmetrical.
+export function useProduct(
+  id: string | null | undefined,
+  shopId: string | null | undefined,
+) {
+  // The backend has no GET /api/products/:id endpoint, so we list-by-shop and
+  // resolve by id client-side. The list response is small and the list-cache
+  // is shared with /products, so this is essentially free after the first call.
   return useQuery<{ product: Product | null }>({
-    queryKey: ["product", id],
-    queryFn: () => api<{ product: Product | null }>(`/api/products/${id}`),
-    enabled: !!id,
+    queryKey: ["product", shopId, id],
+    enabled: !!id && !!shopId,
+    queryFn: async () => {
+      const { products } = await api<{ products: Product[] }>(
+        `/api/products?shopId=${shopId}&limit=1000`,
+      );
+      return { product: products.find((p) => p.id === id) ?? null };
+    },
   });
 }
 

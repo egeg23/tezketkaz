@@ -67,7 +67,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     // sending us back to /onboarding. The PATCH is fire-and-forget; a
     // failure just means we'll retry on next launch.
     if (mounted) context.read<AuthProvider>().markOnboardedLocally();
-    unawaited(OnboardingApi.instance.markOnboarded());
+    // Best-effort by design: a 4xx/5xx here just means we'll retry on next
+    // launch when AuthProvider re-fetches `User.onboardedAt`. Catch any
+    // exception so an unawaited Future doesn't propagate.
+    unawaited(
+      OnboardingApi.instance.markOnboarded().catchError((_) {}),
+    );
     if (!mounted) return;
     context.go('/buyer');
   }

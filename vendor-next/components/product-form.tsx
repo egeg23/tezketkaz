@@ -65,19 +65,38 @@ export function ProductForm({
       toast.error("Name is required");
       return;
     }
-    if (!price.trim() || Number.isNaN(Number(price))) {
+    // Validate numerics once up-front — HTML `min="0"` is UI-only and doesn't
+    // block submit, so without this the form happily POSTs NaN/Infinity/
+    // negative values or a discount that's higher than the base price.
+    const parsedPrice = Number(price);
+    const parsedDiscount = discountPrice.trim() ? Number(discountPrice) : null;
+    const parsedStock = stock.trim() ? Number(stock) : null;
+    if (!price.trim() || !Number.isFinite(parsedPrice) || parsedPrice < 0) {
       toast.error("Valid price is required");
+      return;
+    }
+    if (
+      parsedDiscount != null &&
+      (!Number.isFinite(parsedDiscount) ||
+        parsedDiscount < 0 ||
+        parsedDiscount > parsedPrice)
+    ) {
+      toast.error("Discount price must be between 0 and the base price");
+      return;
+    }
+    if (parsedStock != null && (!Number.isFinite(parsedStock) || parsedStock < 0)) {
+      toast.error("Stock cannot be negative");
       return;
     }
     await onSubmit({
       name: name.trim(),
       nameUz: nameUz.trim() || null,
       description: description.trim() || null,
-      price: Number(price),
-      discountPrice: discountPrice.trim() ? Number(discountPrice) : null,
+      price: parsedPrice,
+      discountPrice: parsedDiscount,
       unit: unit.trim() || null,
       category: category.trim() || null,
-      stock: stock.trim() ? Number(stock) : null,
+      stock: parsedStock,
       imageUrl: imageUrl.trim() || null,
       isAvailable,
     });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useShopReviews } from "@/lib/queries";
 import { useCurrentShop } from "@/lib/shop-context";
 import { dateRu } from "@/lib/formatters";
@@ -17,6 +17,13 @@ export default function ReviewsPage() {
   const { shopId } = useCurrentShop();
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [history, setHistory] = useState<(string | undefined)[]>([undefined]);
+  // Reset pagination when the user switches shops — otherwise the previous
+  // shop's cursor would be applied to the new shop's list and return an
+  // empty/wrong page.
+  useEffect(() => {
+    setCursor(undefined);
+    setHistory([undefined]);
+  }, [shopId]);
   const { data, isLoading, error } = useShopReviews(shopId, cursor, 20);
 
   const reviews = data?.reviews ?? [];

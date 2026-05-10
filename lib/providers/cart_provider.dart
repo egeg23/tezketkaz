@@ -164,6 +164,10 @@ class CartProvider extends ChangeNotifier {
   final Map<String, _ShopMeta> _shopMeta = {};
   // Per-shop debounce timer so rapid mutations don't spam the upsert endpoint.
   final Map<String, Timer> _syncTimers = {};
+  // Per-shop in-flight tracker. Without this an older upsert()/dropShop() can
+  // finish AFTER a newer one and silently revert the latest cart state. We
+  // await the previous future before kicking off the next.
+  final Map<String, Future<void>> _ongoingSyncs = {};
 
   /// The shop the cart screen is currently viewing. Mutations route through
   /// this id; `null` when every draft is empty.
@@ -366,7 +370,11 @@ class CartProvider extends ChangeNotifier {
     int? loyaltyPoints,
   }) {
     final lines = _draftsByShop[shopId]?.values ?? const <CartLine>[];
-    final items = lines.map((l) => '${l.product.id}:${l.quantity}').toList()
+    // Fingerprint must cover modifier identity + price, not just product+qty,
+    // so a modifier change or shop-side price update busts the cache.
+    final items = lines
+        .map((l) => '${l.key}:${l.quantity}:${l.unitPrice}')
+        .toList()
       ..sort();
     final meta = _shopMeta[shopId];
     final pc = promoCode ?? meta?.couponCode ?? '';
@@ -736,6 +744,26 @@ class CartProvider extends ChangeNotifier {
   }
 
   Future<void> _flushSync(String shopId) async {
+    // Serialize per-shop API calls so an older upsert/dropShop can't finish
+    // after a newer mutation and overwrite the latest state.
+    final prev = _ongoingSyncs[shopId];
+    if (prev != null) {
+      try { await prev; } catch (_) { /* swallowed — was already best-effort */ }
+    }
+    final fut = _doFlushSync(shopId);
+    _ongoingSyncs[shopId] = fut;
+    try {
+      await fut;
+    } finally {
+      // Only clear if this future is still the active one (a newer scheduled
+      // run may have replaced us by then).
+      if (identical(_ongoingSyncs[shopId], fut)) {
+        _ongoingSyncs.remove(shopId);
+      }
+    }
+  }
+
+  Future<void> _doFlushSync(String shopId) async {
     final lines = _draftsByShop[shopId];
     final meta = _shopMeta[shopId];
     try {

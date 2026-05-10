@@ -196,7 +196,9 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       final loc = state.matchedLocation;
       final isOnAuth = loc.startsWith('/auth') || loc == '/splash';
       final isOnboarding = loc == '/onboarding';
-      if (!isAuth && !isOnAuth && !isOnboarding) return '/auth/login';
+      // Onboarding is a post-login screen; bounce unauth'd users to login
+      // even when they deep-link straight to /onboarding.
+      if (!isAuth && !isOnAuth) return '/auth/login';
       if (isAuth && loc == '/splash') {
         if (auth.user?.name == null) return '/auth/name';
         if (_needsOnboarding(auth)) return '/onboarding';
