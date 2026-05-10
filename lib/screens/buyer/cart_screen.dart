@@ -16,6 +16,7 @@ import '../../services/analytics_service.dart';
 import '../../services/api_client.dart';
 import '../../services/dispatch_api.dart';
 import '../../services/membership_api.dart';
+import '../../services/order_group_api.dart';
 import '../../services/payment_method_api.dart';
 import '../../services/promo_api.dart';
 import '../../theme/app_theme.dart';
@@ -333,6 +334,62 @@ class _CartScreenState extends State<CartScreen> {
     return isTomorrow ? 'Ertaga $hh:$mm' : 'Bugun $hh:$mm';
   }
 
+  /// Phase 10.1 — host a group order from the current cart. Confirms the shop
+  /// (the cart is already constrained to a single shop), creates a `split`
+  /// group via [OrderGroupApi], and routes to the group screen. The current
+  /// items aren't pushed to the membership cart yet — that's a follow-up
+  /// integration with `setMyCart` once we wire a sync helper.
+  Future<void> _makeGroupOrder() async {
+    final cart = context.read<CartProvider>();
+    if (cart.isEmpty) return;
+    final shopId = cart.orderItems.first.product.shopId;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadii.lg)),
+        title: Text(t(context, 'group.create')),
+        content: Text(t(context, 'group.share_code')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(t(context, 'common.cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(t(context, 'common.confirm')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    try {
+      final group = await OrderGroupApi.instance.create(
+        shopId: shopId,
+        paymentMode: 'split',
+      );
+      // Push the host's existing cart into their membership row so other
+      // members see what the host is buying. Best-effort — backend re-runs
+      // the price calc anyway.
+      try {
+        await OrderGroupApi.instance
+            .setMyCart(group.id, cart.toApiPayload());
+      } catch (_) {/* non-fatal */}
+      if (!mounted) return;
+      context.go('/buyer/group/${group.id}');
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   Future<void> _placeOrder() async {
     final cart = context.read<CartProvider>();
     final orders = context.read<OrderProvider>();
@@ -422,6 +479,22 @@ class _CartScreenState extends State<CartScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 220),
         children: [
+          // Phase 10.1 — group-order CTA. Always shown when the cart has at
+          // least one item; a tap creates a split-bill group and routes to
+          // the group screen with the current items pre-loaded.
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: OutlinedButton.icon(
+              onPressed: _makeGroupOrder,
+              icon: const Text('🤝', style: TextStyle(fontSize: 18)),
+              label: Text(t(context, 'group.create')),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 48),
+                side: const BorderSide(color: AppColors.primary, width: 1.5),
+                foregroundColor: AppColors.primary,
+              ),
+            ),
+          ),
           // Items card
           Container(
             decoration: BoxDecoration(

@@ -101,6 +101,13 @@ model User {
   deletionRequests AccountDeletionRequest[]
   dataExports    DataExport[]
 
+  // Phase 10 relations
+  hostedGroups       OrderGroup[]       @relation("GroupHost")
+  groupMemberships   OrderGroupMember[]
+  supportTickets     SupportTicket[]    @relation("TicketAuthor")
+  supportAssigned    SupportTicket[]    @relation("TicketAssignee")
+  supportMessages    SupportMessage[]   @relation("SupportSender")
+
   // Referral (Phase 3 loyalty)
   referralCode   String?  @unique
   referredById   String?
@@ -1128,4 +1135,179 @@ model DataExport {
 
   @@index([userId, status])
   @@index([status, expiresAt])
+}
+
+// ── Phase 10: group orders, customer support, push campaigns ────────────────
+
+// Multi-buyer order. Host opens a group, shares a join code, friends add
+// items into a single basket, host locks + checks out. Each member pays
+// their own share via their saved payment method (or one host pays all).
+model OrderGroup {
+  id            String   @id @default(uuid())
+  host          User     @relation("GroupHost", fields: [hostUserId], references: [id])
+  hostUserId    String
+
+  shopId        String
+  // Short human-friendly code (6 chars, e.g. "K7P2-AB"), shared via deep-link.
+  joinCode      String   @unique
+
+  // 'open' (members can join + add items)
+  // 'locked' (host has locked, members confirm payment)
+  // 'paid' (all members paid, single Order created)
+  // 'cancelled'
+  // 'expired' (auto-cancel after expiresAt without lock)
+  status        String   @default("open")
+
+  // Optional cap so the host can keep a small group.
+  maxMembers    Int?
+
+  // 'split' — each member pays for what they added.
+  // 'host'  — the host pays for everyone.
+  paymentMode   String   @default("split")
+
+  expiresAt     DateTime    // open → auto-cancel after this point
+  lockedAt      DateTime?
+  paidAt        DateTime?
+  cancelledAt   DateTime?
+
+  // The Order that finalises the group. Set when status = 'paid'.
+  orderId       String?    @unique
+
+  members       OrderGroupMember[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status, expiresAt])
+  @@index([hostUserId])
+}
+
+model OrderGroupMember {
+  id          String   @id @default(uuid())
+  group       OrderGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId     String
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+
+  // 'pending' (joined but hasn't paid)
+  // 'paid'    (member paid their share)
+  // 'declined' (member dropped out)
+  status      String   @default("pending")
+
+  // Items the member added — JSON snapshot identical to OrderItem shape but
+  // not yet persisted as OrderItems. When group locks + checks out, this is
+  // merged into the actual Order.
+  cartJson    String   @default("[]")
+
+  // The amount this member owes (only set after lock). Snapshotted so a
+  // shop-side price change doesn't reshuffle anyone's bill.
+  amountOwed  Float    @default(0)
+
+  // The saved payment method this member chose to charge their share.
+  paymentMethodId String?
+
+  joinedAt    DateTime @default(now())
+  paidAt      DateTime?
+  declinedAt  DateTime?
+
+  @@unique([groupId, userId])
+  @@index([userId, status])
+}
+
+// Customer support inbox. Buyers, couriers, shop members all open tickets
+// against admin. Admin replies via the same thread.
+model SupportTicket {
+  id          String   @id @default(uuid())
+  author      User     @relation("TicketAuthor", fields: [authorId], references: [id])
+  authorId    String
+
+  // Optional categorisation — null when buyer didn't pick a category.
+  // 'order' | 'payment' | 'delivery' | 'account' | 'other'
+  category    String?
+  // Optional link to the order the ticket is about.
+  orderId     String?
+
+  subject     String
+
+  // 'open' | 'in_progress' | 'awaiting_user' | 'closed' | 'resolved'
+  status      String   @default("open")
+  // 'low' | 'normal' | 'high' | 'urgent'
+  priority    String   @default("normal")
+
+  assignee    User?    @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  assigneeId  String?
+
+  closedAt    DateTime?
+  resolvedAt  DateTime?
+  // For "user replied, awaiting admin" SLA tracking.
+  lastReplyAt DateTime?
+  lastReplyBy String?  // 'user' | 'admin'
+
+  messages    SupportMessage[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, priority])
+  @@index([authorId, status])
+  @@index([assigneeId, status])
+}
+
+model SupportMessage {
+  id          String   @id @default(uuid())
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId    String
+
+  sender      User     @relation("SupportSender", fields: [senderId], references: [id])
+  senderId    String
+  // Snapshot of role at message time — surfaces "Admin" vs "Buyer" badge in UI.
+  // 'user' | 'admin'
+  senderRole  String
+
+  body        String
+  // JSON array of attachment URLs (images, screenshots).
+  attachments String?
+
+  createdAt   DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+// Admin-driven push notification campaign. Targets a segment of users via
+// a saved query (country/locale/last-order-window/etc.) and sends FCM.
+model PushCampaign {
+  id            String   @id @default(uuid())
+
+  titleUz       String
+  titleRu       String
+  titleEn       String?
+  titleKk       String?
+
+  bodyUz        String
+  bodyRu        String
+  bodyEn        String?
+  bodyKk        String?
+
+  // Optional deep-link the tap should open (same scheme as banner deep-links).
+  deepLink      String?
+
+  // JSON object with audience filter (country, locale, hasOrders, lastOrderWithinDays, etc.).
+  audienceQuery String   @default("{}")
+
+  // 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed' | 'cancelled'
+  status        String   @default("draft")
+
+  scheduledFor  DateTime?
+  sentAt        DateTime?
+
+  recipientCount Int     @default(0)
+  successCount   Int     @default(0)
+  failureCount   Int     @default(0)
+  openCount      Int     @default(0)
+
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status, scheduledFor])
 }

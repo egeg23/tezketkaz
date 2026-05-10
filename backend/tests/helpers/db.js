@@ -90,6 +90,18 @@ async function setupTestDb(slug) {
   try { app.use('/api/users', require('../../src/routes/gdpr')); } catch { /* noop */ }
   // Phase 9.3 — auth (OAuth endpoints + OTP). Some test files exercise this.
   try { app.use('/api/auth', require('../../src/routes/auth')); } catch { /* noop */ }
+  // Phase 10.2 — customer support inbox.
+  try {
+    const supportRoutes = require('../../src/routes/support');
+    app.use('/api/support', supportRoutes);
+    app.use('/api/admin/support', supportRoutes.adminRouter);
+  } catch { /* noop */ }
+  // Phase 10.3 — push notification campaigns.
+  try {
+    const pushCampaignRoutes = require('../../src/routes/push-campaigns');
+    app.use('/api/admin/push-campaigns', pushCampaignRoutes.adminRouter);
+    app.use('/api/push-campaigns', pushCampaignRoutes.userRouter);
+  } catch { /* noop */ }
   // Stub the io getter — orders.js uses `req.app.get('io')`.
   const noopIo = { to: () => ({ emit: () => {} }), emit: () => {} };
   app.set('io', noopIo);

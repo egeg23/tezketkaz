@@ -169,7 +169,26 @@ class PushService {
 
   void _handleTap(RemoteMessage msg) {
     if (kDebugMode) debugPrint('FCM tap: ${msg.data}');
+    // Phase 10.4 — fire-and-forget campaign open tracking. The notification
+    // payload carries `campaignId` whenever it originated from a push
+    // campaign blast; we hit the analytics endpoint, ignoring failures so a
+    // network blip doesn't block the deep-link routing.
+    final campaignId = msg.data['campaignId']?.toString();
+    if (campaignId != null && campaignId.isNotEmpty) {
+      _trackCampaignOpen(campaignId);
+    }
     _tapController.add(msg);
+  }
+
+  Future<void> _trackCampaignOpen(String campaignId) async {
+    try {
+      await ApiClient.instance
+          .post('/api/push-campaigns/$campaignId/track-open');
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Campaign track-open failed (ignored): $e');
+      }
+    }
   }
 
   Future<void> _registerToken(String token) async {

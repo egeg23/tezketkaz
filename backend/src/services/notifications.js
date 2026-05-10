@@ -81,6 +81,19 @@ const T = {
     en: { title: 'Payout rejected', body: 'Your payout request was rejected' },
     kk: { title: 'Төлем сұрауы қабылданбады', body: 'Сұрауыңыз қабылданбады' },
   },
+  // Phase 10.2 — customer support inbox.
+  support_reply: {
+    uz: { title: 'Yangi javob', body: "Qo'llab-quvvatlash xizmatidan yangi javob" },
+    ru: { title: 'Новый ответ', body: 'Сообщение от службы поддержки' },
+    en: { title: 'New reply', body: 'New message from support' },
+    kk: { title: 'Жаңа жауап', body: 'Қолдау қызметінен жаңа жауап' },
+  },
+  support_resolved: {
+    uz: { title: 'Murojaat hal qilindi', body: 'Murojaatingiz hal qilindi' },
+    ru: { title: 'Обращение решено', body: 'Ваше обращение решено' },
+    en: { title: 'Ticket resolved', body: 'Your support ticket has been resolved' },
+    kk: { title: 'Өтініш шешілді', body: 'Сіздің өтінішіңіз шешілді' },
+  },
 };
 
 function pickLocale(locale) {
@@ -99,6 +112,7 @@ function dbTypeBucket(type) {
   if (type === 'chat_message') return 'chat';
   if (type === 'promo') return 'promo';
   if (type && type.startsWith('order_')) return 'order_update';
+  if (type && type.startsWith('support_')) return 'support';
   return 'system';
 }
 

@@ -13,12 +13,14 @@ import {
   Wallet,
   AlertCircle,
   Image as ImageIcon,
+  LifeBuoy,
+  Megaphone,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
-import { useStats } from "@/lib/queries";
+import { useStats, useSupportStats } from "@/lib/queries";
 
 const NAV: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
@@ -31,6 +33,8 @@ const NAV: { href: string; label: string; icon: React.ComponentType<{ className?
   { href: "/pricing-rules", label: "Pricing", icon: Settings },
   { href: "/finance", label: "Finance", icon: Wallet },
   { href: "/disputes", label: "Disputes", icon: AlertCircle },
+  { href: "/support", label: "Support", icon: LifeBuoy },
+  { href: "/push-campaigns", label: "Push campaigns", icon: Megaphone },
 ];
 
 export function Sidebar() {
@@ -39,6 +43,8 @@ export function Sidebar() {
   const { user, clear } = useAuth();
   const { data: stats } = useStats();
   const openDisputes = stats?.openDisputes ?? 0;
+  const { data: supportStats } = useSupportStats();
+  const openSupport = (supportStats?.open ?? 0) + (supportStats?.in_progress ?? 0);
 
   return (
     <aside className="flex h-screen w-60 flex-col border-r bg-card">
@@ -51,6 +57,7 @@ export function Sidebar() {
           const active = pathname === item.href || pathname?.startsWith(item.href + "/");
           const Icon = item.icon;
           const isDisputes = item.href === "/disputes";
+          const isSupport = item.href === "/support";
           return (
             <Link
               key={item.href}
@@ -66,6 +73,9 @@ export function Sidebar() {
               </span>
               {isDisputes && openDisputes > 0 && (
                 <Badge variant="destructive">{openDisputes}</Badge>
+              )}
+              {isSupport && openSupport > 0 && (
+                <Badge variant="warning">{openSupport}</Badge>
               )}
             </Link>
           );
