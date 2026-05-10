@@ -55,6 +55,8 @@ async function setupTestDb(slug) {
   app.use('/api/users', require('../../src/routes/users'));
   app.use('/api/shops', require('../../src/routes/shops'));
   app.use('/api/products', require('../../src/routes/products'));
+  // Phase 11 — cart drafts.
+  try { app.use('/api/cart-drafts', require('../../src/routes/cart-drafts')); } catch { /* noop */ }
   app.use('/api/categories', require('../../src/routes/categories'));
   app.use('/api', require('../../src/routes/modifiers'));
   app.use('/api', require('../../src/routes/zones'));

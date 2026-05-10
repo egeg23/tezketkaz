@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/models.dart';
+import '../../providers/cart_provider.dart';
 import '../../services/catalog_api.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/product_card.dart';
@@ -33,7 +35,18 @@ class _CatalogScreenState extends State<CatalogScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Phase 11 — seed the cart provider with the shop name so the
+      // multi-shop switcher chip can label the draft before the backend
+      // hydrates a summary row.
+      if (widget.shopId != null) {
+        context.read<CartProvider>().rememberShop(
+              shopId: widget.shopId!,
+              name: widget.shopName,
+            );
+      }
+      _load();
+    });
   }
 
   Future<void> _load() async {

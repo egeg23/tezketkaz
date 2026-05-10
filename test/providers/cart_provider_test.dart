@@ -21,7 +21,7 @@ Product _product({
 void main() {
   group('CartProvider basic add/remove', () {
     test('add increments quantity for the same product', () {
-      final cart = CartProvider();
+      final cart = CartProvider(autoLoad: false);
       expect(cart.add(_product()), true);
       expect(cart.add(_product()), true);
       expect(cart.itemCount, 2);
@@ -29,7 +29,7 @@ void main() {
     });
 
     test('remove decrements then deletes the line', () {
-      final cart = CartProvider();
+      final cart = CartProvider(autoLoad: false);
       cart.add(_product());
       cart.add(_product());
       cart.remove('p1');
@@ -38,16 +38,20 @@ void main() {
       expect(cart.isEmpty, true);
     });
 
-    test('rejects mixing products from different shops', () {
-      final cart = CartProvider();
-      cart.add(_product(shopId: 's1'));
-      expect(cart.add(_product(id: 'p2', shopId: 's2')), false);
+    test('multi-shop drafts keep each shop in its own bucket (Phase 11)', () {
+      final cart = CartProvider(autoLoad: false);
+      expect(cart.add(_product(shopId: 's1')), true);
+      // Mixing shops no longer fails — the second shop opens its own draft
+      // and becomes the active one.
+      expect(cart.add(_product(id: 'p2', shopId: 's2')), true);
+      expect(cart.activeShopId, 's2');
+      expect(cart.drafts, hasLength(2));
     });
   });
 
   group('CartLine keying with modifiers', () {
     test('same product with different modifier sets makes two lines', () {
-      final cart = CartProvider();
+      final cart = CartProvider(autoLoad: false);
       final p = _product();
 
       cart.addWithModifiers(
@@ -72,7 +76,7 @@ void main() {
     });
 
     test('same product with same modifiers merges into one line', () {
-      final cart = CartProvider();
+      final cart = CartProvider(autoLoad: false);
       final p = _product();
 
       cart.addWithModifiers(p, 1, const [
@@ -88,7 +92,7 @@ void main() {
     });
 
     test('quantityOf sums across modifier variants', () {
-      final cart = CartProvider();
+      final cart = CartProvider(autoLoad: false);
       final p = _product();
       cart.addWithModifiers(p, 2, const [
         CartModifierSelection(groupId: 'g1', optionIds: ['o1']),
@@ -102,7 +106,7 @@ void main() {
 
   group('CartProvider scheduling + promo', () {
     test('setCouponCode treats empty string as null', () {
-      final cart = CartProvider();
+      final cart = CartProvider(autoLoad: false);
       cart.setCouponCode('PROMO');
       expect(cart.couponCode, 'PROMO');
       cart.setCouponCode('');
@@ -110,7 +114,7 @@ void main() {
     });
 
     test('setLoyaltyPoints clamps negative input to 0', () {
-      final cart = CartProvider();
+      final cart = CartProvider(autoLoad: false);
       cart.setLoyaltyPoints(-10);
       expect(cart.loyaltyPoints, 0);
       cart.setLoyaltyPoints(50);

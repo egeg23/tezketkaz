@@ -17,6 +17,8 @@ const redisLib = require('./lib/redis');
 const authRoutes = require('./routes/auth');
 const shopRoutes = require('./routes/shops');
 const productRoutes = require('./routes/products');
+// Phase 11 — multi-shop cart drafts (buyer-side).
+const cartDraftRoutes = require('./routes/cart-drafts');
 const categoryRoutes = require('./routes/categories');
 const orderRoutes = require('./routes/orders');
 const userRoutes = require('./routes/users');
@@ -174,6 +176,9 @@ app.use('/api/users', userRoutes);
 app.use('/api/users', gdprRoutes);
 app.use('/api/shops', shopRoutes);
 app.use('/api/products', productRoutes);
+// Phase 11 — cart drafts. Mounted right after products since drafts are
+// scoped per shop and reference products one-to-one.
+app.use('/api/cart-drafts', cartDraftRoutes);
 // Phase 10.1 — group orders / split-bill (mounted right after products so
 // the host's `shopId` lookups + the join flow share the same auth surface
 // as the product/cart routes).

@@ -20,6 +20,7 @@ import '../../services/order_group_api.dart';
 import '../../services/payment_method_api.dart';
 import '../../services/promo_api.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/cart_shop_switcher.dart';
 import '../../widgets/time_slot_picker.dart';
 import 'address_book_screen.dart';
 
@@ -451,7 +452,9 @@ class _CartScreenState extends State<CartScreen> {
     if (cart.isEmpty) return _EmptyState(onShop: () => context.go('/buyer'));
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      // Phase 11 — defer to ThemeData.scaffoldBackgroundColor so dark mode
+      // works without overriding every screen. The light theme still maps
+      // to AppColors.bg.
       appBar: AppBar(
         title: Text('Savat · ${cart.itemCount}'),
         actions: [
@@ -479,6 +482,13 @@ class _CartScreenState extends State<CartScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 220),
         children: [
+          // Phase 11 — multi-shop draft switcher. Renders nothing when the
+          // buyer has only one draft; otherwise shows a chip rail so they
+          // can flip between in-progress carts without losing state.
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: CartShopSwitcher(),
+          ),
           // Phase 10.1 — group-order CTA. Always shown when the cart has at
           // least one item; a tap creates a split-bill group and routes to
           // the group screen with the current items pre-loaded.
@@ -498,7 +508,9 @@ class _CartScreenState extends State<CartScreen> {
           // Items card
           Container(
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              // Phase 11 — colorScheme.surface so dark mode looks correct;
+              // light mode still maps to the same neutral white.
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(AppRadii.lg),
               boxShadow: AppShadows.card,
             ),
@@ -971,7 +983,8 @@ class _Card extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     decoration: BoxDecoration(
-      color: AppColors.surface,
+      // Phase 11 — theme-aware so dark mode renders the right tonal surface.
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(AppRadii.lg),
       boxShadow: AppShadows.card,
     ),
@@ -1320,7 +1333,7 @@ class _LoyaltyPointsCard extends StatelessWidget {
     final clamped = selected > maxPts ? maxPts : selected;
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(AppRadii.lg),
         boxShadow: AppShadows.card,
       ),

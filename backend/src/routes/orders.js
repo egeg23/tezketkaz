@@ -641,6 +641,19 @@ router.post('/', authMiddleware, async (req, res, next) => {
       }
     }
 
+    // Phase 11 — wipe the buyer's cart draft for this shop now that the basket
+    // has been "consumed". Best-effort: any failure is swallowed so we never
+    // roll back a successful order over a draft-cleanup hiccup.
+    try {
+      // eslint-disable-next-line global-require
+      const cartDrafts = require('./cart-drafts');
+      if (typeof cartDrafts.clearDraftAfterOrder === 'function') {
+        await cartDrafts.clearDraftAfterOrder(req.user.id, shopId);
+      }
+    } catch (err) {
+      logger.warn({ err: err.message, orderId: order.id }, 'cart draft cleanup failed');
+    }
+
     res.status(201).json({ order: attachMoneyEnvelope(order) });
   } catch (err) { next(err); }
 });
