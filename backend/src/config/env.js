@@ -42,7 +42,19 @@ const schema = z.object({
   // Phase 7 — transactional email (Resend). Optional in dev/test; absent ⇒ noop.
   RESEND_API_KEY: z.string().optional(),
 
+  // ─── Phase 13.1.6 — Firebase Admin (push notifications) ─────────────────
+  // FCM_ENABLED is the master switch. When 'true', services/push.js will
+  // initialise firebase-admin using one of:
+  //   • FIREBASE_SERVICE_ACCOUNT_JSON — full service-account JSON inline.
+  //     Recommended for managed platforms (Render / Railway / Fly) that
+  //     can't host secret files. Single-line, escaped quotes.
+  //   • FIREBASE_SERVICE_ACCOUNT_PATH — absolute or repo-relative path to a
+  //     service-account JSON file. Used in self-hosted deploys.
+  // Falling back to the legacy `backend/firebase-admin.json` lookup remains
+  // supported for backward compat with pre-13.1.6 setups.
   FCM_ENABLED: z.enum(['true', 'false']).default('false'),
+  FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
 
   USE_MOCK_TAX: z.enum(['true', 'false']).default('true'),
   ADMIN_PHONES: z.string().optional(),

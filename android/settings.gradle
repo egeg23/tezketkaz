@@ -20,6 +20,10 @@ plugins {
     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
     id "com.android.application" version "8.9.1" apply false
     id "org.jetbrains.kotlin.android" version "2.1.0" apply false
+    // Phase 13.1.6 — Firebase Google Services plugin. Reads
+    // android/app/google-services.json (gitignored) at build time. Applied
+    // in android/app/build.gradle below the Flutter plugin.
+    id "com.google.gms.google-services" version "4.4.2" apply false
 }
 
 include ":app"

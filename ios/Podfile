@@ -1,0 +1,62 @@
+# Phase 13.1.6 — committed so the iOS deployment target is pinned at the
+# repo level. `flutter pub get` + `pod install` regenerate the rest of the
+# CocoaPods state on demand.
+#
+# Firebase 11.x (firebase_messaging ^15) requires iOS 13+. Match Flutter's
+# default for new projects.
+platform :ios, '13.0'
+
+# CocoaPods analytics noise.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug'   => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(
+    File.join('..', 'Flutter', 'Generated.xcconfig'),
+    __FILE__,
+  )
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. " \
+          "Run `flutter pub get` first."
+  end
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in Generated.xcconfig. " \
+        "Try deleting Generated.xcconfig, then run `flutter pub get`."
+end
+
+require File.expand_path(
+  File.join('packages', 'flutter_tools', 'bin', 'podhelper'),
+  flutter_root,
+)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+  flutter_install_all_ios_pods(File.dirname(File.realpath(__FILE__)))
+
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    # Phase 13.1.6 — enforce the same 13.0 floor on every Pod so Firebase
+    # subpods don't drag the deployment target back down to 11.0 (CocoaPods
+    # default) and break linking.
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+    end
+  end
+end

@@ -91,5 +91,13 @@
     <true/>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
+
+    <!-- Phase 13.1.6 — Firebase Messaging on iOS.
+         Setting this to NO disables Firebase's automatic UIApplicationDelegate
+         swizzling. We use flutter_local_notifications for foreground display
+         and PushService.onTap for routing, both of which expect manual
+         delegation of the APNs token. Required for FCM 11+. -->
+    <key>FirebaseAppDelegateProxyEnabled</key>
+    <false/>
 </dict>
 </plist>
