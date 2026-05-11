@@ -12,7 +12,7 @@ const env = require('../config/env');
 const logger = require('../lib/logger');
 
 async function createInvoice(order) {
-  if (env.useMockPayments) {
+  if (env.useMockUzum) {
     const prisma = require('../db');
     setTimeout(async () => {
       await prisma.order.update({
@@ -23,8 +23,14 @@ async function createInvoice(order) {
     return `tezketkaz://payment-result?orderId=${order.id}&status=success`;
   }
 
-  // Real Uzum Pay flow — POST to their checkout endpoint, get redirect URL
-  // (требует партнёрский API ключ)
+  // Verify after activation: Uzum's production flow most likely requires a
+  // POST to https://api.business.uzum.uz/v1/payment/create with a signed body
+  // returning a `redirectUrl`. The bare GET URL below is a fallback used by
+  // their legacy checkout — it is known to work for sandbox links but the
+  // production contract gives you a dynamic URL per invoice. After receiving
+  // merchant credentials, replace this with the POST-and-parse flow per
+  // https://docs.business.uzum.uz/. The webhook verification (HMAC-SHA256
+  // over raw body) is already production-ready.
   return `https://checkout.uzum.uz/?merchantId=${env.UZUM_MERCHANT_ID}&orderId=${order.id}&amount=${order.total}`;
 }
 
@@ -87,7 +93,7 @@ async function handleCallback(body, { signatureValid } = {}) {
  * benign placeholder so the surrounding code paths can be exercised.
  */
 async function getStatusFromUzum(externalRef) {
-  if (env.useMockPayments) {
+  if (env.useMockUzum) {
     return { externalRef, status: 'pending', mock: true };
   }
   const err = new Error('NotImplemented: Uzum status polling pending production keys');

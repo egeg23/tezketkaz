@@ -641,6 +641,26 @@ router.post('/', authMiddleware, async (req, res, next) => {
       }
     }
 
+    // Phase 13.3.9 — if the order is paid AT creation (saved-method charge
+    // succeeded), enqueue the fiscal-receipt job. Cash + redirect-flow orders
+    // get fiscalised on the payments callback. Best-effort enqueue.
+    if (isPaid) {
+      try {
+        await queues().fiscal.add(
+          'issue',
+          { orderId: order.id },
+          {
+            attempts: 5,
+            backoff: { type: 'exponential', delay: 60 * 1000 },
+            removeOnComplete: 100,
+            removeOnFail: 500,
+          },
+        );
+      } catch (err) {
+        logger.warn({ err: err.message, orderId: order.id }, 'fiscal enqueue failed');
+      }
+    }
+
     // Phase 11 — wipe the buyer's cart draft for this shop now that the basket
     // has been "consumed". Best-effort: any failure is swallowed so we never
     // roll back a successful order over a draft-cleanup hiccup.

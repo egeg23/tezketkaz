@@ -26,6 +26,27 @@ const click = require('../services/click');
 const payme = require('../services/payme');
 const uzum = require('../services/uzum');
 const kaspi = require('../services/kaspi');
+const { queues } = require('../lib/queues');
+
+// Phase 13.3.9 — enqueue Soliq fiscal-receipt job after payment confirmation.
+// Best-effort: callers swallow failures so a queue blip can't break a webhook.
+async function enqueueFiscalIssue(orderId) {
+  if (!orderId) return;
+  try {
+    await queues().fiscal.add(
+      'issue',
+      { orderId },
+      {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 60 * 1000 },
+        removeOnComplete: 100,
+        removeOnFail: 500,
+      },
+    );
+  } catch (err) {
+    logger.warn({ err: err.message, orderId }, 'fiscal enqueue failed');
+  }
+}
 
 const VALID_INIT_METHODS = new Set(['click', 'payme', 'uzumpay']);
 
@@ -193,6 +214,9 @@ router.post('/click/callback', async (req, res, next) => {
           metadata: { provider: 'click', externalId },
         });
 
+        // Phase 13.3.9 — fiscal receipt issuance.
+        await enqueueFiscalIssue(result.orderId);
+
         return {
           click_trans_id: body.click_trans_id,
           merchant_trans_id: body.merchant_trans_id,
@@ -245,6 +269,8 @@ router.post('/payme/callback', async (req, res, next) => {
                 targetId: order.id,
                 metadata: { provider: 'payme', externalId },
               });
+              // Phase 13.3.9 — fiscal receipt issuance.
+              await enqueueFiscalIssue(order.id);
             }
           }
           return result;
@@ -342,6 +368,8 @@ router.post(
                 targetId: order.id,
                 metadata: { provider: 'uzum', externalId },
               });
+              // Phase 13.3.9 — fiscal receipt issuance.
+              await enqueueFiscalIssue(order.id);
             }
           }
 

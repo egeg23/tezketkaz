@@ -27,7 +27,7 @@ async function pay({ orderId, amount, currency = 'KZT', customerPhone } = {}) {
   if (!orderId) {
     throw Object.assign(new Error('orderId required'), { status: 400 });
   }
-  if (env.useMockPayments || !env.KASPI_MERCHANT_ID) {
+  if (env.useMockKaspi || !env.KASPI_MERCHANT_ID) {
     // Auto-mock-confirm: in mock mode we eagerly mark the order paid so the
     // dev e2e flow advances without a provider round-trip. Mirror click.js.
     // .unref() so the timer doesn't keep the test runner alive.
@@ -54,6 +54,10 @@ async function pay({ orderId, amount, currency = 'KZT', customerPhone } = {}) {
   // merchant signature and parse the redirect URL out of the response. The
   // sandbox contract isn't provisioned yet — return a structured failure so
   // callers can surface a meaningful error rather than pretending it succeeded.
+  // Verify after activation: Kaspi's prod API base is documented at
+  // https://kaspi.kz/merchant/. The actual createInvoice path may live under
+  // /shop/api/v1/ rather than /api/v1/; consult Kaspi merchant onboarding
+  // docs for the exact path + required headers (X-Auth-Token, Content-Type).
   void KASPI_BASE;
   void currency;
   void customerPhone;
@@ -74,7 +78,7 @@ async function tokenizeCard(userId) {
     throw Object.assign(new Error('userId required'), { status: 400 });
   }
   const state = `kaspi_state_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  if (env.useMockPayments || !env.KASPI_MERCHANT_ID) {
+  if (env.useMockKaspi || !env.KASPI_MERCHANT_ID) {
     const mockToken = `mock_kaspi_token_${userId}_${Date.now()}`;
     return {
       provider: 'kaspi',
@@ -104,7 +108,7 @@ async function chargeWithToken(token, amount, orderId, currency = 'KZT') {
   if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
     return { ok: false, externalId: null, message: 'invalid_amount' };
   }
-  if (env.useMockPayments || !env.KASPI_MERCHANT_ID) {
+  if (env.useMockKaspi || !env.KASPI_MERCHANT_ID) {
     return {
       ok: true,
       externalId: `mock_kaspi_charge_${orderId || 'noorder'}_${Date.now()}`,

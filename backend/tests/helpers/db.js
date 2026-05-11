@@ -126,6 +126,8 @@ async function setupTestDb(slug) {
   } catch { /* noop */ }
   // Phase 12 — legal documents (privacy + terms).
   try { app.use('/api/legal', require('../../src/routes/legal')); } catch { /* noop */ }
+  // Phase 13.3.9 — Soliq.uz fiscal receipts.
+  try { app.use('/api', require('../../src/routes/fiscal')); } catch { /* noop */ }
   // Stub the io getter — orders.js uses `req.app.get('io')`.
   const noopIo = { to: () => ({ emit: () => {} }), emit: () => {} };
   app.set('io', noopIo);

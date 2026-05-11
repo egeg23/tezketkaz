@@ -20,6 +20,13 @@
 - [ ] **Kaspi.kz** (KZ, только если запускаешься в Казахстане): https://kaspi.kz/merchant/ → заявка
 - [ ] **Click KG** (KG, опционально): https://my.click.kg/business/
 
+**После получения credentials каждого провайдера:**
+1. Запусти `node backend/scripts/payment-diagnose.js <provider>` локально — он валидирует формат и пингует endpoint
+2. Установи env переменные в prod хостинге (см. `docs/runbooks/payments-go-live.md`)
+3. Сделай тестовую транзакцию 1000 UZS реальной картой → проверь в личном кабинете провайдера
+4. Сделай рефанд → проверь что статус Order.refundedAt обновился
+5. Только после прохождения этих 4 шагов — поставь `USE_MOCK_PAYMENTS=false`
+
 После получения merchant credentials — присылай мне (или сам подставь в env):
 ```env
 CLICK_MERCHANT_ID=...
