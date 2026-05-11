@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-navy-900: #1a237e;
+    --color-navy-700: #3f51b5;
+    --color-gold: #ffd600;
+    --color-amber: #ffa000;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background: #ffffff;
+    color: #0f172a;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  ::selection {
+    background: rgba(255, 214, 0, 0.45);
+    color: var(--color-navy-900);
+  }
+}
+
+@layer components {
+  /* Container with consistent horizontal padding */
+  .container-x {
+    @apply mx-auto w-full max-w-7xl px-5 sm:px-8 lg:px-12;
+  }
+
+  /* Primary CTA button (gold gradient) */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full
+           bg-gold-gradient px-6 py-3 text-sm font-semibold
+           text-navy-900 shadow-soft transition
+           hover:shadow-lift hover:-translate-y-0.5
+           focus-visible:outline focus-visible:outline-2
+           focus-visible:outline-offset-2 focus-visible:outline-brand-gold;
+  }
+
+  /* Ghost / outline CTA on dark backgrounds */
+  .btn-ghost-light {
+    @apply inline-flex items-center justify-center gap-2 rounded-full
+           border border-white/30 bg-white/5 px-6 py-3 text-sm font-semibold
+           text-white backdrop-blur transition
+           hover:bg-white/10 hover:border-white/50;
+  }
+
+  /* Plain text link, navy underline-on-hover */
+  .link-navy {
+    @apply font-medium text-navy-900 underline-offset-4 hover:underline;
+  }
+
+  /* Section vertical rhythm */
+  .section-y {
+    @apply py-20 sm:py-24 lg:py-28;
+  }
+
+  /* Surface card */
+  .surface-card {
+    @apply rounded-3xl border border-slate-100 bg-white p-7 shadow-soft
+           transition hover:shadow-lift;
+  }
+}
+
+/* Animate-on-scroll: simple opacity/translate that hooks into Tailwind's
+   built-in `motion-safe` + `data-revealed` attribute that we toggle with a
+   small IntersectionObserver inline-script. */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+}
+
+.reveal[data-revealed="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}
