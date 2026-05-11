@@ -60,6 +60,7 @@ import 'screens/shared/courier_verification_screen.dart';
 import 'screens/shared/chat_screen.dart';
 import 'screens/shared/legal_screen.dart';
 import 'screens/shared/reviews_screen.dart';
+import 'screens/shared/legal_screen.dart';
 
 Future<void> main() async {
   // SENTRY_DSN is optional. When omitted (local dev) SentryService.init becomes
@@ -197,8 +198,9 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       final loc = state.matchedLocation;
       final isOnAuth = loc.startsWith('/auth') || loc == '/splash';
       // Phase 12 — /legal renders Privacy + Terms which the buyer must be
-      // able to read BEFORE creating an account. Allow it for everyone.
-      final isPublic = loc == '/legal';
+      // able to read BEFORE creating an account. Allow it for everyone
+      // (including the OTP screen consent-link deep dive from Phase 13).
+      final isPublic = loc.startsWith('/legal');
       final isOnboarding = loc == '/onboarding';
       // Onboarding is a post-login screen; bounce unauth'd users to login
       // even when they deep-link straight to /onboarding.
@@ -233,6 +235,15 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       // Phase 12 — read-only Privacy / Terms viewer (tabbed). Auth-agnostic so
       // store reviewers can reach it from the profile screen during review.
       GoRoute(path: '/legal', builder: (_, __) => const LegalScreen()),
+
+      // Phase 13.1.5 — legal viewer (T&C + Privacy Policy). Tab is selected
+      // via ?tab=terms|privacy.
+      GoRoute(
+        path: '/legal',
+        builder: (_, s) => LegalScreen(
+          initialTab: s.uri.queryParameters['tab'] ?? 'terms',
+        ),
+      ),
 
       // Phase 3 — chat / reviews / loyalty / promo (modal screens, no shell).
       GoRoute(

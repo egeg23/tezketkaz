@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
+
+import '../constants/legal.dart';
 import '../models/models.dart';
 import '../services/analytics_service.dart';
 import '../services/api_client.dart';
@@ -18,6 +20,8 @@ class AuthProvider extends ChangeNotifier {
   User? _user;
   bool _isLoading = false;
   String? _error;
+  bool _legalUpdateRequired = false;
+  String? _currentLegalVersion;
 
   // Phase 7.2 — cached buyer membership row. Refreshed once on login and
   // every 30 minutes after that while the auth provider is alive.
@@ -34,6 +38,11 @@ class AuthProvider extends ChangeNotifier {
 
   /// Phase 7.2 — current buyer membership (`null` when not subscribed).
   Membership? get membership => _membership;
+
+  /// True when the most recent verify-otp told us the user needs to re-accept
+  /// the latest T&C / Privacy Policy. UI should prompt and call [acceptLegal].
+  bool get legalUpdateRequired => _legalUpdateRequired;
+  String? get currentLegalVersion => _currentLegalVersion;
 
   final _api = ApiClient.instance;
 
@@ -153,16 +162,40 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> verifyOtp(String phone, String code) async {
+  Future<bool> verifyOtp(
+    String phone,
+    String code, {
+    String acceptedLegalVersion = kCurrentLegalVersion,
+  }) async {
     _setLoading(true);
     try {
-      final res = await _api.post('/api/auth/verify-otp', {'phone': phone, 'code': code});
+      final res = await _api.post('/api/auth/verify-otp', {
+        'phone': phone,
+        'code': code,
+        'acceptedLegalVersion': acceptedLegalVersion,
+      });
       await _ingestAuthResponse(res.data, res.statusCode, method: 'otp');
       _setLoading(false);
       return true;
     } on ApiException catch (e) {
       _error = e.message;
       _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Records acceptance of the current legal version against the backend and
+  /// clears the [legalUpdateRequired] flag on success.
+  Future<bool> acceptLegal({String version = kCurrentLegalVersion}) async {
+    try {
+      await _api.post('/api/auth/accept-legal', {'version': version});
+      _legalUpdateRequired = false;
+      _currentLegalVersion = version;
+      notifyListeners();
+      return true;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
       return false;
     }
   }
@@ -248,6 +281,8 @@ class AuthProvider extends ChangeNotifier {
       throw ApiException('Server javobi noto\'g\'ri', statusCode);
     }
     _user = _parseUser(body['user']);
+    _legalUpdateRequired = body['legalUpdateRequired'] == true;
+    _currentLegalVersion = body['currentLegalVersion'] as String?;
     _state = AuthState.authenticated;
     SocketService.instance.connect();
     unawaited(PushService.instance.init());

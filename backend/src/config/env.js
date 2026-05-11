@@ -52,11 +52,15 @@ const schema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   SENTRY_DSN: z.string().optional(),
 
-  // Phase 9 — Cloudflare R2 / S3-compatible storage. All optional; falls back
-  // to local /uploads/* when unset.
+  // ─── Storage (Phase 9 + Phase 13.1.2) ─────────────────────────────────────
+  // Where uploaded files live. Defaults to local /uploads/* serving.
+  STORAGE_PROVIDER: z.enum(['local', 'r2', 's3']).default('local'),
+  // Used to build absolute URLs for files served by /uploads/* (local).
+  PUBLIC_URL: z.string().optional(),
+  // Required when STORAGE_PROVIDER=r2 or s3 (Phase 9 names).
   S3_BUCKET: z.string().optional(),
   S3_ENDPOINT: z.string().optional(),
-  S3_REGION: z.string().optional(),
+  S3_REGION: z.string().default('auto'),
   S3_ACCESS_KEY: z.string().optional(),
   S3_SECRET_KEY: z.string().optional(),
   S3_PUBLIC_BASE: z.string().optional(),
@@ -99,6 +103,13 @@ if (parsed.NODE_ENV === 'production') {
   }
   if (parsed.REDIS_ENABLED === 'true' && !parsed.REDIS_URL) {
     missing.push('REDIS_URL');
+  }
+  if (parsed.STORAGE_PROVIDER === 'r2' || parsed.STORAGE_PROVIDER === 's3') {
+    if (!parsed.R2_ACCESS_KEY_ID) missing.push('R2_ACCESS_KEY_ID');
+    if (!parsed.R2_SECRET_ACCESS_KEY) missing.push('R2_SECRET_ACCESS_KEY');
+    if (!parsed.R2_BUCKET) missing.push('R2_BUCKET');
+    if (!parsed.R2_ENDPOINT && parsed.STORAGE_PROVIDER === 'r2') missing.push('R2_ENDPOINT');
+    if (!parsed.R2_PUBLIC_URL) missing.push('R2_PUBLIC_URL');
   }
   if (missing.length) {
     // eslint-disable-next-line no-console

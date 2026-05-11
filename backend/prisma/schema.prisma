@@ -1,13 +1,13 @@
 // Prisma schema for TezKetKaz
-// To use PostgreSQL in production, change `provider = "sqlite"` to `provider = "postgresql"`
-// and update DATABASE_URL in .env
+// PostgreSQL-only (Phase 13.1.1). Local development requires Postgres running
+// (see backend/.env.example and the root docker-compose.yml for setup).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -32,6 +32,13 @@ model User {
   stir            String?  // ИНН Узбекистана (9 цифр)
   passportSeries  String?
   selfEmployedCert String?
+
+  // Phase 13.1.5 — legal acceptance (T&C / Privacy Policy).
+  // `acceptedLegalAt` is the moment of acceptance; `acceptedLegalVersion` is
+  // the version string (e.g. "v1.0.0") so we can require re-acceptance after
+  // material updates to legal documents.
+  acceptedLegalAt      DateTime?
+  acceptedLegalVersion String?
 
   // Shop linkage (one user can manage multiple shops via ShopMember)
   shopMemberships ShopMember[]

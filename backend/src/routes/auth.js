@@ -15,10 +15,15 @@ const { sendOtp } = require('../services/sms');
 const { authMiddleware } = require('../middleware/auth');
 const country = require('../services/country');
 const socialAuth = require('../services/socialAuth');
+const {
+  CURRENT_LEGAL_VERSION,
+  SUPPORTED_LEGAL_VERSIONS,
+} = require('../constants/legal');
 
 // Phase 7 — Kazakh joins the supported set on the auth /me PATCH path. This is
 // the same set as routes/users.js PATCH /me; keep them in sync.
 const VALID_LOCALES = new Set(['uz', 'ru', 'en', 'kk']);
+const SUPPORTED_LEGAL_VERSIONS_SET = new Set(SUPPORTED_LEGAL_VERSIONS);
 const OTP_RATE_KEY = (phone) => `otp:rate:${phone}`;
 const OTP_FAIL_KEY = (phone) => `otp:fail:${phone}`;
 const OTP_RATE_WINDOW_S = 3600;     // 1 hour
@@ -102,7 +107,7 @@ router.post('/send-otp', async (req, res, next) => {
 router.post('/verify-otp', async (req, res, next) => {
   try {
     const phone = normalizePhone(req.body.phone || '');
-    const { code } = req.body;
+    const { code, acceptedLegalVersion } = req.body;
     if (!isAllowedPhone(phone) || !code) {
       return errResp(res, 400, 'Invalid phone or code');
     }
@@ -135,22 +140,55 @@ router.post('/verify-otp', async (req, res, next) => {
       return errResp(res, 400, 'Invalid or expired code');
     }
 
-    await prisma.otpCode.update({ where: { id: otp.id }, data: { used: true } });
-    // Reset fail counter on success
-    await redis.del(failKey);
-
-    // Find or create user (default locale 'uz')
+    // Find user before consuming the OTP so that a missing legal acceptance
+    // on a brand-new signup can fail without burning the code.
     let user = await prisma.user.findUnique({
       where: { phone },
       include: { shopMemberships: { include: { shop: true } } },
     });
+
+    // Phase 13.1.5 — new accounts MUST explicitly accept current T&C / Privacy.
     if (!user) {
+      if (
+        typeof acceptedLegalVersion !== 'string' ||
+        !SUPPORTED_LEGAL_VERSIONS_SET.has(acceptedLegalVersion)
+      ) {
+        return res.status(400).json({
+          error: 'legal_acceptance_required',
+          currentVersion: CURRENT_LEGAL_VERSION,
+        });
+      }
+    }
+
+    await prisma.otpCode.update({ where: { id: otp.id }, data: { used: true } });
+    // Reset fail counter on success
+    await redis.del(failKey);
+
+    if (!user) {
+      // Phase 13.1.5 — new accounts must accept the current legal version. We
+      // gate creation here (not earlier) so OTP can still be verified and the
+      // client gets a clear actionable error.
+      if (
+        !acceptedLegalVersion ||
+        !SUPPORTED_LEGAL_VERSIONS_SET.has(acceptedLegalVersion)
+      ) {
+        return res.status(400).json({
+          error: 'legal_acceptance_required',
+          currentVersion: CURRENT_LEGAL_VERSION,
+        });
+      }
       // Phase 7 — auto-detect country + locale from phone prefix at signup.
       // (User can override later via PATCH /me.)
       const detectedCountry = country.fromPhone(phone);
       const detectedLocale = country.info(detectedCountry).locale || 'uz';
       user = await prisma.user.create({
-        data: { phone, locale: detectedLocale, country: detectedCountry },
+        data: {
+          phone,
+          locale: detectedLocale,
+          country: detectedCountry,
+          acceptedLegalAt: new Date(),
+          acceptedLegalVersion,
+        },
         include: { shopMemberships: { include: { shop: true } } },
       });
     } else if (!user.country) {
@@ -184,7 +222,42 @@ router.post('/verify-otp', async (req, res, next) => {
       metadata: { userAgent },
     });
 
-    res.json({ accessToken, refreshToken, user: serializeUser(user) });
+    // Existing user: signal the client when they need to re-accept after a
+    // legal-version bump. We don't reject the login — the next screen prompts
+    // re-acceptance via POST /api/auth/accept-legal.
+    const legalUpdateRequired =
+      user.acceptedLegalVersion !== CURRENT_LEGAL_VERSION;
+
+    res.json({
+      accessToken,
+      refreshToken,
+      user: serializeUser(user),
+      legalUpdateRequired,
+      currentLegalVersion: CURRENT_LEGAL_VERSION,
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/auth/accept-legal ─────────────────────────────────────────────
+// Records (or refreshes) the user's acceptance of the current T&C / Privacy
+// Policy. Used after a legal-version bump signalled by `legalUpdateRequired`.
+router.post('/accept-legal', authMiddleware, async (req, res, next) => {
+  try {
+    const { version } = req.body || {};
+    if (typeof version !== 'string' || !SUPPORTED_LEGAL_VERSIONS_SET.has(version)) {
+      return res.status(400).json({
+        error: 'invalid_legal_version',
+        currentVersion: CURRENT_LEGAL_VERSION,
+      });
+    }
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: {
+        acceptedLegalAt: new Date(),
+        acceptedLegalVersion: version,
+      },
+    });
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
