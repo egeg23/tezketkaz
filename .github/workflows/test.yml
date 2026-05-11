@@ -105,7 +105,11 @@ jobs:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: tezketkaz-backend
         run: |
-          npx @sentry/cli releases new "$GITHUB_SHA"
+          # `releases new` returns non-zero when the release already exists
+          # (e.g. workflow re-run on the same SHA). Probe with `info` first so
+          # the step stays idempotent.
+          npx @sentry/cli releases info "$GITHUB_SHA" >/dev/null 2>&1 || \
+            npx @sentry/cli releases new "$GITHUB_SHA"
           npx @sentry/cli releases set-commits "$GITHUB_SHA" --auto || true
           npx @sentry/cli releases finalize "$GITHUB_SHA"
 

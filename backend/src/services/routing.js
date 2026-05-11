@@ -19,6 +19,18 @@ const ENDPOINT = 'https://api.routing.yandex.net/v2/route';
 // effectively-identical points reuse the cached result.
 const _cache = new Map();
 const CACHE_TTL_MS = 60 * 1000;
+// Bound the cache so high-cardinality (origin,dest) traffic can't grow it
+// without limit. Map.keys() preserves insertion order so deleting the first
+// key drops the oldest entry — cheap LRU-ish eviction.
+const CACHE_MAX_ENTRIES = 5000;
+
+function _cacheSet(key, value) {
+  if (_cache.size >= CACHE_MAX_ENTRIES) {
+    const oldest = _cache.keys().next().value;
+    if (oldest !== undefined) _cache.delete(oldest);
+  }
+  _cache.set(key, { value, fetchedAt: Date.now() });
+}
 
 function _key(lat1, lng1, lat2, lng2) {
   const r = (n) => Math.round(n * 1e5) / 1e5;
@@ -68,7 +80,7 @@ async function route(origin, destination, opts = {}) {
       distanceKm: distance / 1000,
       etaMinutes: Math.ceil(duration / 60),
     };
-    _cache.set(k, { value, fetchedAt: Date.now() });
+    _cacheSet(k, value);
     return { ...value, source: 'yandex' };
   } catch (err) {
     logger.warn({ err: err.message }, 'Yandex Routing failed, falling back to haversine');
