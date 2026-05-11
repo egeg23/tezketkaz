@@ -78,9 +78,37 @@ dev_dependencies:
   mockito: ^5.4.4
   mocktail: ^1.0.4
   build_runner: ^2.4.13
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.0
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/
     - assets/icons/
+    - assets/launcher/
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/launcher/icon-1024.png"
+  min_sdk_android: 21
+  remove_alpha_ios: true
+  background_color_ios: "#1A237E"
+  adaptive_icon_background: "#1A237E"
+  adaptive_icon_foreground: "assets/launcher/icon-fg-1024.png"
+  web:
+    generate: true
+    image_path: "assets/launcher/icon-1024.png"
+    background_color: "#1A237E"
+    theme_color: "#1A237E"
+
+flutter_native_splash:
+  color: "#1A237E"
+  image: "assets/launcher/splash-logo.png"
+  android_12:
+    color: "#1A237E"
+    image: "assets/launcher/splash-logo.png"
+  ios: true
+  android: true
+  web: false
