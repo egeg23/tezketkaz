@@ -129,10 +129,16 @@ async function setupTestDb(slug) {
   // Stub the io getter — orders.js uses `req.app.get('io')`.
   const noopIo = { to: () => ({ emit: () => {} }), emit: () => {} };
   app.set('io', noopIo);
-  // Error handler so failures surface as JSON (not HTML).
+  // Error handler so failures surface as JSON (not HTML). Set
+  // `TEST_DEBUG_ERRORS=1` to also print stack traces for 5xx errors — handy
+  // when triaging broken routes locally.
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, _next) => {
     const status = err.status || err.statusCode || 500;
+    if (status >= 500 && process.env.TEST_DEBUG_ERRORS === '1') {
+      // eslint-disable-next-line no-console
+      console.error('[test-route-error]', err && (err.stack || err.message));
+    }
     res.status(status).json({ error: err.message || 'Server error' });
   });
 

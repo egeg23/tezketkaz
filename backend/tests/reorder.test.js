@@ -84,17 +84,31 @@ describe('POST /api/orders/:id/reorder', () => {
 
   test('product deleted (orphaned reference) → marked with skipReason=product_deleted', async () => {
     // FK constraints prevent us from actually deleting a referenced product.
-    // Disable FK enforcement temporarily so we can simulate an orphaned
-    // OrderItem.productId — exactly the state seen in production when an
-    // older row's product is removed via raw cleanup.
+    // We need to simulate an orphaned OrderItem.productId — the state seen in
+    // production when an older row's product is removed via raw cleanup.
+    //
+    // On Postgres we drop the FK constraint for the duration of the test, do
+    // the update, then re-add it. Quoted identifiers because Prisma generates
+    // CamelCase table/column names.
     const { buyer, order } = await makeScenario();
     const fakeId = 'ghost-' + Math.random().toString(36).slice(2, 8);
-    await prisma.$executeRawUnsafe('PRAGMA foreign_keys = OFF');
+    // Find and drop the FK constraint name dynamically — Prisma names them
+    // unpredictably (e.g. OrderItem_productId_fkey).
+    const fks = await prisma.$queryRawUnsafe(
+      `SELECT conname FROM pg_constraint
+         WHERE conrelid = '"OrderItem"'::regclass
+           AND contype = 'f'
+           AND conname LIKE '%productId%'`,
+    );
+    for (const { conname } of fks) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "OrderItem" DROP CONSTRAINT "${conname}"`,
+      );
+    }
     await prisma.$executeRawUnsafe(
-      `UPDATE OrderItem SET productId = ? WHERE orderId = ?`,
+      `UPDATE "OrderItem" SET "productId" = $1 WHERE "orderId" = $2`,
       fakeId, order.id,
     );
-    await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON');
     const res = await request(ctx.app)
       .post(`/api/orders/${order.id}/reorder`)
       .set('Authorization', buyer.auth);
