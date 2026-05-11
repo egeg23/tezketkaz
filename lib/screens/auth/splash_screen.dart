@@ -44,6 +44,10 @@ class _SplashScreenState extends State<SplashScreen>
       context.read<OrderProvider>().connectSockets();
       if (auth.user?.name == null) {
         context.go('/auth/name');
+      } else if (auth.user?.activeRole == UserRole.buyer &&
+          auth.user?.onboardedAt == null) {
+        // Phase 11 — first-time buyers see the tutorial before the shell.
+        context.go('/onboarding');
       } else {
         switch (auth.user?.activeRole) {
           case UserRole.courier: context.go('/courier'); break;

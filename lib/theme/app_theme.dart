@@ -314,7 +314,7 @@ class AppTheme {
   /// Phase 10.3 — dark variant. Mirrors [light] structurally so widgets that
   /// pull colors from `Theme.of(context).colorScheme` automatically switch.
   /// Widgets that hard-code `AppColors.*` will keep their light-mode tint —
-  /// follow-up PRs can refactor those to ThemeData lookups.
+  /// Phase 11 wires the most-trafficked surfaces to theme-aware lookups.
   static ThemeData get dark {
     final base = ThemeData(
       useMaterial3: true,
@@ -327,6 +327,16 @@ class AppTheme {
         surface: AppDarkColors.surface,
         error: AppDarkColors.error,
         onSurface: AppDarkColors.textPrimary,
+        // Phase 11 — explicit tonal-surface tokens so widgets that read
+        // `colorScheme.surfaceContainerLow` (Material 3 cards / chips /
+        // bottom sheets) render with the correct elevation in dark mode.
+        surfaceContainerLowest: AppDarkColors.bg,
+        surfaceContainerLow: AppDarkColors.surface,
+        surfaceContainer: AppDarkColors.surfaceElevated,
+        surfaceContainerHigh: AppDarkColors.surfaceMuted,
+        surfaceContainerHighest: AppDarkColors.surfaceMuted,
+        outline: AppDarkColors.border,
+        outlineVariant: AppDarkColors.borderLight,
       ),
       scaffoldBackgroundColor: AppDarkColors.bg,
       splashFactory: NoSplash.splashFactory,
@@ -474,6 +484,9 @@ class AppTheme {
         type: BottomNavigationBarType.fixed,
         elevation: 0,
       ),
+      // Phase 11 — disabled buttons / fields use a muted surface so they still
+      // read as inactive against the darker bg.
+      disabledColor: AppDarkColors.surfaceMuted,
       dividerTheme: const DividerThemeData(
         color: AppDarkColors.borderLight,
         thickness: 1,

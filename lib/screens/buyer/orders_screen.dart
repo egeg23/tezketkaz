@@ -182,10 +182,13 @@ class _OrderCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          // Phase 11 — theme-aware so dark mode renders correctly.
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isActive ? AppColors.primary.withValues(alpha: 0.4) : AppColors.border,
+            color: isActive
+                ? AppColors.primary.withValues(alpha: 0.4)
+                : Theme.of(context).dividerColor,
             width: isActive ? 1.5 : 1,
           ),
         ),

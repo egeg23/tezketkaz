@@ -122,7 +122,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
 
     final cart = context.read<CartProvider>();
-    final ok = cart.addWithModifiers(
+    // Phase 11 — multi-shop drafts: addWithModifiers always succeeds now.
+    // Different-shop additions land in a separate draft instead of replacing
+    // the active one. Confirmation snackbar uses the shop's name when we know
+    // it (cached when the buyer entered via the shop card).
+    cart.addWithModifiers(
       widget.product,
       _qty,
       selections,
@@ -130,20 +134,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       snapshot: snapshot,
     );
     if (!mounted) return;
-    if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text("Boshqa do'konga o'tishni xohlaysizmi?"),
-        action: SnackBarAction(
-          label: 'Ha',
-          onPressed: () {
-            cart.clearForNewShop();
-            cart.addWithModifiers(widget.product, _qty, selections, _unitPrice,
-                snapshot: snapshot);
-          },
-        ),
-      ));
-      return;
-    }
     context.showSuccess(t(context, 'product.added_to_cart'));
     if (mounted) Navigator.of(context).maybePop();
   }

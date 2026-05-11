@@ -369,7 +369,24 @@ class AuthProvider extends ChangeNotifier {
       shopId: firstShop?['id'],
       shopName: firstShop?['name'],
       country: json['country'] as String?,
+      // Phase 11 — null means the user hasn't seen the tutorial.
+      onboardedAt: _parseDate(json['onboardedAt']),
     );
+  }
+
+  DateTime? _parseDate(dynamic v) {
+    if (v == null) return null;
+    if (v is String && v.isNotEmpty) return DateTime.tryParse(v);
+    return null;
+  }
+
+  /// Phase 11 — flip the local user object to "onboarded" after completing the
+  /// tutorial. Backend write is owned by `OnboardingApi.markOnboarded`; this
+  /// just nudges the in-memory state so the router redirect stops firing.
+  void markOnboardedLocally() {
+    if (_user == null) return;
+    _user = _user!.copyWith(onboardedAt: DateTime.now());
+    notifyListeners();
   }
 
   CourierVerificationStatus _parseCourierStatus(String? s) {

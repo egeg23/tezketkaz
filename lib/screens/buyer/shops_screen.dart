@@ -63,7 +63,7 @@ class _ShopsScreenState extends State<ShopsScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      // Phase 11 — rely on ThemeData.scaffoldBackgroundColor (dark mode).
       appBar: AppBar(
         title: Text(t(context, 'shops.title')),
         bottom: TabBar(
@@ -274,7 +274,8 @@ class _ShopCardState extends State<_ShopCard> {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.surface,
+      // Phase 11 — theme-aware so dark mode picks the right surface tone.
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(AppRadii.lg),
       child: InkWell(
         onTap: () {

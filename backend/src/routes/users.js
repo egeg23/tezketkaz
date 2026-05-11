@@ -46,6 +46,14 @@ router.patch('/me', authMiddleware, async (req, res, next) => {
       data.name = name.trim() || null;
     }
 
+    // Phase 11 — onboardedAt is a "complete the intro" stamp. Server-controlled:
+    // we set new Date() whenever the field is present in the body, regardless
+    // of the value the client sent ("now", an ISO string, or anything truthy).
+    // The Flutter side just needs a way to flip the flag.
+    if ('onboardedAt' in (req.body || {})) {
+      data.onboardedAt = new Date();
+    }
+
     if (Object.keys(data).length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
     }
@@ -62,7 +70,27 @@ router.patch('/me', authMiddleware, async (req, res, next) => {
         name: user.name,
         locale: user.locale,
         country: user.country || 'UZ',
+        onboardedAt: user.onboardedAt,
       },
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/users/me/onboarding-status — Phase 11 ─────────────────────────
+// Returns whether the buyer has completed the first-run intro flow. Cheap
+// endpoint hit on every cold start by the Flutter app to decide whether to
+// show the 3-slide intro + role select.
+router.get('/me/onboarding-status', authMiddleware, async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { onboardedAt: true },
+    });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const onboarded = !!user.onboardedAt;
+    res.json({
+      onboarded,
+      ...(onboarded ? { completedAt: user.onboardedAt } : {}),
     });
   } catch (err) { next(err); }
 });

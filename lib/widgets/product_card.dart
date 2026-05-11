@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../providers/cart_provider.dart';
 import '../screens/buyer/product_detail_screen.dart';
@@ -69,19 +70,21 @@ class _ProductCardState extends State<ProductCard> {
 
   void _onAdd(BuildContext context) {
     HapticFeedback.lightImpact();
-    final ok = context.read<CartProvider>().add(product);
-    if (!ok) {
+    final cart = context.read<CartProvider>();
+    final wasDifferentShop =
+        cart.activeShopId != null && cart.activeShopId != product.shopId;
+    cart.add(product);
+    if (wasDifferentShop) {
+      // Phase 11 — multi-shop drafts: just confirm where the item landed.
+      final tpl = t(context, 'cart.added_to_shop');
+      final shopName = cart.drafts
+          .where((d) => d.shopId == product.shopId)
+          .map((d) => d.shopName)
+          .firstWhere((n) => n.isNotEmpty, orElse: () => '');
+      final msg = tpl.replaceAll('{shopName}',
+          shopName.isEmpty ? t(context, 'shops.title') : shopName);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text("Boshqa do'konga o'tishni xohlaysizmi?"),
-          action: SnackBarAction(
-            label: 'Ha',
-            onPressed: () {
-              context.read<CartProvider>().clearForNewShop();
-              context.read<CartProvider>().add(product);
-            },
-          ),
-        ),
+        SnackBar(content: Text(msg)),
       );
     }
   }

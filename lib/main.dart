@@ -22,6 +22,7 @@ import 'screens/auth/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/otp_screen.dart';
 import 'screens/auth/name_screen.dart';
+import 'screens/onboarding/onboarding_screen.dart';
 import 'screens/buyer/buyer_shell.dart';
 import 'screens/buyer/home_screen.dart';
 import 'screens/buyer/catalog_screen.dart';
@@ -194,9 +195,25 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       final isAuth = auth.isAuthenticated;
       final loc = state.matchedLocation;
       final isOnAuth = loc.startsWith('/auth') || loc == '/splash';
+      final isOnboarding = loc == '/onboarding';
+      // Onboarding is a post-login screen; bounce unauth'd users to login
+      // even when they deep-link straight to /onboarding.
       if (!isAuth && !isOnAuth) return '/auth/login';
       if (isAuth && loc == '/splash') {
         if (auth.user?.name == null) return '/auth/name';
+        if (_needsOnboarding(auth)) return '/onboarding';
+        return _homeForRole(auth);
+      }
+      // Phase 11 — buyers without `onboardedAt` get bounced into the
+      // tutorial the first time they try to enter the buyer shell.
+      if (isAuth &&
+          loc.startsWith('/buyer') &&
+          _needsOnboarding(auth)) {
+        return '/onboarding';
+      }
+      // Already-onboarded users shouldn't get stuck on /onboarding (e.g.
+      // after deep-link). Bounce them home.
+      if (isAuth && isOnboarding && !_needsOnboarding(auth)) {
         return _homeForRole(auth);
       }
       return null;
@@ -206,6 +223,7 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       GoRoute(path: '/auth/login', builder: (_, __) => const LoginScreen()),
       GoRoute(path: '/auth/otp', builder: (_, s) => OtpScreen(phone: s.extra as String? ?? '')),
       GoRoute(path: '/auth/name', builder: (_, __) => const NameScreen()),
+      GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
       GoRoute(path: '/switch-role', builder: (_, __) => const RoleSwitcherScreen()),
       GoRoute(path: '/courier-verification', builder: (_, __) => const CourierVerificationScreen()),
 
@@ -352,5 +370,13 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       case UserRole.shop: return '/shop';
       default: return '/buyer';
     }
+  }
+
+  // Phase 11 — only buyers see the tutorial; couriers / shop owners skip it.
+  bool _needsOnboarding(AuthProvider auth) {
+    final u = auth.user;
+    if (u == null) return false;
+    if (u.activeRole != UserRole.buyer) return false;
+    return u.onboardedAt == null;
   }
 }

@@ -26,6 +26,10 @@ class User {
   // user can override it from the country-settings screen.
   final String? country;
 
+  // Phase 11 — buyer onboarding tutorial timestamp. `null` ⇒ never completed
+  // ⇒ splash redirects to `/onboarding` on next launch.
+  final DateTime? onboardedAt;
+
   User({
     required this.id,
     required this.phone,
@@ -40,6 +44,7 @@ class User {
     this.shopId,
     this.shopName,
     this.country,
+    this.onboardedAt,
   });
 
   User copyWith({
@@ -54,6 +59,7 @@ class User {
     String? shopId,
     String? shopName,
     String? country,
+    DateTime? onboardedAt,
   }) => User(
     id: id,
     phone: phone,
@@ -68,6 +74,7 @@ class User {
     shopId: shopId ?? this.shopId,
     shopName: shopName ?? this.shopName,
     country: country ?? this.country,
+    onboardedAt: onboardedAt ?? this.onboardedAt,
   );
 
   // Shop data

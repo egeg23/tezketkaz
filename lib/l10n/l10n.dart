@@ -1471,6 +1471,94 @@ class L10n extends ChangeNotifier {
       'kk': 'Өтініштер жоқ',
     },
 
+    // ── Phase 11 — Onboarding ────────────────────────────────────────────
+    'onboarding.slide1_title': {
+      'uz': 'TezKetKaz',
+      'ru': 'TezKetKaz',
+      'en': 'TezKetKaz',
+      'kk': 'TezKetKaz',
+    },
+    'onboarding.slide1_body': {
+      'uz': 'Bir-ikki klik bilan eng yaqin do\'kondan tezda yetkazib beramiz.',
+      'ru': 'Быстрая доставка из ближайших магазинов в пару кликов.',
+      'en': 'Lightning-fast delivery from your nearest shops in a couple of taps.',
+      'kk': 'Жақын дүкендерден бірнеше басумен жылдам жеткізу.',
+    },
+    'onboarding.slide2_title': {
+      'uz': 'Restoranlar, do\'konlar, dorixonalar',
+      'ru': 'Рестораны, магазины, аптеки',
+      'en': 'Restaurants, shops, pharmacies',
+      'kk': 'Мейрамханалар, дүкендер, дәріханалар',
+    },
+    'onboarding.slide2_body': {
+      'uz': 'Hammasi bitta ilovada — kerakli kategoriyani tanlang.',
+      'ru': 'Всё в одном приложении — выберите нужную категорию.',
+      'en': 'All in one app — pick the vertical you need.',
+      'kk': 'Барлығы бір қосымшада — қажет санатты таңдаңыз.',
+    },
+    'onboarding.slide3_title': {
+      'uz': 'Real vaqtda kuzatib boring',
+      'ru': 'Отслеживайте курьера в реальном времени',
+      'en': 'Real-time courier tracking',
+      'kk': 'Курьерді нақты уақытта бақылау',
+    },
+    'onboarding.slide3_body': {
+      'uz': 'Buyurtmangiz qayerda ekanini xaritada ko\'ring.',
+      'ru': 'Смотрите, где ваш заказ, прямо на карте.',
+      'en': 'See exactly where your order is on the map.',
+      'kk': 'Тапсырысыңыз қайда екенін картадан көріңіз.',
+    },
+    'onboarding.slide4_title': {
+      'uz': 'Boshlash uchun tayyormisiz?',
+      'ru': 'Готовы начать?',
+      'en': 'Ready to get started?',
+      'kk': 'Бастауға дайынсыз ба?',
+    },
+    'onboarding.slide4_body': {
+      'uz': 'Telefon raqamingiz bilan kiring va birinchi buyurtmangizni bering.',
+      'ru': 'Войдите по номеру телефона и оформите первый заказ.',
+      'en': 'Continue with your phone number and place your first order.',
+      'kk': 'Телефон нөміріңізбен кіріп, бірінші тапсырысыңызды беріңіз.',
+    },
+    'onboarding.skip': {
+      'uz': "O'tkazib yuborish",
+      'ru': 'Пропустить',
+      'en': 'Skip',
+      'kk': 'Өткізіп жіберу',
+    },
+    'onboarding.next': {
+      'uz': 'Keyingisi',
+      'ru': 'Далее',
+      'en': 'Next',
+      'kk': 'Келесі',
+    },
+    'onboarding.continue': {
+      'uz': 'Boshlash',
+      'ru': 'Начать',
+      'en': "Let's go",
+      'kk': 'Бастау',
+    },
+
+    // ── Phase 11 — Multi-shop cart ───────────────────────────────────────
+    'cart.switcher_label': {
+      'uz': 'Sizning savatlaringiz',
+      'ru': 'Ваши корзины',
+      'en': 'Your carts',
+      'kk': 'Сіздің себеттеріңіз',
+    },
+    'cart.added_to_shop': {
+      'uz': "{shopName} savatiga qo'shildi",
+      'ru': 'Добавлено в корзину {shopName}',
+      'en': 'Added to {shopName}',
+      'kk': '{shopName} себетіне қосылды',
+    },
+    'cart.stale_items_warning': {
+      'uz': 'Diqqat: {count} ta mahsulot endi mavjud emas',
+      'ru': 'Внимание: {count} товаров больше недоступно',
+      'en': '{count} item(s) are no longer available',
+      'kk': 'Назар аударыңыз: {count} тауар енді қолжетімсіз',
+    },
+
     // ── Phase 10.3 — Dark mode ────────────────────────────────────────────
     'theme.title': {
       'uz': 'Tungi rejim',

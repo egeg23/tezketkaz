@@ -20,7 +20,8 @@ Widget pumpWithProviders(
   return MultiProvider(
     providers: [
       ChangeNotifierProvider<AuthProvider>.value(value: auth ?? AuthProvider()),
-      ChangeNotifierProvider<CartProvider>.value(value: cart ?? CartProvider()),
+      ChangeNotifierProvider<CartProvider>.value(
+          value: cart ?? CartProvider(autoLoad: false)),
       ChangeNotifierProvider<OrderProvider>.value(value: orders ?? OrderProvider()),
       ChangeNotifierProvider<CourierStateProvider>.value(
         value: courier ?? CourierStateProvider(),
