@@ -84,6 +84,93 @@ class L10n extends ChangeNotifier {
       'uz': 'Tasdiqlash',
       'ru': 'Подтвердить',
       'en': 'Verify',
+      'kk': 'Растау',
+    },
+
+    // ── Phase 13.1.5 — Legal acceptance (T&C / Privacy Policy) ──────────────
+    'auth.legal_consent_intro': {
+      'uz': 'Men quyidagilarga roziman:',
+      'ru': 'Я согласен(а) с',
+      'en': 'I agree to the',
+      'kk': 'Мен төмендегімен келісемін:',
+    },
+    'auth.legal_consent_and': {
+      'uz': 'va',
+      'ru': 'и',
+      'en': 'and the',
+      'kk': 'және',
+    },
+    'auth.terms_link': {
+      'uz': 'Foydalanish shartlari',
+      'ru': 'Условиями использования',
+      'en': 'Terms of Service',
+      'kk': 'Қолдану шарттары',
+    },
+    'auth.privacy_link': {
+      'uz': 'Maxfiylik siyosati',
+      'ru': 'Политикой конфиденциальности',
+      'en': 'Privacy Policy',
+      'kk': 'Құпиялылық саясаты',
+    },
+    'auth.legal_submit_blocked': {
+      'uz': "Davom etish uchun shartlarni qabul qiling",
+      'ru': 'Чтобы продолжить, примите условия',
+      'en': 'Accept the terms to continue',
+      'kk': 'Жалғастыру үшін шарттарды қабылдаңыз',
+    },
+    'auth.legal_updated_title': {
+      'uz': 'Shartlar yangilandi',
+      'ru': 'Условия обновлены',
+      'en': 'Terms updated',
+      'kk': 'Шарттар жаңартылды',
+    },
+    'auth.legal_updated_body': {
+      'uz': "Iltimos, yangi Foydalanish shartlari va Maxfiylik siyosatini qabul qiling.",
+      'ru': 'Пожалуйста, примите обновлённые Условия использования и Политику конфиденциальности.',
+      'en': 'Please accept the updated Terms of Service and Privacy Policy.',
+      'kk': 'Жаңартылған Қолдану шарттары мен Құпиялылық саясатын қабылдаңыз.',
+    },
+    'auth.legal_review': {
+      'uz': "Ko'rib chiqish",
+      'ru': 'Прочитать',
+      'en': 'Review',
+      'kk': 'Қарап шығу',
+    },
+    'auth.legal_accept_cta': {
+      'uz': 'Qabul qilish',
+      'ru': 'Принять',
+      'en': 'Accept',
+      'kk': 'Қабылдау',
+    },
+    'legal.title': {
+      'uz': "Huquqiy hujjatlar",
+      'ru': 'Юридические документы',
+      'en': 'Legal',
+      'kk': 'Заңды құжаттар',
+    },
+    'legal.terms_title': {
+      'uz': 'Shartlar',
+      'ru': 'Условия',
+      'en': 'Terms',
+      'kk': 'Шарттар',
+    },
+    'legal.privacy_title': {
+      'uz': 'Maxfiylik',
+      'ru': 'Конфиденциальность',
+      'en': 'Privacy',
+      'kk': 'Құпиялылық',
+    },
+    'legal.terms_body_stub': {
+      'uz': "Foydalanish shartlarining toʻliq matni tez orada chiqadi.",
+      'ru': 'Полный текст Условий использования будет доступен в ближайшее время.',
+      'en': 'Full Terms of Service text will be available soon.',
+      'kk': 'Қолдану шарттарының толық мәтіні жақын арада жарияланады.',
+    },
+    'legal.privacy_body_stub': {
+      'uz': "Maxfiylik siyosatining toʻliq matni tez orada chiqadi.",
+      'ru': 'Полный текст Политики конфиденциальности будет доступен в ближайшее время.',
+      'en': 'Full Privacy Policy text will be available soon.',
+      'kk': 'Құпиялылық саясатының толық мәтіні жақын арада жарияланады.',
     },
 
     // Common

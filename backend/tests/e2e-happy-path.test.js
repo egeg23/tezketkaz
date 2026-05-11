@@ -107,7 +107,7 @@ describe('e2e happy path', () => {
 
     const verifyRes = await request(app)
       .post('/api/auth/verify-otp')
-      .send({ phone, code: '123456' });
+      .send({ phone, code: '123456', acceptedLegalVersion: 'v1.0.0' });
     expect(verifyRes.status).toBe(200);
     expect(verifyRes.body.accessToken).toBeTruthy();
     expect(verifyRes.body.refreshToken).toBeTruthy();
