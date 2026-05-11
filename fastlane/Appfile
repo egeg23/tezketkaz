@@ -1,0 +1,20 @@
+# Fastlane Appfile — identifiers used by every lane.
+#
+# All secrets here are sourced from environment variables in CI so that this
+# file can be safely committed. Local-only signing material (the Play
+# service-account JSON, App Store Connect API keys) is never committed.
+
+# ── Android (supply / Play Console) ───────────────────────────────────────
+# The service-account JSON is written here by the GitHub Actions release
+# workflow from the PLAY_STORE_JSON_KEY secret. It is gitignored.
+json_key_file("fastlane/play-store-key.json")
+package_name("uz.tezketkaz.app")
+
+# ── iOS (deliver / pilot / App Store Connect) ─────────────────────────────
+# These three IDs are required for the iOS lanes. They are configured via
+# repository secrets in CI; locally you can `export` them or place them in
+# `fastlane/.env` (gitignored).
+apple_id(ENV["FASTLANE_APPLE_ID"])      # Apple ID email, e.g. ops@tezketkaz.uz
+itc_team_id(ENV["FASTLANE_ITC_TEAM_ID"]) # App Store Connect numeric team id
+team_id(ENV["FASTLANE_TEAM_ID"])         # Apple Developer Portal alphanumeric team id
+app_identifier("uz.tezketkaz.app")

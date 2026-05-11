@@ -1,0 +1,198 @@
+name: release
+
+# Tag-driven release pipeline. Push a semver tag (`v1.0.1`) to trigger.
+# The two jobs run in parallel and are entirely independent — iOS can
+# fail without Android suffering and vice versa.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  # Manual dispatch is useful for re-running a release after fixing a
+  # transient infra issue (Play API rate-limit, App Store Connect 5xx).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build (must already exist).'
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false  # Don't cancel a release halfway through.
+
+jobs:
+  build-android:
+    name: Android (Play Internal)
+    runs-on: ubuntu-latest
+    # Required secrets:
+    #   ANDROID_KEYSTORE_BASE64        — keystore JKS, base64-encoded
+    #   ANDROID_KEYSTORE_PASSWORD      — store password
+    #   ANDROID_KEY_ALIAS              — signing key alias
+    #   ANDROID_KEY_PASSWORD           — signing key password
+    #   PLAY_STORE_JSON_KEY            — Play Console service account JSON, base64
+    # Optional:
+    #   RELEASE_WEBHOOK_URL            — Slack/Discord webhook for notifications
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+
+      - name: Setup Ruby 3.2
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true  # caches ./vendor/bundle for repeat runs
+
+      - name: Restore Android keystore from secret
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is missing."
+            exit 1
+          fi
+          mkdir -p android/app
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-keystore.jks
+          # Sanity: file should be a non-empty binary blob.
+          test -s android/app/release-keystore.jks
+
+      - name: Compose key.properties
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          cat > android/key.properties <<EOF
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyPassword=${ANDROID_KEY_PASSWORD}
+          keyAlias=${ANDROID_KEY_ALIAS}
+          storeFile=app/release-keystore.jks
+          EOF
+
+      - name: Restore Play Console service-account JSON
+        env:
+          PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
+        run: |
+          if [ -z "$PLAY_STORE_JSON_KEY" ]; then
+            echo "::error::PLAY_STORE_JSON_KEY secret is missing."
+            exit 1
+          fi
+          printf '%s' "$PLAY_STORE_JSON_KEY" | base64 --decode > fastlane/play-store-key.json
+          test -s fastlane/play-store-key.json
+
+      - name: Bundle install
+        run: bundle install --jobs 4 --retry 3
+
+      - name: Fastlane android internal
+        env:
+          # Surface signing env so the gradle release block can fall back
+          # to them if key.properties is ever missing.
+          ANDROID_KEYSTORE_PATH: android/app/release-keystore.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          RELEASE_WEBHOOK_URL: ${{ secrets.RELEASE_WEBHOOK_URL }}
+        run: bundle exec fastlane android internal
+
+      - name: Upload APK artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: warn
+
+      - name: Upload AAB artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: warn
+
+      - name: Cleanup signing material
+        if: always()
+        run: |
+          rm -f android/app/release-keystore.jks
+          rm -f android/key.properties
+          rm -f fastlane/play-store-key.json
+
+  build-ios:
+    name: iOS (TestFlight)
+    runs-on: macos-14
+    # Required secrets (iOS lane skips gracefully if MATCH_GIT_URL unset):
+    #   MATCH_GIT_URL                       — private repo storing encrypted certs
+    #   MATCH_PASSWORD                      — passphrase decrypting match repo
+    #   MATCH_GIT_BASIC_AUTHORIZATION       — base64 of "user:token" for match git
+    #   APP_STORE_CONNECT_API_KEY_ID        — key id (e.g. ABCD123456)
+    #   APP_STORE_CONNECT_API_ISSUER_ID     — issuer id (UUID)
+    #   APP_STORE_CONNECT_API_KEY_BASE64    — base64 of the .p8 private key
+    #   FASTLANE_APPLE_ID                   — apple id email
+    #   FASTLANE_TEAM_ID                    — dev portal alphanumeric team id
+    #   FASTLANE_ITC_TEAM_ID                — app store connect numeric team id
+    # Optional:
+    #   RELEASE_WEBHOOK_URL                 — Slack/Discord webhook
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+        continue-on-error: true  # The macos-14 image may not yet have Xcode 16
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+
+      - name: Setup Ruby 3.2
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Bundle install
+        run: bundle install --jobs 4 --retry 3
+
+      - name: Check iOS signing readiness
+        id: ios_signing
+        env:
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+        run: |
+          if [ -z "$MATCH_GIT_URL" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::iOS signing not yet configured — skipping lane gracefully."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fastlane ios beta
+        env:
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+          FASTLANE_APPLE_ID: ${{ secrets.FASTLANE_APPLE_ID }}
+          FASTLANE_TEAM_ID: ${{ secrets.FASTLANE_TEAM_ID }}
+          FASTLANE_ITC_TEAM_ID: ${{ secrets.FASTLANE_ITC_TEAM_ID }}
+          RELEASE_WEBHOOK_URL: ${{ secrets.RELEASE_WEBHOOK_URL }}
+        run: bundle exec fastlane ios beta
+
+      - name: Upload IPA artifact
+        if: always() && steps.ios_signing.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: build/ios/ipa/Runner.ipa
+          if-no-files-found: warn

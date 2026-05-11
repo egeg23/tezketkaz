@@ -1,0 +1,241 @@
+# Fastfile — TezKetKaz release automation.
+#
+# Lane summary:
+#   android internal   → build APK + AAB, upload to Play Console Internal Testing.
+#   android beta       → promote Internal → Beta (open testing).
+#   android production → promote Beta → Production.
+#   ios beta           → build IPA via build_ios_app, upload to TestFlight.
+#   ios release        → push metadata + screenshots to App Store Connect.
+#
+# Each lane wraps its body in a begin/rescue so that a Slack/Discord
+# webhook (RELEASE_WEBHOOK_URL) is hit on both success and failure, and
+# so an iOS lane can no-op gracefully on a fresh checkout that has not
+# yet wired the Apple Developer signing material.
+
+default_platform(:android)
+
+# ─── Helpers ──────────────────────────────────────────────────────────────
+
+def flutter_prepare(target)
+  # Both platforms need a clean Flutter build before the native packaging
+  # step kicks in. `flutter clean` purges stale Generated.xcconfig /
+  # .gradle artefacts; `flutter pub get` re-resolves the dart deps.
+  sh("flutter", "clean")
+  sh("flutter", "pub", "get")
+  case target
+  when :android
+    # --release implies obfuscation through R8 (configured in build.gradle).
+    sh("flutter", "build", "appbundle", "--release")
+    sh("flutter", "build", "apk", "--release")
+  when :ios
+    # --no-codesign — Fastlane gym/build_ios_app handles signing afterwards.
+    sh("flutter", "build", "ios", "--release", "--no-codesign")
+  end
+end
+
+def notify_success(lane_name)
+  return unless ENV["RELEASE_WEBHOOK_URL"]
+  slack(
+    slack_url: ENV["RELEASE_WEBHOOK_URL"],
+    message: ":white_check_mark: TezKetKaz `#{lane_name}` succeeded.",
+    success: true,
+    default_payloads: [:git_branch, :last_git_commit_hash],
+  )
+end
+
+def notify_failure(lane_name, exception)
+  return unless ENV["RELEASE_WEBHOOK_URL"]
+  slack(
+    slack_url: ENV["RELEASE_WEBHOOK_URL"],
+    message: ":x: TezKetKaz `#{lane_name}` failed: #{exception.message}",
+    success: false,
+    default_payloads: [:git_branch, :last_git_commit_hash],
+  )
+end
+
+# Returns true when the iOS signing material has been wired up. We let the
+# release workflow run unconditionally — iOS lanes self-skip until the user
+# has provisioned the certificates repo. This avoids a red CI matrix during
+# the months between launching Android and TestFlight.
+def ios_signing_ready?
+  !ENV["MATCH_GIT_URL"].to_s.empty? &&
+    !ENV["MATCH_PASSWORD"].to_s.empty?
+end
+
+# ─── Android ──────────────────────────────────────────────────────────────
+
+platform :android do
+  desc "Build APK+AAB and upload to Play Console Internal Testing."
+  lane :internal do
+    begin
+      flutter_prepare(:android)
+      # `upload_to_play_store` is the modern alias for `supply`. We rely on
+      # the json_key_file declared in the Appfile for authentication.
+      upload_to_play_store(
+        track: "internal",
+        aab: "build/app/outputs/bundle/release/app-release.aab",
+        apk: "build/app/outputs/flutter-apk/app-release.apk",
+        metadata_path: "fastlane/metadata/android",
+        skip_upload_changelogs: false,
+        # release_status: completed makes the build available to testers
+        # immediately; switch to "draft" if a human should gate.
+        release_status: "completed",
+      )
+      notify_success("android internal")
+    rescue => exception
+      notify_failure("android internal", exception)
+      raise exception
+    end
+  end
+
+  desc "Promote the current Internal Testing build to the Beta (open testing) track."
+  lane :beta do
+    begin
+      upload_to_play_store(
+        track: "internal",
+        track_promote_to: "beta",
+        skip_upload_apk: true,
+        skip_upload_aab: true,
+        skip_upload_metadata: true,
+        skip_upload_changelogs: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true,
+      )
+      notify_success("android beta")
+    rescue => exception
+      notify_failure("android beta", exception)
+      raise exception
+    end
+  end
+
+  desc "Promote the current Beta build to Production."
+  lane :production do
+    begin
+      upload_to_play_store(
+        track: "beta",
+        track_promote_to: "production",
+        skip_upload_apk: true,
+        skip_upload_aab: true,
+        skip_upload_metadata: true,
+        skip_upload_changelogs: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true,
+      )
+      notify_success("android production")
+    rescue => exception
+      notify_failure("android production", exception)
+      raise exception
+    end
+  end
+end
+
+# ─── iOS ──────────────────────────────────────────────────────────────────
+#
+# Prerequisites (1-time setup, before any iOS lane will succeed):
+#
+#   1. Create a private GitHub/GitLab repo (e.g. tezketkaz-ios-certs) to
+#      store the encrypted certificates. Add its HTTPS URL to the
+#      `MATCH_GIT_URL` secret and a strong passphrase to `MATCH_PASSWORD`.
+#   2. Locally run `bundle exec fastlane match init` once to initialise
+#      the cert repo, then `bundle exec fastlane match appstore` to seed
+#      the App Store distribution cert + provisioning profile.
+#   3. Generate an App Store Connect API key in https://appstoreconnect.apple.com
+#      → Users and Access → Keys (App Manager role). Add the key id, issuer
+#      id, and the base64-encoded .p8 file to the matching CI secrets.
+#
+# Until those secrets exist the lanes below print a clear message and exit
+# zero so the GitHub Actions matrix stays green during the rollout window.
+
+platform :ios do
+  desc "Build IPA via gym and upload to TestFlight."
+  lane :beta do
+    unless ios_signing_ready?
+      UI.important("iOS signing not yet wired — set MATCH_GIT_URL/MATCH_PASSWORD to enable.")
+      next
+    end
+
+    begin
+      flutter_prepare(:ios)
+
+      # `match` syncs the App Store distribution certificate + provisioning
+      # profile from the encrypted git repo into the local keychain.
+      match(
+        type: "appstore",
+        readonly: true,
+        git_url: ENV["MATCH_GIT_URL"],
+        git_basic_authorization: ENV["MATCH_GIT_BASIC_AUTHORIZATION"],
+      )
+
+      # build_ios_app is the modern alias for `gym`. Same options, clearer
+      # name. xcargs disables Bitcode (deprecated by Apple since Xcode 14).
+      build_ios_app(
+        workspace: "ios/Runner.xcworkspace",
+        scheme: "Runner",
+        configuration: "Release",
+        export_method: "app-store",
+        clean: true,
+        output_directory: "build/ios/ipa",
+        output_name: "Runner.ipa",
+        xcargs: "-allowProvisioningUpdates",
+      )
+
+      # `pilot` ≡ upload_to_testflight. We use the App Store Connect API
+      # key flow (api_key_path) rather than 2FA Apple ID auth so CI can
+      # run unattended.
+      app_store_connect_api_key(
+        key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+        issuer_id: ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+        key_content: ENV["APP_STORE_CONNECT_API_KEY_BASE64"],
+        is_key_content_base64: true,
+        in_house: false,
+      )
+
+      upload_to_testflight(
+        ipa: "build/ios/ipa/Runner.ipa",
+        skip_waiting_for_build_processing: true,
+      )
+
+      notify_success("ios beta")
+    rescue => exception
+      notify_failure("ios beta", exception)
+      raise exception
+    end
+  end
+
+  desc "Push metadata + screenshots to App Store Connect (production review)."
+  lane :release do
+    unless ios_signing_ready?
+      UI.important("iOS signing not yet wired — set MATCH_GIT_URL/MATCH_PASSWORD to enable.")
+      next
+    end
+
+    begin
+      app_store_connect_api_key(
+        key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+        issuer_id: ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+        key_content: ENV["APP_STORE_CONNECT_API_KEY_BASE64"],
+        is_key_content_base64: true,
+        in_house: false,
+      )
+
+      # `deliver` ≡ upload_to_app_store. skip_binary_upload because the
+      # binary is delivered via the `ios beta` lane → TestFlight; this lane
+      # only updates the listing.
+      upload_to_app_store(
+        metadata_path: "fastlane/metadata/ios",
+        screenshots_path: "fastlane/screenshots",
+        skip_binary_upload: true,
+        skip_screenshots: false,
+        skip_metadata: false,
+        force: true, # Skip the HTML preview confirmation in CI.
+        precheck_include_in_app_purchases: false,
+        submit_for_review: false, # Human review submission stays manual.
+      )
+
+      notify_success("ios release")
+    rescue => exception
+      notify_failure("ios release", exception)
+      raise exception
+    end
+  end
+end

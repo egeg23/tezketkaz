@@ -1,0 +1,4 @@
+# Fastlane plugins live here. None required yet — left intentionally empty
+# so the Gemfile loader has a file to eval. Add plugins via
+# `bundle exec fastlane add_plugin <name>` when needed (e.g. firebase
+# app distribution, sentry release tagging, semantic version bumping).

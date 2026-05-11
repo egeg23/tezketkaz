@@ -62,3 +62,42 @@ bundle exec fastlane ios deploy
 Until the `Fastfile` and signing keys are checked in, the .txt files in this
 tree can still be copy-pasted into Play Console and App Store Connect by
 hand for the initial release.
+
+## Deploying
+
+The Phase 13.1.4 work wired a real `Fastfile`, `Appfile`, and
+`.github/workflows/release.yml` to the metadata in this folder. The lanes
+below assume `bundle install` has been run once at the repo root.
+
+```bash
+# Local (after bundle install + signing setup):
+bundle exec fastlane android internal        # APK to Play Internal Testing
+bundle exec fastlane android beta            # Promote → Beta
+bundle exec fastlane android production      # Promote → Production
+bundle exec fastlane ios beta                # IPA to TestFlight
+bundle exec fastlane ios release             # Metadata + screenshots → App Store
+
+# CI (push a semver tag, e.g. v1.0.1):
+git tag v1.0.1 && git push origin v1.0.1     # Triggers release.yml
+```
+
+### 1-time signing setup
+
+The release workflow expects a set of GitHub Secrets — see the inline
+`# Required:` comments in `.github/workflows/release.yml`. In short:
+
+- **Android** — generate a keystore once with
+  `keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias tezketkaz`,
+  then `base64 release.jks | pbcopy` and paste into `ANDROID_KEYSTORE_BASE64`.
+  Create a Play Console service account
+  ([guide](https://docs.fastlane.tools/getting-started/android/setup/)),
+  download the JSON key, base64-encode it, and paste into `PLAY_STORE_JSON_KEY`.
+- **iOS** — provision a separate private repo for `match` to store the
+  encrypted distribution certificate, then locally:
+  `bundle exec fastlane match init` followed by `bundle exec fastlane match appstore`.
+  Generate an App Store Connect API key with the App Manager role in
+  Users and Access → Keys, base64-encode the `.p8`, and store the key id,
+  issuer id, and key blob in CI secrets.
+
+The iOS lane self-skips with a friendly warning until `MATCH_GIT_URL` is set,
+so Android-only releases stay green on CI.

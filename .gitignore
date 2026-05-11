@@ -107,6 +107,17 @@ vendor-next/tsconfig.tsbuildinfo
 test_*.js
 buyer_login.json
 
+# ─── Fastlane ─────────────────────────────────────────────────────────────────
+# Play Console service-account JSON is injected by CI from a secret and must
+# never land in git. Locally, place it at fastlane/play-store-key.json.
+fastlane/play-store-key.json
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+fastlane/.env
+# Gemfile.lock IS committed for reproducible CI — see Gemfile comment.
+
 # ─── Claude Code (local) ──────────────────────────────────────────────────────
 .claude/settings.local.json
 

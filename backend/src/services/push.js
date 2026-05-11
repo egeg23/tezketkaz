@@ -1,10 +1,21 @@
 // Firebase Cloud Messaging service.
-// Setup:
-// 1. Create Firebase project at https://console.firebase.google.com
-// 2. Download serviceAccountKey.json
-// 3. Place it in backend/firebase-admin.json (gitignored)
-// 4. Set FCM_ENABLED=true in .env
+//
+// Phase 13.1.6 — credential resolution order (first hit wins):
+//   1. FIREBASE_SERVICE_ACCOUNT_JSON env var  (inline JSON; preferred for
+//      managed platforms like Render / Railway)
+//   2. FIREBASE_SERVICE_ACCOUNT_PATH env var  (filesystem path; preferred
+//      for self-hosted deploys)
+//   3. Legacy backend/firebase-admin.json     (kept for backward compat)
+//
+// Setup (one-time, in production):
+//   1. Create Firebase project at https://console.firebase.google.com
+//   2. Project Settings → Service Accounts → Generate new private key
+//   3. Provide it via FIREBASE_SERVICE_ACCOUNT_JSON (inline) OR
+//      FIREBASE_SERVICE_ACCOUNT_PATH (file)
+//   4. Set FCM_ENABLED=true
+// See docs/runbooks/firebase-prod-setup.md for the full checklist.
 
+const fs = require('fs');
 const path = require('path');
 const env = require('../config/env');
 const logger = require('../lib/logger');
@@ -12,20 +23,66 @@ const prisma = require('../db');
 
 let admin = null;
 
-if (env.fcmEnabled) {
-  try {
-    // eslint-disable-next-line global-require
-    admin = require('firebase-admin');
-    // eslint-disable-next-line global-require, import/no-dynamic-require
-    const serviceAccount = require(path.resolve(__dirname, '../../firebase-admin.json'));
-    if (!admin.apps.length) {
-      admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+/** Resolve a parsed service-account credential object, or return null. */
+function loadServiceAccount() {
+  // 1. Inline JSON (managed platforms).
+  if (env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    try {
+      return JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    } catch (err) {
+      logger.warn({ err: err.message },
+        'FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON; ignoring');
     }
-    logger.info('FCM initialized');
-  } catch (err) {
-    logger.warn({ err: err.message }, 'FCM init failed, falling back to mock');
-    admin = null;
   }
+  // 2. Explicit path.
+  if (env.FIREBASE_SERVICE_ACCOUNT_PATH) {
+    const resolved = path.isAbsolute(env.FIREBASE_SERVICE_ACCOUNT_PATH)
+      ? env.FIREBASE_SERVICE_ACCOUNT_PATH
+      : path.resolve(process.cwd(), env.FIREBASE_SERVICE_ACCOUNT_PATH);
+    try {
+      const raw = fs.readFileSync(resolved, 'utf8');
+      return JSON.parse(raw);
+    } catch (err) {
+      logger.warn({ err: err.message, path: resolved },
+        'FIREBASE_SERVICE_ACCOUNT_PATH unreadable; ignoring');
+    }
+  }
+  // 3. Legacy default location.
+  const legacy = path.resolve(__dirname, '../../firebase-admin.json');
+  if (fs.existsSync(legacy)) {
+    try {
+      // eslint-disable-next-line global-require, import/no-dynamic-require
+      return require(legacy);
+    } catch (err) {
+      logger.warn({ err: err.message }, 'legacy firebase-admin.json unreadable');
+    }
+  }
+  return null;
+}
+
+if (env.fcmEnabled) {
+  const serviceAccount = loadServiceAccount();
+  if (!serviceAccount) {
+    logger.warn(
+      'FCM_ENABLED=true but no service account found. Set '
+      + 'FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH. '
+      + 'Push notifications will be mocked.',
+    );
+  } else {
+    try {
+      // eslint-disable-next-line global-require
+      admin = require('firebase-admin');
+      if (!admin.apps.length) {
+        admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+      }
+      logger.info({ projectId: serviceAccount.project_id }, 'FCM initialized');
+    } catch (err) {
+      logger.warn({ err: err.message }, 'FCM init failed, falling back to mock');
+      admin = null;
+    }
+  }
+} else {
+  logger.info('FCM_ENABLED=false — push notifications run in mock mode');
 }
 
 const isReal = () => Boolean(admin);

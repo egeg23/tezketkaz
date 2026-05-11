@@ -2,6 +2,10 @@ plugins {
     id "com.android.application"
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
+    // Phase 13.1.6 — Firebase. The plugin parses google-services.json at
+    // build time; without that file (placeholder ships with TODOs) gradle
+    // will warn but still produce a working debug APK without FCM.
+    id "com.google.gms.google-services"
 }
 
 def localProperties = new Properties()
@@ -53,11 +57,20 @@ android {
 
     signingConfigs {
         release {
+            // Prefer key.properties for local dev; fall back to env vars for
+            // CI (set by .github/workflows/release.yml). Either source must
+            // provide all four fields or the release build will fail signing.
+            def envStoreFile = System.getenv('ANDROID_KEYSTORE_PATH')
             if (keystoreProperties['storeFile'] != null) {
                 keyAlias keystoreProperties['keyAlias']
                 keyPassword keystoreProperties['keyPassword']
                 storeFile file(keystoreProperties['storeFile'])
                 storePassword keystoreProperties['storePassword']
+            } else if (envStoreFile != null && !envStoreFile.isEmpty()) {
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+                storeFile file(envStoreFile)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
             }
         }
     }
@@ -82,4 +95,11 @@ flutter {
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.22"
     implementation "androidx.multidex:multidex:2.0.1"
+
+    // Phase 13.1.6 — Firebase BoM pins messaging + analytics versions to a
+    // mutually compatible release. The individual artifacts inherit their
+    // version from the BoM so we never need to edit them by hand.
+    implementation platform("com.google.firebase:firebase-bom:33.5.0")
+    implementation "com.google.firebase:firebase-messaging"
+    implementation "com.google.firebase:firebase-analytics"
 }
