@@ -93,6 +93,11 @@ admin-next/.next/
 admin-next/out/
 admin-next/tsconfig.tsbuildinfo
 
+# ─── Next.js vendor ──────────────────────────────────────────────────────────
+vendor-next/.next/
+vendor-next/out/
+vendor-next/tsconfig.tsbuildinfo
+
 # ─── Stray dirs from past tooling glitch ─────────────────────────────────────
 /{android/
 /{lib/

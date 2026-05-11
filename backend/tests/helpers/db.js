@@ -1,5 +1,10 @@
-// Test helper: creates an isolated SQLite DB per test file by running migrations
-// against a unique file, then returns a PrismaClient bound to it.
+// Test helper: creates an isolated Postgres SCHEMA per test file by running
+// migrations against a unique schema, then returns a PrismaClient bound to it.
+// Schemas are wiped on teardown.
+//
+// Requires DATABASE_URL pointing to a reachable Postgres server. The schema
+// name in the URL is overridden per test file. CI workflow and local
+// docker-compose both provide such a server.
 //
 // Usage in a test file:
 //   const { setupTestDb, teardownTestDb } = require('./helpers/db');
@@ -8,31 +13,46 @@
 //   afterAll(async () => { await teardownTestDb(ctx); });
 //
 // `ctx.app` is a fresh Express app with the routes mounted. Each call wires
-// `prisma` to the per-file DB by setting DATABASE_URL before requiring modules.
+// `prisma` to the per-file schema by setting DATABASE_URL before requiring
+// modules.
 
-const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-function makeDbPath(slug) {
-  const dir = path.resolve(__dirname, '..', '..', 'prisma');
-  const file = path.join(dir, `test-${slug}-${process.pid}.db`);
-  // Wipe any leftover from a crashed previous run.
-  try { fs.unlinkSync(file); } catch { /* noop */ }
-  try { fs.unlinkSync(file + '-journal'); } catch { /* noop */ }
-  return file;
+// Build a per-test-file schema name. Postgres schema names are limited to
+// 63 chars, must start with a letter, and are case-sensitive when quoted.
+function makeSchemaName(slug) {
+  const safe = String(slug).toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 32);
+  return `test_${safe}_${process.pid}`;
+}
+
+// Replace (or insert) the `schema=...` query param in DATABASE_URL.
+function urlWithSchema(baseUrl, schema) {
+  const u = new URL(baseUrl);
+  u.searchParams.set('schema', schema);
+  return u.toString();
+}
+
+function baseDatabaseUrl() {
+  return (
+    process.env.TEST_DATABASE_URL ||
+    process.env.DATABASE_URL ||
+    'postgresql://postgres:postgres@localhost:5432/tezketkaz_test'
+  );
 }
 
 async function setupTestDb(slug) {
-  const dbFile = makeDbPath(slug);
+  const schema = makeSchemaName(slug);
+  const dbUrl = urlWithSchema(baseDatabaseUrl(), schema);
   // Set the URL BEFORE requiring prisma client so it picks it up.
-  process.env.DATABASE_URL = `file:./prisma/${path.basename(dbFile)}`;
+  process.env.DATABASE_URL = dbUrl;
   process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-min-eight-chars';
 
-  // Apply migrations to the new file.
+  // Apply migrations to the new schema. `prisma migrate deploy` creates the
+  // schema implicitly when targeting a fresh one.
   execSync('npx prisma migrate deploy', {
     cwd: path.resolve(__dirname, '..', '..'),
-    env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL },
+    env: { ...process.env, DATABASE_URL: dbUrl },
     stdio: 'pipe',
   });
 
@@ -116,14 +136,30 @@ async function setupTestDb(slug) {
     res.status(status).json({ error: err.message || 'Server error' });
   });
 
-  return { prisma, app, dbFile };
+  return { prisma, app, schema, dbUrl };
 }
 
 async function teardownTestDb(ctx) {
   if (!ctx) return;
+  // Drop the per-test schema so subsequent runs are clean. Use a fresh
+  // PrismaClient pointed at the public schema so the DROP isn't blocked by
+  // open transactions or by being inside the schema we're deleting.
+  if (ctx.schema && ctx.dbUrl) {
+    try {
+      const cleanupUrl = urlWithSchema(ctx.dbUrl, 'public');
+      const { PrismaClient } = require('@prisma/client');
+      const cleanup = new PrismaClient({
+        datasources: { db: { url: cleanupUrl } },
+      });
+      await cleanup.$executeRawUnsafe(
+        `DROP SCHEMA IF EXISTS "${ctx.schema}" CASCADE`
+      );
+      await cleanup.$disconnect();
+    } catch {
+      // Non-fatal; the next run will reuse or recreate the schema.
+    }
+  }
   try { await ctx.prisma.$disconnect(); } catch { /* noop */ }
-  try { fs.unlinkSync(ctx.dbFile); } catch { /* noop */ }
-  try { fs.unlinkSync(ctx.dbFile + '-journal'); } catch { /* noop */ }
 }
 
 // Create a user + return { user, token } using JWT helpers.
