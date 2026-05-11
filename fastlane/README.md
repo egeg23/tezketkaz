@@ -7,7 +7,7 @@ without rearranging files.
 
 ## Layout
 
-```
+```text
 fastlane/metadata/
   android/<locale>/
     title.txt              # ≤ 30 chars  (Play store app name)
@@ -26,9 +26,16 @@ adjust the locale codes in `deliver`'s `Deliverfile` when wiring CI.
 
 Screenshots, app icon, and the marketing app icon (the 1024×1024 listing
 icon for iOS) are NOT stored here yet — see `assets/launcher/README.md`
-for the icon spec. Drop screenshots into
-`fastlane/screenshots/<platform>/<locale>/` when the design team produces
-them; both `supply` and `deliver` will pick them up automatically.
+for the icon spec. Each platform expects a different default location, so
+drop screenshots into the right tree and `supply`/`deliver` will pick them
+up automatically:
+
+- iOS (`deliver`): `fastlane/screenshots/<language-locale>/` — flat per
+  locale, no platform subdirectory. See the
+  [deliver docs](https://docs.fastlane.tools/getting-started/ios/screenshots/).
+- Android (`supply`): `fastlane/metadata/android/<locale>/images/<device>Screenshots/`
+  where `<device>` is one of `phone`, `sevenInch`, `tenInch`, `tv`, `wear`.
+  See the [supply docs](https://docs.fastlane.tools/actions/supply/).
 
 ## Common edits
 

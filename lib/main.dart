@@ -199,10 +199,13 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       final isAuth = auth.isAuthenticated;
       final loc = state.matchedLocation;
       final isOnAuth = loc.startsWith('/auth') || loc == '/splash';
+      // Phase 12 — /legal renders Privacy + Terms which the buyer must be
+      // able to read BEFORE creating an account. Allow it for everyone.
+      final isPublic = loc == '/legal';
       final isOnboarding = loc == '/onboarding';
       // Onboarding is a post-login screen; bounce unauth'd users to login
       // even when they deep-link straight to /onboarding.
-      if (!isAuth && !isOnAuth) return '/auth/login';
+      if (!isAuth && !isOnAuth && !isPublic) return '/auth/login';
       if (isAuth && loc == '/splash') {
         if (auth.user?.name == null) return '/auth/name';
         if (_needsOnboarding(auth)) return '/onboarding';
