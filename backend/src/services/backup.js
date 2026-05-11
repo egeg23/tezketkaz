@@ -1,9 +1,11 @@
 // Phase 9.4 — daily backup automation.
 //
-// SQLite path (current): copy the .sqlite file, gzip it, write through the
-// storage abstraction to /backups/<YYYY-MM-DD>.sqlite.gz. Postgres path is
-// a TODO (pg_dump piped to gzip) — switched on when DATABASE_URL is no
-// longer file:./.
+// SQLite path: copy the .sqlite file, gzip it, write through the storage
+// abstraction to /backups/<YYYY-MM-DD>.sqlite.gz.
+//
+// Postgres path (Phase 13.1.1+): shell out to `pg_dump`, gzip the SQL stream,
+// store as /backups/<YYYY-MM-DD>.pg.gz. We pick the path based on the
+// DATABASE_URL scheme.
 //
 // 30-day retention: any backup older than 30 days is pruned from storage on
 // every run.
@@ -11,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const { spawn } = require('child_process');
 const { promisify } = require('util');
 const { audit } = require('../lib/audit');
 const logger = require('../lib/logger');
@@ -53,6 +56,51 @@ function resolveSqliteFile() {
   const raw = url.slice('file:'.length);
   if (path.isAbsolute(raw)) return raw;
   return path.resolve(__dirname, '..', '..', 'prisma', raw);
+}
+
+// Snapshot a Postgres database via `pg_dump` and gzip the SQL stream in-memory.
+// Resolves to a Buffer of the gzipped dump, or rejects on non-zero exit.
+//
+// We strip the Prisma-specific `schema=` query parameter (pg_dump rejects it)
+// and forward it via `-n <schema>` so per-schema test DBs still dump cleanly.
+function dumpPostgres(databaseUrl) {
+  let cleanUrl = databaseUrl;
+  let schemaName = null;
+  try {
+    const u = new URL(databaseUrl);
+    if (u.searchParams.has('schema')) {
+      schemaName = u.searchParams.get('schema');
+      u.searchParams.delete('schema');
+      cleanUrl = u.toString();
+    }
+  } catch {
+    // Non-URL inputs fall through to raw use.
+  }
+
+  return new Promise((resolve, reject) => {
+    const args = ['--no-owner', '--no-privileges', '--format=plain'];
+    if (schemaName) args.push('-n', schemaName);
+    args.push(cleanUrl);
+    const proc = spawn('pg_dump', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const chunks = [];
+    const errChunks = [];
+    proc.stdout.on('data', (d) => chunks.push(d));
+    proc.stderr.on('data', (d) => errChunks.push(d));
+    proc.on('error', reject);
+    proc.on('close', async (code) => {
+      if (code !== 0) {
+        const stderr = Buffer.concat(errChunks).toString('utf8').trim();
+        return reject(new Error(`pg_dump exited ${code}: ${stderr || 'unknown error'}`));
+      }
+      try {
+        const raw = Buffer.concat(chunks);
+        const gz = await gzip(raw);
+        resolve(gz);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
 }
 
 async function writeLocalBackup(key, bytes) {
@@ -102,33 +150,50 @@ async function pruneLocalBackups(now = new Date()) {
  */
 async function runDailyBackup({ now = new Date() } = {}) {
   const storage = tryLoadStorage();
+  const url = process.env.DATABASE_URL || '';
   const dbFile = resolveSqliteFile();
-  if (!dbFile) {
-    logger.warn('runDailyBackup: non-SQLite database, skipping (Postgres pg_dump TODO)');
+  const isPostgres = /^postgres(ql)?:\/\//.test(url);
+
+  let bytes;
+  let ext;
+  if (dbFile) {
+    try {
+      const raw = await fs.promises.readFile(dbFile);
+      bytes = await gzip(raw);
+      ext = 'sqlite.gz';
+    } catch (err) {
+      logger.error({ err: err.message, dbFile }, 'backup snapshot failed');
+      await audit({
+        action: 'system.backup',
+        metadata: { ok: false, error: err.message },
+      });
+      return { ok: false, error: err.message };
+    }
+  } else if (isPostgres) {
+    try {
+      bytes = await dumpPostgres(url);
+      ext = 'pg.gz';
+    } catch (err) {
+      logger.error({ err: err.message }, 'pg_dump backup snapshot failed');
+      await audit({
+        action: 'system.backup',
+        metadata: { ok: false, error: err.message },
+      });
+      return { ok: false, error: err.message };
+    }
+  } else {
+    logger.warn('runDailyBackup: unsupported DATABASE_URL scheme');
     return { ok: false, error: 'unsupported_provider' };
   }
 
-  let bytes;
-  try {
-    const raw = await fs.promises.readFile(dbFile);
-    bytes = await gzip(raw);
-  } catch (err) {
-    logger.error({ err: err.message, dbFile }, 'backup snapshot failed');
-    await audit({
-      action: 'system.backup',
-      metadata: { ok: false, error: err.message },
-    });
-    return { ok: false, error: err.message };
-  }
-
-  const key = `backups/${isoDay(now)}.sqlite.gz`;
-  let url;
+  const key = `backups/${isoDay(now)}.${ext}`;
+  let backupUrl;
   try {
     if (storage && typeof storage.put === 'function') {
       const result = await storage.put(key, bytes, { contentType: 'application/gzip' });
-      url = result?.url || result?.location || key;
+      backupUrl = result?.url || result?.location || key;
     } else {
-      url = await writeLocalBackup(key, bytes);
+      backupUrl = await writeLocalBackup(key, bytes);
     }
   } catch (err) {
     logger.error({ err: err.message, key }, 'backup upload failed');
@@ -162,10 +227,10 @@ async function runDailyBackup({ now = new Date() } = {}) {
 
   await audit({
     action: 'system.backup',
-    metadata: { ok: true, key, url, sizeBytes: bytes.length, prunedCount },
+    metadata: { ok: true, key, url: backupUrl, sizeBytes: bytes.length, prunedCount },
   });
 
-  return { ok: true, key, url, sizeBytes: bytes.length, prunedCount };
+  return { ok: true, key, url: backupUrl, sizeBytes: bytes.length, prunedCount };
 }
 
 module.exports = {

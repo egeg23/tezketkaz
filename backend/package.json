@@ -4,6 +4,7 @@
   "description": "TezKetKaz delivery backend",
   "main": "src/index.js",
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
     "db:setup": "prisma migrate dev --name init && prisma generate",

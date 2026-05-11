@@ -7,6 +7,7 @@
 const request = require('supertest');
 const express = require('express');
 const { setupTestDb, teardownTestDb } = require('./helpers/db');
+const { CURRENT_LEGAL_VERSION } = require('../src/constants/legal');
 
 let ctx;
 let app;
@@ -42,7 +43,9 @@ describe('auth signup country auto-detection', () => {
   test('+77 phone signup → User.country = KZ + locale = kk', async () => {
     const phone = '+77011234567';
     const code = await sendAndGetCode(phone);
-    const r = await request(app).post('/api/auth/verify-otp').send({ phone, code });
+    const r = await request(app)
+      .post('/api/auth/verify-otp')
+      .send({ phone, code, acceptedLegalVersion: CURRENT_LEGAL_VERSION });
     expect(r.status).toBe(200);
     expect(r.body.user.country).toBe('KZ');
     // Default locale for KZ is Kazakh.
@@ -56,7 +59,9 @@ describe('auth signup country auto-detection', () => {
   test('+998 phone signup → User.country = UZ + locale = uz', async () => {
     const phone = '+998901234567';
     const code = await sendAndGetCode(phone);
-    const r = await request(app).post('/api/auth/verify-otp').send({ phone, code });
+    const r = await request(app)
+      .post('/api/auth/verify-otp')
+      .send({ phone, code, acceptedLegalVersion: CURRENT_LEGAL_VERSION });
     expect(r.status).toBe(200);
     expect(r.body.user.country).toBe('UZ');
     expect(r.body.user.locale).toBe('uz');
@@ -65,7 +70,9 @@ describe('auth signup country auto-detection', () => {
   test('+996 phone signup → User.country = KG + locale = ru', async () => {
     const phone = '+996700123456';
     const code = await sendAndGetCode(phone);
-    const r = await request(app).post('/api/auth/verify-otp').send({ phone, code });
+    const r = await request(app)
+      .post('/api/auth/verify-otp')
+      .send({ phone, code, acceptedLegalVersion: CURRENT_LEGAL_VERSION });
     expect(r.status).toBe(200);
     expect(r.body.user.country).toBe('KG');
     expect(r.body.user.locale).toBe('ru');
@@ -74,7 +81,9 @@ describe('auth signup country auto-detection', () => {
   test('+79 (RU) phone signup → User.country = RU', async () => {
     const phone = '+79161234567';
     const code = await sendAndGetCode(phone);
-    const r = await request(app).post('/api/auth/verify-otp').send({ phone, code });
+    const r = await request(app)
+      .post('/api/auth/verify-otp')
+      .send({ phone, code, acceptedLegalVersion: CURRENT_LEGAL_VERSION });
     expect(r.status).toBe(200);
     expect(r.body.user.country).toBe('RU');
     expect(r.body.user.locale).toBe('ru');
@@ -83,7 +92,9 @@ describe('auth signup country auto-detection', () => {
   test('repeat verify on existing user keeps country (no overwrite)', async () => {
     const phone = '+77051234567';
     const code = await sendAndGetCode(phone);
-    const r = await request(app).post('/api/auth/verify-otp').send({ phone, code });
+    const r = await request(app)
+      .post('/api/auth/verify-otp')
+      .send({ phone, code, acceptedLegalVersion: CURRENT_LEGAL_VERSION });
     expect(r.status).toBe(200);
     expect(r.body.user.country).toBe('KZ');
 

@@ -14,13 +14,15 @@ beforeAll(async () => {
 afterAll(async () => { await teardownTestDb(ctx); });
 
 describe('backup.runDailyBackup', () => {
-  test('writes a gzipped sqlite snapshot under /uploads/backups/', async () => {
+  test('writes a gzipped snapshot under /uploads/backups/', async () => {
     const result = await backup.runDailyBackup();
     expect(result.ok).toBe(true);
-    expect(result.key).toMatch(/backups\/\d{4}-\d{2}-\d{2}\.sqlite\.gz/);
+    // Phase 13.1.1: Postgres path produces `.pg.gz`; SQLite path produces
+    // `.sqlite.gz`. Accept either so the test stays robust across providers.
+    expect(result.key).toMatch(/backups\/\d{4}-\d{2}-\d{2}\.(sqlite|pg)\.gz/);
     expect(result.sizeBytes).toBeGreaterThan(0);
 
-    // The local-fallback URL is /uploads/backups/<date>.sqlite.gz.
+    // The local-fallback URL is /uploads/backups/<date>.(sqlite|pg).gz.
     if (result.url && result.url.startsWith('/uploads/')) {
       const localPath = path.resolve(__dirname, '..', result.url.replace(/^\//, ''));
       expect(fs.existsSync(localPath)).toBe(true);
@@ -30,7 +32,7 @@ describe('backup.runDailyBackup', () => {
   test('prune logic removes files older than 30 days', async () => {
     const dir = path.resolve(__dirname, '..', 'uploads', 'backups');
     await fs.promises.mkdir(dir, { recursive: true });
-    const stale = path.join(dir, '2020-01-01.sqlite.gz');
+    const stale = path.join(dir, '2020-01-01.pg.gz');
     await fs.promises.writeFile(stale, 'stale');
     // Backdate the stale file.
     const old = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
