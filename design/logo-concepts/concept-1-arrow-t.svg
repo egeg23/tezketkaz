@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF7A1A"/>
+      <stop offset="100%" stop-color="#E63B17"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background -->
+  <rect width="1024" height="1024" rx="224" ry="224" fill="url(#g1)"/>
+  <!-- White letter T with arrow horizontal -->
+  <g fill="white">
+    <!-- Vertical stem of T -->
+    <rect x="448" y="320" width="128" height="464" rx="32"/>
+    <!-- Horizontal arrow top of T -->
+    <path d="M 256 256 L 720 256 L 720 192 L 832 320 L 720 448 L 720 384 L 256 384 Z"/>
+  </g>
+</svg>
