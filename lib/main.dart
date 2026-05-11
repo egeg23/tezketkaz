@@ -1,5 +1,3 @@
-import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -7,7 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'dart:async';
 
-import 'firebase_options.dart';
+import 'services/firebase_setup.dart';
 import 'services/push_service.dart';
 import 'services/sentry_service.dart';
 import 'theme/app_theme.dart';
@@ -60,7 +58,6 @@ import 'screens/shared/courier_verification_screen.dart';
 import 'screens/shared/chat_screen.dart';
 import 'screens/shared/legal_screen.dart';
 import 'screens/shared/reviews_screen.dart';
-import 'screens/shared/legal_screen.dart';
 
 Future<void> main() async {
   // SENTRY_DSN is optional. When omitted (local dev) SentryService.init becomes
@@ -70,26 +67,30 @@ Future<void> main() async {
   await SentryService.init(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
-      try {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
-      } catch (e) {
-        debugPrint('Firebase init skipped: $e');
-      }
+      // Phase 13.1.6 — single funnel for Firebase boot. Returns false on
+      // local dev (no real google-services.json) without crashing the app.
+      // We hold onto the result so the widget tree can skip PushService when
+      // Firebase isn't available.
+      final firebaseReady = await initializeFirebase();
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
       SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.dark,
       ));
-      runApp(const TezKetKazApp());
+      runApp(TezKetKazApp(firebaseReady: firebaseReady));
     },
     dsn: sentryDsn.isEmpty ? null : sentryDsn,
   );
 }
 
 class TezKetKazApp extends StatefulWidget {
-  const TezKetKazApp({super.key});
+  const TezKetKazApp({super.key, this.firebaseReady = false});
+
+  /// Whether Firebase finished initialising. When false the app still runs
+  /// fully (login, browsing, orders, payments) — only FCM push handling is
+  /// disabled.
+  final bool firebaseReady;
+
   @override
   State<TezKetKazApp> createState() => _TezKetKazAppState();
 }
@@ -110,6 +111,12 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
     // Phase 10.3 — load persisted theme preference (best-effort; defaults to
     // ThemeMode.system so the first frame uses the OS palette).
     _theme.load();
+    // Phase 13.1.6 — `widget.firebaseReady` is `false` on local dev runs
+    // without google-services.json. `AuthProvider` reads `FirebaseSetup.isReady`
+    // and skips `PushService.init()` in that case, so this listener stays
+    // permanently idle and is effectively a no-op. We still wire it
+    // unconditionally because the StreamController has no cost.
+    //
     // Phase 6 — deep-link FCM taps into the right screen. The push service
     // exposes `onTap` which fires for foreground / background / cold-start
     // notifications.

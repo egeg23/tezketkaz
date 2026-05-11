@@ -8,6 +8,7 @@ import '../constants/legal.dart';
 import '../models/models.dart';
 import '../services/analytics_service.dart';
 import '../services/api_client.dart';
+import '../services/firebase_setup.dart';
 import '../services/membership_api.dart';
 import '../services/push_service.dart';
 import '../services/social_auth_service.dart';
@@ -133,8 +134,12 @@ class AuthProvider extends ChangeNotifier {
       _user = _parseUser(res.data['user']);
       _state = AuthState.authenticated;
       SocketService.instance.connect();
-      // Fire-and-forget — push will silently degrade if Firebase not configured.
-      unawaited(PushService.instance.init());
+      // Phase 13.1.6 — only attempt push registration when Firebase actually
+      // initialised at boot. Without `FirebaseSetup.isReady` the plugin call
+      // would throw "[core/no-app]" and Sentry would log noise.
+      if (FirebaseSetup.isReady) {
+        unawaited(PushService.instance.init());
+      }
       _startMembershipTimer();
       unawaited(refreshMembership());
       if (_user != null) {
@@ -285,7 +290,12 @@ class AuthProvider extends ChangeNotifier {
     _currentLegalVersion = body['currentLegalVersion'] as String?;
     _state = AuthState.authenticated;
     SocketService.instance.connect();
-    unawaited(PushService.instance.init());
+    // Phase 13.1.6 — guard against unconfigured Firebase (e.g. dev runs
+    // without google-services.json). PushService.init() is itself try/catch
+    // safe, but skipping the call keeps logs clean.
+    if (FirebaseSetup.isReady) {
+      unawaited(PushService.instance.init());
+    }
     _startMembershipTimer();
     unawaited(refreshMembership());
     if (_user != null) {
