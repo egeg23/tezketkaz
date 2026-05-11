@@ -103,6 +103,14 @@ class ProfileScreen extends StatelessWidget {
                 label: 'Конфиденциальность',
                 onTap: () => context.push('/buyer/data-privacy'),
               ),
+              // Phase 12 — Privacy Policy + Terms tabbed viewer. App Store /
+              // Play Store reviewers reach legal text without creating an
+              // account; required for store compliance.
+              _SettingsRow(
+                icon: Icons.gavel_rounded,
+                label: 'Условия и политика',
+                onTap: () => context.push('/legal'),
+              ),
               _SettingsRow(
                 icon: Icons.chat_bubble_outline_rounded,
                 label: 'Помощь',

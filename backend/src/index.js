@@ -49,6 +49,8 @@ const orderGroupRoutes = require('./routes/order-groups');
 const supportRoutes = require('./routes/support');
 // Phase 10.3 — admin push notification campaigns.
 const pushCampaignRoutes = require('./routes/push-campaigns');
+// Phase 12 — legal documents (privacy policy + terms of service).
+const legalRoutes = require('./routes/legal');
 const { setupSockets } = require('./sockets');
 
 const app = express();
@@ -176,6 +178,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/users', gdprRoutes);
 app.use('/api/shops', shopRoutes);
 app.use('/api/products', productRoutes);
+// Phase 12 — legal documents served as cached Markdown (privacy + terms).
+app.use('/api/legal', legalRoutes);
 // Phase 11 — cart drafts. Mounted right after products since drafts are
 // scoped per shop and reference products one-to-one.
 app.use('/api/cart-drafts', cartDraftRoutes);

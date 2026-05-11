@@ -104,6 +104,8 @@ async function setupTestDb(slug) {
     app.use('/api/admin/push-campaigns', pushCampaignRoutes.adminRouter);
     app.use('/api/push-campaigns', pushCampaignRoutes.userRouter);
   } catch { /* noop */ }
+  // Phase 12 — legal documents (privacy + terms).
+  try { app.use('/api/legal', require('../../src/routes/legal')); } catch { /* noop */ }
   // Stub the io getter — orders.js uses `req.app.get('io')`.
   const noopIo = { to: () => ({ emit: () => {} }), emit: () => {} };
   app.set('io', noopIo);

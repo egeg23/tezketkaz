@@ -61,6 +61,7 @@ import 'screens/shop/shop_settings_screen.dart';
 import 'screens/shared/role_switcher_screen.dart';
 import 'screens/shared/courier_verification_screen.dart';
 import 'screens/shared/chat_screen.dart';
+import 'screens/shared/legal_screen.dart';
 import 'screens/shared/reviews_screen.dart';
 
 Future<void> main() async {
@@ -229,6 +230,9 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
       GoRoute(path: '/switch-role', builder: (_, __) => const RoleSwitcherScreen()),
       GoRoute(path: '/courier-verification', builder: (_, __) => const CourierVerificationScreen()),
+      // Phase 12 — read-only Privacy / Terms viewer (tabbed). Auth-agnostic so
+      // store reviewers can reach it from the profile screen / consent links.
+      GoRoute(path: '/legal', builder: (_, __) => const LegalScreen()),
       GoRoute(
         path: '/buyer/order-success/:orderId',
         builder: (_, s) => OrderSuccessScreen(orderId: s.pathParameters['orderId'] ?? ''),

@@ -1584,6 +1584,38 @@ class L10n extends ChangeNotifier {
       'en': 'Dark',
       'kk': 'Қараңғы',
     },
+
+    // ── Phase 12 — Legal screen (Privacy / Terms) ─────────────────────────
+    'profile.legal_tile': {
+      'uz': 'Maxfiylik / shartlar',
+      'ru': 'Приватность / Условия',
+      'en': 'Privacy / Terms',
+      'kk': 'Құпиялылық / Шарттар',
+    },
+    'legal.privacy_tab': {
+      'uz': 'Maxfiylik siyosati',
+      'ru': 'Политика конфиденциальности',
+      'en': 'Privacy Policy',
+      'kk': 'Құпиялылық саясаты',
+    },
+    'legal.terms_tab': {
+      'uz': 'Foydalanish shartlari',
+      'ru': 'Условия использования',
+      'en': 'Terms of Service',
+      'kk': 'Пайдалану шарттары',
+    },
+    'legal.loading': {
+      'uz': 'Hujjat yuklanmoqda…',
+      'ru': 'Загружаем документ…',
+      'en': 'Loading document…',
+      'kk': 'Құжат жүктелуде…',
+    },
+    'legal.error': {
+      'uz': 'Hujjatni yuklab bo\'lmadi. Internetni tekshirib, qayta urinib ko\'ring.',
+      'ru': 'Не удалось загрузить документ. Проверьте интернет и повторите.',
+      'en': 'Could not load the document. Check your connection and retry.',
+      'kk': 'Құжатты жүктеу мүмкін болмады. Интернетті тексеріп, қайталаңыз.',
+    },
   };
 }
 

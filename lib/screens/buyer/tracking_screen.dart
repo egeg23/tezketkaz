@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../l10n/l10n.dart';
 import '../../models/money.dart';
 import '../../providers/order_provider.dart';
+import '../../services/review_prompt_service.dart';
 import '../../services/socket_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -91,6 +92,13 @@ class _TrackingScreenState extends State<TrackingScreen> {
     }
 
     final isHanded = order.status == AppOrderStatus.delivered;
+
+    // Phase 12 — once an order lands in `delivered`, ask the system to maybe
+    // show the native App Store / Play Store review sheet (gated to Nth
+    // successful order). Best-effort; never blocks rendering.
+    if (isHanded) {
+      ReviewPromptService.instance.maybePromptAfterDelivery(order.id);
+    }
 
     return Scaffold(
       backgroundColor: AppColors.bg,

@@ -8,6 +8,7 @@
 // destination is outside every active zone for the shop.
 
 const { distanceKm, pointInPolygon, eta_minutes } = require('../lib/geo');
+const routing = require('./routing');
 
 // Env defaults are read at call time so tests can override via process.env.
 function envDefaults() {
@@ -101,9 +102,14 @@ async function computeDelivery(prisma, { shopId, destLat, destLng, userId, count
   const zone = pickZone(zones, destLat, destLng);
   const defaults = envDefaults();
 
-  const dKm = (shop.lat != null && shop.lng != null)
+  // Road-aware distance + ETA via Yandex Routing (with haversine fallback).
+  // For the out-of-zone short-circuit below we only need the haversine value;
+  // we skip the network call until we know we'll actually price the route.
+  let dKm = (shop.lat != null && shop.lng != null)
     ? distanceKm(shop.lat, shop.lng, destLat, destLng)
     : 0;
+  let etaMinutesRouted = null;
+  let etaSource = 'fallback';
 
   if (!zone) {
     return {
@@ -118,7 +124,19 @@ async function computeDelivery(prisma, { shopId, destLat, destLng, userId, count
       deliveryFee: 0,
       minOrder: shop.minOrderAmount ?? 0,
       outOfZone: true,
+      etaSource: 'fallback',
     };
+  }
+
+  // In-zone — ask the routing service for a real driving estimate.
+  if (shop.lat != null && shop.lng != null) {
+    const routed = await routing.route(
+      { lat: shop.lat, lng: shop.lng },
+      { lat: destLat, lng: destLng },
+    );
+    if (Number.isFinite(routed.distanceKm)) dKm = routed.distanceKm;
+    if (Number.isFinite(routed.etaMinutes)) etaMinutesRouted = routed.etaMinutes;
+    etaSource = routed.source || 'fallback';
   }
 
   // Resolve effective fee parameters: zone → shop → env default.
@@ -139,7 +157,12 @@ async function computeDelivery(prisma, { shopId, destLat, destLng, userId, count
   const rawFee = baseFee + billableKm * perKmFee;
   let deliveryFee = Math.round(rawFee * surgeFactor);
 
-  let eta = eta_minutes(dKm) + 15; // 15-min prep buffer
+  // Prefer the road-aware travel-time estimate when routing succeeded; fall
+  // back to the pure-JS heuristic otherwise. 15-min prep buffer in both cases.
+  const travelMinutes = Number.isFinite(etaMinutesRouted)
+    ? etaMinutesRouted
+    : eta_minutes(dKm);
+  let eta = travelMinutes + 15;
   if (shop.vertical === 'restaurant') eta += 5;
 
   // Phase 7.2 — apply membership perk on top of the surge-adjusted fee.
@@ -184,6 +207,7 @@ async function computeDelivery(prisma, { shopId, destLat, destLng, userId, count
     outOfZone: false,
     membershipDiscount,
     freeDeliveryReason,
+    etaSource,
   };
 }
 
