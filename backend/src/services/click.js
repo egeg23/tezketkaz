@@ -11,7 +11,7 @@ const CLICK_BASE = 'https://my.click.uz/services/pay';
  * Возвращает URL, на который нужно перенаправить пользователя.
  */
 async function createInvoice(order) {
-  if (env.useMockPayments) {
+  if (env.useMockClick) {
     // В mock-режиме сразу помечаем как оплачено и возвращаем deep link обратно в app
     const prisma = require('../db');
     setTimeout(async () => {
@@ -23,7 +23,13 @@ async function createInvoice(order) {
     return `tezketkaz://payment-result?orderId=${order.id}&status=success`;
   }
 
-  // Real Click integration
+  // Real Click integration — hosted "services/pay" redirect, no server-side
+  // signature needed; the merchant_id + service_id pair is the auth, and the
+  // back-channel POST to /click/callback carries the signed result.
+  // Verify after activation: Click expects `amount` as decimal sum (e.g.
+  // "120000.00"), not cents. order.total is stored in major units; we send
+  // it raw. If your Click merchant dashboard says "amount in tiyin", you will
+  // need to multiply by 100 here.
   const params = new URLSearchParams({
     service_id: env.CLICK_SERVICE_ID,
     merchant_id: env.CLICK_MERCHANT_ID,
@@ -147,7 +153,7 @@ async function tokenizeCard(userId) {
     throw Object.assign(new Error('userId required'), { status: 400 });
   }
   const state = `click_state_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  if (env.useMockPayments || !env.CLICK_MERCHANT_ID) {
+  if (env.useMockClick || !env.CLICK_MERCHANT_ID) {
     const mockToken = `mock_click_${userId}_${Date.now()}`;
     return {
       provider: 'click',
@@ -193,7 +199,7 @@ async function chargeWithToken(token, amount, orderId, currency = 'UZS') {
   if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
     return { ok: false, externalId: null, message: 'invalid_amount' };
   }
-  if (env.useMockPayments || !env.CLICK_MERCHANT_ID) {
+  if (env.useMockClick || !env.CLICK_MERCHANT_ID) {
     // Deterministic fake — surfaces enough info for tests + audit logs.
     return {
       ok: true,

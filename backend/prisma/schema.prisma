@@ -259,6 +259,14 @@ model Shop {
   // launch. KZT/KGS activated in Phase 7 when expanding to KZ/KG.
   currency    String   @default("UZS")
 
+  // Phase 13.3.9 — Soliq.uz fiscal API config. Required for Uzbek shops only.
+  // Without these, fiscal receipts are not issued and the backend logs a
+  // warning per order (admin notification surfaced in admin-next dashboard).
+  soliqInn       String?  // 9 or 14 digit STIR/INN
+  soliqVatNumber String?  // optional VAT registration number
+  soliqApiKey    String?  // per-shop OR fall back to global SOLIQ_API_KEY
+  soliqEnabled   Boolean  @default(false) // master switch — off until shop is verified
+
   members     ShopMember[]
   products    Product[]
   orders      Order[]
@@ -593,6 +601,16 @@ model Order {
   // taxAmount is what was added on top of subtotal (in major units of currency).
   taxRate         Float    @default(0)
   taxAmount       Float    @default(0)
+
+  // Phase 13.3.9 — Soliq.uz fiscal receipt linkage. Populated by the
+  // `fiscal:issue` BullMQ job after a successful API call. fiscalFailureCount
+  // is incremented when the job exhausts retries; fiscalLastError holds the
+  // last surfaced error message for admin diagnosis.
+  fiscalReceiptId    String?
+  fiscalReceiptUrl   String?
+  fiscalIssuedAt     DateTime?
+  fiscalFailureCount Int      @default(0)
+  fiscalLastError    String?
 
   // Phase 8 — stacked dispatch. When set, this order is part of a batch
   // the same courier picked up together. Null for solo deliveries.

@@ -51,6 +51,8 @@ const supportRoutes = require('./routes/support');
 const pushCampaignRoutes = require('./routes/push-campaigns');
 // Phase 12 — legal documents (privacy policy + terms of service).
 const legalRoutes = require('./routes/legal');
+// Phase 13.3.9 — Soliq.uz fiscal receipts.
+const fiscalRoutes = require('./routes/fiscal');
 const { setupSockets } = require('./sockets');
 
 const app = express();
@@ -235,6 +237,10 @@ app.use('/api', reviewRoutes);
 app.use('/api', chatRoutes);
 // Phase 4 — buyer-facing dispute endpoints.
 app.use('/api', buyerDisputeRoutes);
+// Phase 13.3.9 — Soliq.uz fiscal receipts (declares absolute paths under
+// /orders/:id/fiscal-receipt, /admin/orders/:id/fiscal-retry,
+// /admin/fiscal/failures).
+app.use('/api', fiscalRoutes);
 
 // ─── User-uploaded product images ────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
@@ -305,6 +311,8 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
     const backupJobs = require('./jobs/backup');
     // eslint-disable-next-line global-require
     const groupExpiryJobs = require('./jobs/groupExpiry');
+    // eslint-disable-next-line global-require
+    const fiscalJobs = require('./jobs/fiscal-receipt');
     startWorkers({
       dispatch: dispatchJobs.dispatchHandler,
       autoCancel: dispatchJobs.autoCancelHandler,
@@ -314,6 +322,7 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
       accountDeletion: accountDeletionJobs.accountDeletionHandler,
       backup: backupJobs.backupHandler,
       groupExpiry: groupExpiryJobs.groupExpiryHandler,
+      fiscal: fiscalJobs.fiscalReceiptHandler,
     });
     // Schedule weekly payouts: Mondays at 03:00 UTC.
     try {

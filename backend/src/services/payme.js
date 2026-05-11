@@ -14,7 +14,7 @@ const PAYME_CHECKOUT = 'https://checkout.paycom.uz';
  * Создать платёжную ссылку через Base64-параметры (формат Payme).
  */
 async function createInvoice(order) {
-  if (env.useMockPayments) {
+  if (env.useMockPayme) {
     const prisma = require('../db');
     setTimeout(async () => {
       await prisma.order.update({
@@ -25,7 +25,11 @@ async function createInvoice(order) {
     return `tezketkaz://payment-result?orderId=${order.id}&status=success`;
   }
 
-  // Payme принимает параметры в Base64
+  // Payme принимает параметры в Base64.
+  // Verify after activation: the parameter name `ac.order_id` MUST match the
+  // "Account" field configured in your Payme merchant cabinet (Настройки →
+  // Параметры счёта). Common alternatives are `ac.OrderID` or `ac.id`. The
+  // amount `a` is in tiyin (1/100 UZS) per Payme spec — `Math.round(order.total * 100)`.
   const params = `m=${env.PAYME_MERCHANT_ID};ac.order_id=${order.id};a=${Math.round(order.total * 100)}`;
   const encoded = Buffer.from(params).toString('base64');
   return `${PAYME_CHECKOUT}/${encoded}`;
@@ -148,7 +152,7 @@ async function tokenizeCard(userId) {
   }
   const state = `payme_state_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const env = require('../config/env');
-  if (env.useMockPayments || !env.PAYME_MERCHANT_ID) {
+  if (env.useMockPayme || !env.PAYME_MERCHANT_ID) {
     const mockToken = `mock_payme_${userId}_${Date.now()}`;
     return {
       provider: 'payme',
@@ -183,7 +187,7 @@ async function chargeWithToken(token, amount, orderId, currency = 'UZS') {
   if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
     return { ok: false, externalId: null, message: 'invalid_amount' };
   }
-  if (env.useMockPayments || !env.PAYME_MERCHANT_ID) {
+  if (env.useMockPayme || !env.PAYME_MERCHANT_ID) {
     return {
       ok: true,
       externalId: `mock_payme_charge_${orderId || 'noorder'}_${Date.now()}`,

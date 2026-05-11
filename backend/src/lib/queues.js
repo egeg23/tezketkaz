@@ -68,6 +68,8 @@ function noopQueues() {
     backup: makeNoopQueue('backup'),
     // Phase 10.1 — daily sweep of expired open group orders.
     groupExpiry: makeNoopQueue('groupExpiry'),
+    // Phase 13.3.9 — Soliq.uz fiscal receipts.
+    fiscal: makeNoopQueue('fiscal'),
   };
 }
 
@@ -95,6 +97,8 @@ function queues() {
     backup: new Queue('backup', { connection }),
     // Phase 10.1 — daily sweep of expired open group orders.
     groupExpiry: new Queue('groupExpiry', { connection }),
+    // Phase 13.3.9 — Soliq.uz fiscal receipts.
+    fiscal: new Queue('fiscal', { connection }),
   };
   return _queues;
 }
@@ -128,6 +132,10 @@ function startWorkers(handlers) {
   }
   if (handlers.groupExpiry) {
     _workers.push(new Worker('groupExpiry', handlers.groupExpiry, { connection, concurrency: 1 }));
+  }
+  if (handlers.fiscal) {
+    // Phase 13.3.9 — concurrency=3 so we don't overload the Soliq API.
+    _workers.push(new Worker('fiscal', handlers.fiscal, { connection, concurrency: 3 }));
   }
   for (const w of _workers) {
     w.on('failed', (job, err) => logger.error({ queue: w.name, jobId: job?.id, err }, 'worker job failed'));

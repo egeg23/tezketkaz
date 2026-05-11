@@ -18,7 +18,7 @@ async function pay({ orderId, amount, currency = 'KGS' } = {}) {
   if (!orderId) {
     throw Object.assign(new Error('orderId required'), { status: 400 });
   }
-  if (env.useMockPayments || !env.CLICK_KG_MERCHANT_ID) {
+  if (env.useMockClickKg || !env.CLICK_KG_MERCHANT_ID) {
     // .unref() so the timer doesn't keep the test runner alive.
     const t = setTimeout(async () => {
       try {
@@ -63,7 +63,7 @@ async function tokenizeCard(userId) {
     throw Object.assign(new Error('userId required'), { status: 400 });
   }
   const state = `click_kg_state_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  if (env.useMockPayments || !env.CLICK_KG_MERCHANT_ID) {
+  if (env.useMockClickKg || !env.CLICK_KG_MERCHANT_ID) {
     const mockToken = `mock_click_kg_${userId}_${Date.now()}`;
     return {
       provider: 'click_kg',
@@ -96,7 +96,7 @@ async function chargeWithToken(token, amount, orderId, currency = 'KGS') {
   if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
     return { ok: false, externalId: null, message: 'invalid_amount' };
   }
-  if (env.useMockPayments || !env.CLICK_KG_MERCHANT_ID) {
+  if (env.useMockClickKg || !env.CLICK_KG_MERCHANT_ID) {
     return {
       ok: true,
       externalId: `mock_click_kg_charge_${orderId || 'noorder'}_${Date.now()}`,
