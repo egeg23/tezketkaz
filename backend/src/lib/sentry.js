@@ -42,7 +42,12 @@ function init(app /* , server */) {
     Sentry.init({
       dsn: env.SENTRY_DSN,
       environment: env.NODE_ENV || 'development',
-      release: process.env.GIT_COMMIT || 'dev',
+      // Phase 12 — CI tags the release with the commit SHA via GIT_COMMIT
+      // (preferred) or SENTRY_RELEASE (set by getsentry/action-release).
+      release:
+        process.env.GIT_COMMIT ||
+        process.env.SENTRY_RELEASE ||
+        'dev',
       tracesSampleRate: 0.1,
       profilesSampleRate: 0,
     });

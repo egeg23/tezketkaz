@@ -192,6 +192,12 @@ class ProfileScreen extends StatelessWidget {
               title: t(context, 'support.title'),
               onTap: () => context.push('/buyer/support'),
             ),
+            // Phase 12 — Privacy Policy / Terms of Service (read-only).
+            _Tile(
+              icon: '📄',
+              title: t(context, 'profile.legal_tile'),
+              onTap: () => context.push('/legal'),
+            ),
           ]),
 
           const SizedBox(height: 10),

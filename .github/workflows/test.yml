@@ -92,6 +92,23 @@ jobs:
           name: coverage
           path: backend/coverage/
 
+      # Phase 12 — tag a Sentry release with the commit SHA so prod errors are
+      # attributable to the deploy that introduced them. Skips gracefully when
+      # SENTRY_AUTH_TOKEN is not configured (e.g. PRs from forks) — there is
+      # no equivalent of `env.SECRET` for `if:`, so we expose the secret as an
+      # env var on the step itself and gate on its presence.
+      - name: Tag Sentry release
+        if: env.SENTRY_AUTH_TOKEN != ''
+        working-directory: backend
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: tezketkaz-backend
+        run: |
+          npx @sentry/cli releases new "$GITHUB_SHA"
+          npx @sentry/cli releases set-commits "$GITHUB_SHA" --auto || true
+          npx @sentry/cli releases finalize "$GITHUB_SHA"
+
   flutter:
     runs-on: ubuntu-latest
     # Flutter steps are non-blocking until the Phase 5 test files have been

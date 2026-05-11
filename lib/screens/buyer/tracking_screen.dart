@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../l10n/l10n.dart';
 import '../../models/money.dart';
 import '../../providers/order_provider.dart';
+import '../../services/review_prompt_service.dart';
 import '../../services/socket_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -59,6 +60,15 @@ class _TrackingScreenState extends State<TrackingScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Yetkazib berish tasdiqlandi 🎉')));
+      // Phase 12 — bump the per-user "completed orders" counter; once it hits
+      // the threshold (5) we surface the native review sheet exactly once.
+      // Fire-and-forget — the rating-dialog snackbar above is the primary UX
+      // and we don't want to await the platform channel.
+      // Delay one frame so the snackbar lands first and the review sheet
+      // appears on top of the now-confirmed screen.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ReviewPromptService.recordOrderCompleted();
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

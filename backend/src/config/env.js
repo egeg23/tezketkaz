@@ -60,6 +60,10 @@ const schema = z.object({
   S3_ACCESS_KEY: z.string().optional(),
   S3_SECRET_KEY: z.string().optional(),
   S3_PUBLIC_BASE: z.string().optional(),
+
+  // Phase 12 — Yandex Routing API for road-aware ETAs. Optional; when absent
+  // services/routing.js falls back to haversine + 25 km/h heuristic.
+  YANDEX_ROUTING_KEY: z.string().optional(),
 });
 
 let parsed;
