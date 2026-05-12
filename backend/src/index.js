@@ -243,6 +243,13 @@ app.use('/api', buyerDisputeRoutes);
 app.use('/api', fiscalRoutes);
 
 // ─── User-uploaded product images ────────────────────────────────────────────
+// GDPR data exports under /uploads/exports/* contain PII and must NEVER be
+// served publicly. Block direct static access — owners reach them via the
+// authenticated /api/users/me/exports/:id endpoint, which returns the parsed
+// JSON or a presigned URL when S3 storage is configured.
+app.use('/uploads/exports', (_req, res) => {
+  res.status(403).json({ error: 'forbidden' });
+});
 app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
   maxAge: '7d',
   setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'),

@@ -4,6 +4,7 @@
 
 const router = require('express').Router();
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const prisma = require('../db');
 const env = require('../config/env');
@@ -36,7 +37,10 @@ function errResp(res, status, message) {
 }
 
 function genCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  // Use crypto.randomInt for cryptographically-strong OTPs. Math.random()
+  // is a PRNG seeded from a small state; predictable OTPs let an attacker
+  // brute-force the 5-attempt verify window for any phone.
+  return String(crypto.randomInt(100000, 1000000));
 }
 
 function normalizePhone(phone) {

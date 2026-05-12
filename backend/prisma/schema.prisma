@@ -135,6 +135,8 @@ model User {
   @@index([isAdmin])
   @@index([isCourier, courierStatus])
   @@index([isOnline, courierStatus])
+  // FK index — referrals lookup ("who did this user refer?") + cascade scans.
+  @@index([referredById])
 }
 
 model OtpCode {
@@ -149,6 +151,9 @@ model OtpCode {
   createdAt DateTime @default(now())
 
   @@index([phone])
+  // FK index — needed for "who has open OTPs?" admin reports and cleanup
+  // jobs that scan by user.
+  @@index([userId])
 }
 
 model FcmToken {
@@ -193,6 +198,10 @@ model AuditLog {
   @@index([actorId])
   @@index([targetType, targetId])
   @@index([createdAt])
+  // Audit history per-actor: "show me what this admin did, newest first".
+  @@index([actorId, createdAt])
+  // Entity history: "show all events for this order".
+  @@index([targetType, targetId, createdAt])
 }
 
 // Idempotency table for payment webhooks — prevents double-processing
@@ -227,6 +236,10 @@ model Address {
   apartment    String?
   intercom     String?
   instructions String?
+
+  // FK index — every buyer load fetches their addresses, and Postgres won't
+  // auto-index this column the way MySQL does for FKs.
+  @@index([userId])
 }
 
 model Shop {
@@ -449,6 +462,9 @@ model ShopMember {
   role   String @default("manager") // owner | manager | staff
 
   @@unique([userId, shopId])
+  // Shop-side lookups ("list all members of this shop") can't use the
+  // composite unique above since userId is the leading column.
+  @@index([shopId])
 }
 
 model Product {
@@ -654,6 +670,13 @@ model Order {
   @@index([courierId])
   @@index([status])
   @@index([scheduledFor])
+  // Buyer order history: WHERE buyerId = ? ORDER BY createdAt DESC.
+  @@index([buyerId, createdAt])
+  // Shop dashboard list: filter by shop + status, order by recency.
+  @@index([shopId, status, createdAt])
+  // FK indexes for Order.paymentMethodId and Order.batchId.
+  @@index([paymentMethodId])
+  @@index([batchId])
 }
 
 model OrderItem {
@@ -671,6 +694,11 @@ model OrderItem {
   // JSON snapshot of selected modifiers at order time. Format:
   // [{ groupId, groupName, optionId, optionName, priceDelta }, ...]
   modifiers   String?
+
+  // FK indexes — needed for include {items} fanouts and product sales reports.
+  // OrderItem.orderId is also used by Order cascade deletes (rare but real).
+  @@index([orderId])
+  @@index([productId])
 }
 
 model Notification {
@@ -818,6 +846,8 @@ model ChatMessage {
 
   @@index([orderId, createdAt])
   @@index([receiverId, isRead])
+  // FK index — senderId scans (user's outgoing messages, abuse reports).
+  @@index([senderId])
 }
 
 // Scheduled-for-later order. Dispatcher activation runs prep+ETA before the slot.
@@ -1016,6 +1046,9 @@ model Membership {
   updatedAt         DateTime @updatedAt
 
   @@index([status, currentPeriodEnd])
+  // Used to find memberships pointing at a given saved card (cascade on
+  // PaymentMethod delete + renewal-failure diagnostics).
+  @@index([paymentMethodId])
 }
 
 // Promo banners shown on buyer home / vertical landing. Admin-managed.
@@ -1092,6 +1125,9 @@ model Favorite {
   @@unique([userId, productId])
   @@unique([userId, shopId])
   @@index([userId])
+  // "How many users favorited this product/shop?" — admin/merchant stats.
+  @@index([productId])
+  @@index([shopId])
 }
 
 // ── Phase 8: stacked dispatch (multi-pickup batch) ──────────────────────────
@@ -1220,6 +1256,8 @@ model OrderGroup {
 
   @@index([status, expiresAt])
   @@index([hostUserId])
+  // FK index — shop dashboards listing active group orders.
+  @@index([shopId])
 }
 
 model OrderGroupMember {
@@ -1291,6 +1329,9 @@ model SupportTicket {
   @@index([status, priority])
   @@index([authorId, status])
   @@index([assigneeId, status])
+  // "All support tickets about this order" — used when courier/buyer opens
+  // dispute and admin needs to see existing related tickets.
+  @@index([orderId])
 }
 
 model SupportMessage {
@@ -1311,6 +1352,8 @@ model SupportMessage {
   createdAt   DateTime @default(now())
 
   @@index([ticketId, createdAt])
+  // FK index — admin abuse audit ("show messages this user sent").
+  @@index([senderId])
 }
 
 // Admin-driven push notification campaign. Targets a segment of users via

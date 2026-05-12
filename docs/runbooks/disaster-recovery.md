@@ -17,6 +17,15 @@ escalate to, and how to communicate with users.
   / SaveMyTime / etc.; replace before publishing). `<STATUS_URL>` is the
   public statuspage. `<SUPPORT_PHONE>` is the customer-support hotline.
 
+> **TODO before pilot launch:** these three placeholders MUST be replaced
+> with real values throughout this document. Grep for `<ESCALATION>`,
+> `<STATUS_URL>`, `<SUPPORT_PHONE>` to find every reference. Suggested:
+> - `<ESCALATION>` → `@cto` (Telegram) + `+998 XX XXX-XX-XX` (Бахром / CTO mobile)
+> - `<STATUS_URL>` → `https://status.tezketkaz.uz` (Statuspage / Atlassian or
+>   self-hosted via `cstate`); register the subdomain in Cloudflare first.
+> - `<SUPPORT_PHONE>` → `+998 71 200-XX-XX` (24/7 dispatcher line — see
+>   `courier-onboarding.md` §10).
+
 ---
 
 ## 1. Database corrupt or lost
