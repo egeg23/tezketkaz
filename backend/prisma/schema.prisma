@@ -612,6 +612,13 @@ model Order {
   fiscalFailureCount Int      @default(0)
   fiscalLastError    String?
 
+  // Phase 13.2.5 — courier delivery-photo proof. `deliveryPhotoUrl` is the
+  // storage URL of the snapshot the courier took at hand-off (camera-only,
+  // no gallery uploads). `deliveryPhotoAt` is when the upload landed. Required
+  // for dispute resolution and contactless-delivery confirmation.
+  deliveryPhotoUrl  String?
+  deliveryPhotoAt   DateTime?
+
   // Phase 8 — stacked dispatch. When set, this order is part of a batch
   // the same courier picked up together. Null for solo deliveries.
   batchId         String?
