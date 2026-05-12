@@ -19,9 +19,9 @@ export default function PromotionsPage() {
   const { shopId } = useCurrentShop();
   const { data, isLoading, error } = useShopCoupons(shopId);
 
-  // Backend `/api/coupons` requires admin role. For shop owners this will
-  // return 403 today — we present a read-only "contact admin" stub instead
-  // of failing loudly.
+  // Phase 13.2.7 — backend `/api/shops/:id/coupons` is shop-owner callable.
+  // We still tolerate a 403 (e.g. demoted member) by showing the contact-
+  // admin stub rather than a hard error toast.
   const forbidden = error instanceof ApiError && error.status === 403;
   const coupons = data?.coupons ?? [];
 

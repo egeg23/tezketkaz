@@ -27,9 +27,8 @@ export default function DashboardPage() {
       </div>
 
       {error && (
-        <div className="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
-          Stats endpoint not available yet — showing client-side aggregation.
-          (TODO: backend `/api/shops/:id/stats` is a stub.)
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          {(error as Error).message}
         </div>
       )}
 
