@@ -149,6 +149,24 @@ class L10n extends ChangeNotifier {
       'en': 'Accept',
       'kk': 'Қабылдау',
     },
+    'auth.social_apple_error': {
+      'uz': 'Apple bilan kirishda xatolik',
+      'ru': 'Ошибка входа через Apple',
+      'en': 'Apple sign-in failed',
+      'kk': 'Apple арқылы кіру қатесі',
+    },
+    'auth.social_google_error': {
+      'uz': 'Google bilan kirishda xatolik',
+      'ru': 'Ошибка входа через Google',
+      'en': 'Google sign-in failed',
+      'kk': 'Google арқылы кіру қатесі',
+    },
+    'login.terms_blurb': {
+      'uz': 'Kirish orqali siz\nFoydalanish shartlarimizga rozilik bildirasiz',
+      'ru': 'Войдя, вы соглашаетесь\nс нашими Условиями использования',
+      'en': 'By signing in you agree\nto our Terms of Service',
+      'kk': 'Кіру арқылы сіз\nҚолдану шарттарымен келісесіз',
+    },
     'legal.title': {
       'uz': "Huquqiy hujjatlar",
       'ru': 'Юридические документы',
@@ -228,6 +246,12 @@ class L10n extends ChangeNotifier {
       'ru': 'Загрузка...',
       'en': 'Loading...',
       'kk': 'Жүктелуде...',
+    },
+    'common.see_all': {
+      'uz': 'Barchasi',
+      'ru': 'Все',
+      'en': 'See all',
+      'kk': 'Барлығы',
     },
 
     // Buyer
@@ -591,11 +615,13 @@ class L10n extends ChangeNotifier {
       'uz': 'Yetkazib berish: ~{minutes} daqiqa',
       'ru': 'Доставка через ~{minutes} мин',
       'en': 'Delivery in ~{minutes} min',
+      'kk': 'Жеткізу: ~{minutes} мин',
     },
     'cart.distance': {
       'uz': '{km} km',
       'ru': '{km} км',
       'en': '{km} km',
+      'kk': '{km} км',
     },
     'cart.surge_badge': {
       'uz': 'Yuklama',
@@ -608,6 +634,42 @@ class L10n extends ChangeNotifier {
       'ru': 'Доставка не доступна',
       'en': 'Address out of delivery zone',
       'kk': 'Бұл мекенжайға жеткізу қолжетімсіз',
+    },
+    'cart.promo_invalid': {
+      'uz': 'Promo kod yaroqsiz',
+      'ru': 'Промокод недействителен',
+      'en': 'Invalid promo code',
+      'kk': 'Промокод жарамсыз',
+    },
+    'subscription.add_card_first': {
+      'uz': "Avval karta qo'shing",
+      'ru': 'Сначала добавьте карту',
+      'en': 'Please add a card first',
+      'kk': 'Алдымен карта қосыңыз',
+    },
+    'group.code_copied': {
+      'uz': 'Kod nusxalandi',
+      'ru': 'Код скопирован',
+      'en': 'Code copied',
+      'kk': 'Код көшірілді',
+    },
+    'group.my_basket': {
+      'uz': 'Mening savatim',
+      'ru': 'Моя корзина',
+      'en': 'My basket',
+      'kk': 'Менің себетім',
+    },
+    'group.add_items': {
+      'uz': "Mahsulot qo'shish",
+      'ru': 'Добавить товары',
+      'en': 'Add items',
+      'kk': 'Тауар қосу',
+    },
+    'group.view_tracking': {
+      'uz': 'Buyurtmani kuzatish',
+      'ru': 'Отслеживать заказ',
+      'en': 'View order tracking',
+      'kk': 'Тапсырысты бақылау',
     },
     'cart.min_order_warn': {
       'uz': "Yana {amount} qo'shing",
@@ -2643,23 +2705,14 @@ class L10n extends ChangeNotifier {
       'en': 'Refresh',
       'kk': 'Жаңарту',
     },
-    'common.cancel': {
-      'uz': 'Bekor qilish',
-      'ru': 'Отмена',
-      'en': 'Cancel',
-      'kk': 'Бас тарту',
-    },
+    // `common.cancel` / `common.error` are defined near the top of the map
+    // — keeping the canonical definition there avoids the const-Map
+    // duplicate-key warning that Dart 3 promotes to an error.
     'common.delete': {
       'uz': "O'chirish",
       'ru': 'Удалить',
       'en': 'Delete',
       'kk': 'Өшіру',
-    },
-    'common.error': {
-      'uz': 'Xatolik',
-      'ru': 'Ошибка',
-      'en': 'Error',
-      'kk': 'Қате',
     },
     'common.currency_uzs': {
       'uz': "so'm",
@@ -3264,6 +3317,141 @@ class L10n extends ChangeNotifier {
       'ru': 'Обновляется…',
       'en': 'Refreshing…',
       'kk': 'Жаңартылуда…',
+    },
+
+    // ── Tracking + buyer orders (centralised after audit) ───────────────────
+    'tracking.confirm_received_snack': {
+      'uz': 'Yetkazib berish tasdiqlandi 🎉',
+      'ru': 'Доставка подтверждена 🎉',
+      'en': 'Delivery confirmed 🎉',
+      'kk': 'Жеткізу расталды 🎉',
+    },
+    'tracking.error_prefix': {
+      'uz': 'Xatolik',
+      'ru': 'Ошибка',
+      'en': 'Error',
+      'kk': 'Қате',
+    },
+    'tracking.order_not_found': {
+      'uz': 'Buyurtma topilmadi',
+      'ru': 'Заказ не найден',
+      'en': 'Order not found',
+      'kk': 'Тапсырыс табылмады',
+    },
+    'tracking.confirm_cta': {
+      'uz': 'Qabul qildim',
+      'ru': 'Получено',
+      'en': "I received it",
+      'kk': 'Қабылдадым',
+    },
+    'tracking.rate_and_close': {
+      'uz': 'Baholash va yopish',
+      'ru': 'Оценить и закрыть',
+      'en': 'Rate and close',
+      'kk': 'Бағалау және жабу',
+    },
+    'tracking.chat_tooltip': {
+      'uz': 'Chat',
+      'ru': 'Чат',
+      'en': 'Chat',
+      'kk': 'Чат',
+    },
+    'tracking.order_number_prefix': {
+      'uz': 'Buyurtma raqami:',
+      'ru': 'Номер заказа:',
+      'en': 'Order #:',
+      'kk': 'Тапсырыс №:',
+    },
+    'tracking.courier_label': {
+      'uz': 'Kuryer',
+      'ru': 'Курьер',
+      'en': 'Courier',
+      'kk': 'Курьер',
+    },
+
+    'orders.title': {
+      'uz': 'Mening buyurtmalarim',
+      'ru': 'Мои заказы',
+      'en': 'My orders',
+      'kk': 'Менің тапсырыстарым',
+    },
+    'orders.empty': {
+      'uz': "Hali buyurtma yo'q",
+      'ru': 'Пока нет заказов',
+      'en': 'No orders yet',
+      'kk': 'Әзірге тапсырыстар жоқ',
+    },
+    'orders.active_section': {
+      'uz': 'Faol buyurtmalar',
+      'ru': 'Активные заказы',
+      'en': 'Active orders',
+      'kk': 'Белсенді тапсырыстар',
+    },
+    'orders.history_section': {
+      'uz': 'Tarix',
+      'ru': 'История',
+      'en': 'History',
+      'kk': 'Тарих',
+    },
+    'orders.track_cta': {
+      'uz': 'Buyurtmani kuzatish',
+      'ru': 'Отследить заказ',
+      'en': 'Track order',
+      'kk': 'Тапсырысты бақылау',
+    },
+    'orders.rate_cta': {
+      'uz': 'Baholash',
+      'ru': 'Оценить',
+      'en': 'Rate',
+      'kk': 'Бағалау',
+    },
+    'orders.reorder_cta': {
+      'uz': 'Qayta buyurtma',
+      'ru': 'Повторить заказ',
+      'en': 'Reorder',
+      'kk': 'Қайтадан тапсырыс беру',
+    },
+    'orders.courier_prefix': {
+      'uz': 'Kuryer:',
+      'ru': 'Курьер:',
+      'en': 'Courier:',
+      'kk': 'Курьер:',
+    },
+    'orders.cart_updated': {
+      'uz': 'Savat yangilandi',
+      'ru': 'Корзина обновлена',
+      'en': 'Cart updated',
+      'kk': 'Себет жаңартылды',
+    },
+    'orders.items_unavailable_prefix': {
+      'uz': "Bu mahsulotlar mavjud emas:",
+      'ru': 'Эти товары недоступны:',
+      'en': 'These items are unavailable:',
+      'kk': 'Бұл тауарлар қол жетімсіз:',
+    },
+    'orders.rating_thanks': {
+      'uz': 'Rahmat! Baho yuborildi.',
+      'ru': 'Спасибо! Оценка отправлена.',
+      'en': 'Thanks! Your rating has been sent.',
+      'kk': 'Рақмет! Бағалау жіберілді.',
+    },
+    'orders.rate_shop_title': {
+      'uz': "Do'konni baholang",
+      'ru': 'Оцените магазин',
+      'en': 'Rate the shop',
+      'kk': 'Дүкенді бағалаңыз',
+    },
+    'orders.rate_courier_title': {
+      'uz': 'Kuryerni baholang',
+      'ru': 'Оцените курьера',
+      'en': 'Rate the courier',
+      'kk': 'Курьерді бағалаңыз',
+    },
+    'orders.rate_product_title': {
+      'uz': 'Mahsulotni baholang',
+      'ru': 'Оцените товар',
+      'en': 'Rate the product',
+      'kk': 'Тауарды бағалаңыз',
     },
   };
 }

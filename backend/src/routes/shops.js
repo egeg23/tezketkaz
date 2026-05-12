@@ -640,22 +640,44 @@ router.delete('/:id/coupons/:code', authMiddleware, async (req, res, next) => {
 });
 
 // ─── POST /api/shops/connect ─────────────────────────────────────────────────
-// Прототип — в реальности магазин подключается через invite-код
+// SECURITY: this endpoint previously let any authenticated user join ANY
+// shop as a manager by guessing the shop id — a severe privilege escalation.
+// Real onboarding goes through an admin-issued invite-code flow; until that
+// exists, only admins may call this. Non-admins get a 403.
 router.post('/connect', authMiddleware, async (req, res, next) => {
   try {
-    const { shopId } = req.body;
+    if (!req.user.isAdmin) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const { shopId, userId } = req.body || {};
+    if (!shopId) return res.status(400).json({ error: 'shopId required' });
+
     const shop = await prisma.shop.findUnique({ where: { id: shopId } });
     if (!shop) return res.status(404).json({ error: 'Shop not found' });
 
+    // Admin can attach themselves OR a target user by id (default: self).
+    const targetUserId = (typeof userId === 'string' && userId) ? userId : req.user.id;
+    const target = await prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!target) return res.status(404).json({ error: 'User not found' });
+
     await prisma.shopMember.upsert({
-      where: { userId_shopId: { userId: req.user.id, shopId } },
+      where: { userId_shopId: { userId: targetUserId, shopId } },
       update: {},
-      create: { userId: req.user.id, shopId, role: 'manager' },
+      create: { userId: targetUserId, shopId, role: 'manager' },
     });
 
     await prisma.user.update({
-      where: { id: req.user.id },
+      where: { id: targetUserId },
       data: { isShop: true },
+    });
+
+    audit({
+      actorId: req.user.id,
+      action: 'shop.member_add',
+      targetType: 'Shop',
+      targetId: shopId,
+      metadata: { userId: targetUserId, role: 'manager' },
+      ipAddress: req.ip,
     });
 
     res.json({ success: true });
