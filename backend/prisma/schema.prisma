@@ -11,6 +11,71 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ── Enums ───────────────────────────────────────────────────────────────────
+
+// Order status lifecycle. Possible transitions are documented above
+// `model Order` below. Adding a new value here requires (a) regenerating the
+// Postgres baseline migration, (b) updating any switch/case in
+// `services/notifications.js` / Flutter `OrderStatus` mapping, and
+// (c) checking admin filters in `routes/admin.js` and `routes/heatmap.js`.
+enum OrderStatus {
+  pending
+  confirmed
+  paid
+  collecting
+  readyForPickup
+  courierSearching
+  courierAssigned
+  pickedUp
+  inDelivery
+  arrivedAtCustomer
+  delivered
+  confirmedByBuyer
+  cancelled
+  refunded
+  no_courier_found
+}
+
+// Dispute lifecycle. `under_review` is reserved for admin triage but not yet
+// written from code (admin filter only); keeping it in the enum so future
+// admin actions can transition without a migration.
+enum DisputeStatus {
+  open
+  under_review
+  resolved
+  rejected
+}
+
+// Support ticket lifecycle.
+enum SupportTicketStatus {
+  open
+  in_progress
+  awaiting_user
+  closed
+  resolved
+}
+
+// Weekly / instant payout lifecycle. `requested` is set by the courier's
+// instant-payout flow; `processing` is reserved for the eventual asynchronous
+// bank-transfer state.
+enum PayoutStatus {
+  pending
+  requested
+  processing
+  paid
+  failed
+  cancelled
+}
+
+// Subscription membership lifecycle (Wolt+/Yandex Plus).
+enum MembershipStatus {
+  active
+  past_due
+  cancelled
+  expired
+  pending
+}
+
 model User {
   id              String   @id @default(uuid())
   phone           String   @unique
@@ -554,7 +619,7 @@ model Order {
   // Status flow:
   // pending → confirmed → collecting → readyForPickup → courierAssigned →
   // pickedUp → inDelivery → delivered  (or cancelled)
-  status          String   @default("pending")
+  status          OrderStatus @default(pending)
   orderNumber     String?  // e.g. K-247
 
   // Buyer
@@ -894,7 +959,7 @@ model Payout {
   // pending | requested | paid | failed | cancelled
   // 'requested' is set by the courier's instant-payout flow (Phase 8.5);
   // admin then transitions to 'paid' or 'failed'.
-  status        String   @default("pending")
+  status        PayoutStatus @default(pending)
   paidAt        DateTime?
   txnRef        String?
   notes         String?
@@ -927,7 +992,7 @@ model Dispute {
   evidence    String?
 
   // open | under_review | resolved | rejected
-  status      String   @default("open")
+  status      DisputeStatus @default(open)
 
   resolution  String?  // 'refund' | 'partial_refund' | 'replacement' | 'rejected' | 'no_action'
   refundAmount Float   @default(0)
@@ -1020,7 +1085,7 @@ model Membership {
   tier              String   @default("plus")
 
   // 'active' | 'past_due' | 'cancelled' | 'expired'
-  status            String   @default("active")
+  status            MembershipStatus @default(active)
 
   // ISO currency snapshot of the price the user signed up at (e.g. "UZS").
   currency          String   @default("UZS")
@@ -1308,7 +1373,7 @@ model SupportTicket {
   subject     String
 
   // 'open' | 'in_progress' | 'awaiting_user' | 'closed' | 'resolved'
-  status      String   @default("open")
+  status      SupportTicketStatus @default(open)
   // 'low' | 'normal' | 'high' | 'urgent'
   priority    String   @default("normal")
 

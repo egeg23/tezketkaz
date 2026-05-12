@@ -10,6 +10,33 @@
 const { distanceKm, pointInPolygon, eta_minutes } = require('../lib/geo');
 const routing = require('./routing');
 
+// Money invariant: every monetary value written to the DB must be a finite,
+// non-negative, integer-valued Number in major units (UZS, KZT, …). See
+// docs/architecture/money-handling.md for the full rationale. Throws a
+// 400-shaped error when the value violates the invariant so callers can
+// surface it as a request validation error rather than crashing the route.
+function assertIntegerMoney(value, label = 'money') {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw Object.assign(new Error(`${label} must be a finite Number`), {
+      status: 400,
+      code: 'money_invariant',
+    });
+  }
+  if (value < 0) {
+    throw Object.assign(new Error(`${label} must be non-negative`), {
+      status: 400,
+      code: 'money_invariant',
+    });
+  }
+  if (!Number.isInteger(value)) {
+    throw Object.assign(
+      new Error(`${label} must be an integer in major units (got ${value})`),
+      { status: 400, code: 'money_invariant' },
+    );
+  }
+  return value;
+}
+
 // Env defaults are read at call time so tests can override via process.env.
 function envDefaults() {
   return {
@@ -193,6 +220,15 @@ async function computeDelivery(prisma, { shopId, destLat, destLng, userId, count
     }
   }
 
+  // Defense in depth — every Float column we write must be an integer in
+  // major units. computeDelivery already rounds, so under normal flow this
+  // is a no-op; if a future change introduces a fractional path the
+  // assertion will surface it before the value reaches the Prisma write.
+  assertIntegerMoney(deliveryFee, 'Order.deliveryFee');
+  if (membershipDiscount) {
+    assertIntegerMoney(membershipDiscount, 'membershipDiscount');
+  }
+
   return {
     zoneId: zone.id,
     distanceKm: Number(dKm.toFixed(3)),
@@ -211,4 +247,4 @@ async function computeDelivery(prisma, { shopId, destLat, destLng, userId, count
   };
 }
 
-module.exports = { computeDelivery };
+module.exports = { computeDelivery, assertIntegerMoney };
