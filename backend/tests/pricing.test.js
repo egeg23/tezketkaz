@@ -191,3 +191,31 @@ describe('computeDelivery', () => {
     expect(r.deliveryFee).toBe(10000);
   });
 });
+
+describe('assertIntegerMoney', () => {
+  let assertIntegerMoney;
+  beforeAll(() => {
+    ({ assertIntegerMoney } = require('../src/services/pricing'));
+  });
+
+  test('accepts non-negative integers', () => {
+    expect(assertIntegerMoney(0, 'x')).toBe(0);
+    expect(assertIntegerMoney(12000, 'x')).toBe(12000);
+  });
+
+  test('rejects fractional numbers', () => {
+    expect(() => assertIntegerMoney(12000.5, 'Order.total'))
+      .toThrow(/Order\.total/);
+  });
+
+  test('rejects negatives', () => {
+    expect(() => assertIntegerMoney(-1, 'x')).toThrow(/non-negative/);
+  });
+
+  test('rejects non-finite / non-number', () => {
+    expect(() => assertIntegerMoney(NaN, 'x')).toThrow(/finite/);
+    expect(() => assertIntegerMoney(Infinity, 'x')).toThrow(/finite/);
+    expect(() => assertIntegerMoney('123', 'x')).toThrow(/finite/);
+    expect(() => assertIntegerMoney(null, 'x')).toThrow(/finite/);
+  });
+});

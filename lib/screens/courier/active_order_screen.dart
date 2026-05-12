@@ -363,15 +363,16 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Buyurtmani tark etish?', style: Theme.of(context).textTheme.headlineMedium),
+            Text(t(context, 'courier.active.cancel_title'),
+                style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 8),
-            const Text('Tez-tez tark etish reytingingizni pasaytiradi.',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+            Text(t(context, 'courier.active.cancel_subtitle'),
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
             const SizedBox(height: 20),
             ...[
-              'Yo\'lda muammo yuz berdi',
-              'Do\'kon yopiq',
-              'Boshqa favqulodda holat',
+              t(context, 'courier.active.cancel_reason_road'),
+              t(context, 'courier.active.cancel_reason_closed'),
+              t(context, 'courier.active.cancel_reason_other'),
             ].map((r) => ListTile(
               leading: const Icon(Icons.radio_button_unchecked, color: AppColors.textHint),
               title: Text(r),
@@ -379,7 +380,9 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
               onTap: () { Navigator.pop(context); context.go('/courier'); },
             )),
             const SizedBox(height: 8),
-            OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text('Ortga')),
+            OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(t(context, 'common.back'))),
           ],
         ),
       ),
@@ -406,11 +409,11 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labels = {
-      DeliveryStep.goToShop: 'Do\'konga boring',
-      DeliveryStep.confirmPickup: 'Buyurtmani oling',
-      DeliveryStep.goToCustomer: 'Xaridorga boring',
-      DeliveryStep.atCustomer: 'Mahsulot topshiring',
-      DeliveryStep.done: 'Bajarildi',
+      DeliveryStep.goToShop: t(context, 'courier.active.step_go_to_shop'),
+      DeliveryStep.confirmPickup: t(context, 'courier.active.step_confirm_pickup'),
+      DeliveryStep.goToCustomer: t(context, 'courier.active.step_go_to_customer'),
+      DeliveryStep.atCustomer: t(context, 'courier.active.step_at_customer'),
+      DeliveryStep.done: t(context, 'courier.active.step_done'),
     };
     final steps = DeliveryStep.values.where((s) => s != DeliveryStep.done).toList();
     final curIdx = steps.indexOf(step);
@@ -722,7 +725,7 @@ class _MapView extends StatelessWidget {
           children: [
             Text(toShop ? '🏪' : '🏠', style: const TextStyle(fontSize: 56)),
             const SizedBox(height: 8),
-            Text('2GIS Navigator\n(production versiyada)',
+            Text(t(context, 'courier.active.map_placeholder'),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
           ],
@@ -753,7 +756,10 @@ class _EtaBubble extends StatelessWidget {
           children: [
             const Icon(Icons.timer_outlined, size: 16, color: AppColors.courier),
             const SizedBox(width: 6),
-            Text('~$mins daqiqa', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+            Text(
+                t(context, 'courier.active.eta_minutes')
+                    .replaceAll('{mins}', '$mins'),
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
             const SizedBox(width: 8),
             Container(width: 1, height: 14, color: AppColors.border),
             const SizedBox(width: 8),
@@ -832,10 +838,11 @@ class _GoToShop extends StatelessWidget {
           decoration: BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
           child: Column(
             children: [
-              const Row(children: [
-                Icon(Icons.inventory_2_outlined, size: 16, color: AppColors.textSecondary),
-                SizedBox(width: 8),
-                Text('Mahsulotlar ro\'yxati', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              Row(children: [
+                const Icon(Icons.inventory_2_outlined, size: 16, color: AppColors.textSecondary),
+                const SizedBox(width: 8),
+                Text(t(context, 'courier.active.items_list_title'),
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
               ]),
               const SizedBox(height: 8),
               ...order.items.map((i) => Padding(
@@ -877,16 +884,18 @@ class _ConfirmPickup extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Text('🏷️', style: TextStyle(fontSize: 32)),
-              SizedBox(width: 14),
+              const Text('🏷️', style: TextStyle(fontSize: 32)),
+              const SizedBox(width: 14),
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Do\'kondan buyurtma raqamini so\'rang', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.primary)),
-                  SizedBox(height: 4),
-                  Text('Sticker yoki chekdagi raqamni kiriting', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                  Text(t(context, 'courier.active.ask_for_number_title'),
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.primary)),
+                  const SizedBox(height: 4),
+                  Text(t(context, 'courier.active.ask_for_number_subtitle'),
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                 ],
               )),
             ],
@@ -902,7 +911,7 @@ class _ConfirmPickup extends StatelessWidget {
           decoration: InputDecoration(
             hintText: 'K-247',
             hintStyle: const TextStyle(fontSize: 28, fontWeight: FontWeight.w300, color: AppColors.textHint, letterSpacing: 4),
-            errorText: hasError ? 'Noto\'g\'ri raqam. Qayta urinib ko\'ring' : null,
+            errorText: hasError ? t(context, 'courier.active.number_invalid') : null,
             filled: true,
             fillColor: hasError ? const Color(0xFFFFEEEE) : AppColors.surface,
             border: OutlineInputBorder(
@@ -919,7 +928,7 @@ class _ConfirmPickup extends StatelessWidget {
         const SizedBox(height: 10),
         Center(
           child: Text(
-            'Do\'kon panelida buyurtma raqami ko\'rsatilgan',
+            t(context, 'courier.active.number_hint_help'),
             style: const TextStyle(color: AppColors.textHint, fontSize: 12),
           ),
         ),
@@ -989,8 +998,13 @@ class _GoToCustomer extends StatelessWidget {
                 Expanded(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('To\'lov: ${order.paymentMethod}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                    Text(order.isPaid ? 'To\'langan ✓' : 'Naqd pul oling',
+                    Text(
+                        '${t(context, 'courier.active.payment_method_prefix')} ${order.paymentMethod}',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    Text(
+                        order.isPaid
+                            ? t(context, 'courier.active.payment_paid')
+                            : t(context, 'courier.active.payment_take_cash'),
                         style: TextStyle(color: order.isPaid ? AppColors.success : AppColors.courier, fontSize: 12, fontWeight: FontWeight.w600)),
                   ],
                 )),
@@ -1028,11 +1042,11 @@ class _CtaButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labels = {
-      DeliveryStep.goToShop: '🏪  Do\'konga yetib keldim',
-      DeliveryStep.confirmPickup: '✓  Buyurtmani oldim',
-      DeliveryStep.goToCustomer: '🏠  Xaridor eshigiga yetdim',
-      DeliveryStep.atCustomer: '🎉  Mahsulot topshirildi',
-      DeliveryStep.done: 'Yangi buyurtmalar',
+      DeliveryStep.goToShop: t(context, 'courier.active.cta_at_shop'),
+      DeliveryStep.confirmPickup: t(context, 'courier.active.cta_picked_up'),
+      DeliveryStep.goToCustomer: t(context, 'courier.active.cta_at_door'),
+      DeliveryStep.atCustomer: t(context, 'courier.active.cta_handed_off'),
+      DeliveryStep.done: t(context, 'courier.active.cta_new_orders'),
     };
     return AnimatedOpacity(
       opacity: canProceed ? 1.0 : 0.4,
@@ -1076,7 +1090,8 @@ class _DoneScreenState extends State<_DoneScreen> with SingleTickerProviderState
   @override
   void dispose() { _c.dispose(); super.dispose(); }
 
-  String _fmt(double v) => '${v.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ')} so\'m';
+  String _fmt(BuildContext context, double v) =>
+      '${v.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ')} ${t(context, 'common.som_short')}';
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -1100,8 +1115,8 @@ class _DoneScreenState extends State<_DoneScreen> with SingleTickerProviderState
                   ),
                 ),
                 const SizedBox(height: 28),
-                const Text('Buyurtma yetkazildi!',
-                    style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
+                Text(t(context, 'courier.active.done_title'),
+                    style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
@@ -1111,16 +1126,17 @@ class _DoneScreenState extends State<_DoneScreen> with SingleTickerProviderState
                   ),
                   child: Column(
                     children: [
-                      const Text('Daromadingiz', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      Text(t(context, 'courier.active.done_earnings_label'),
+                          style: const TextStyle(color: Colors.white70, fontSize: 13)),
                       const SizedBox(height: 6),
-                      Text('+ ${_fmt(widget.reward)}',
+                      Text('+ ${_fmt(context, widget.reward)}',
                           style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900)),
                     ],
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text('⭐ Xaridor sizni baholashini kuting',
-                    style: TextStyle(color: Colors.white70, fontSize: 13)),
+                Text(t(context, 'courier.active.done_wait_rating'),
+                    style: const TextStyle(color: Colors.white70, fontSize: 13)),
                 const SizedBox(height: 40),
                 ElevatedButton(
                   onPressed: widget.onFinish,
@@ -1130,7 +1146,8 @@ class _DoneScreenState extends State<_DoneScreen> with SingleTickerProviderState
                     minimumSize: const Size(double.infinity, 52),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
-                  child: const Text('Yangi buyurtma qabul qilish', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                  child: Text(t(context, 'courier.active.done_next_cta'),
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                 ),
               ],
             ),

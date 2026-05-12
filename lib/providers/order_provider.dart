@@ -72,6 +72,14 @@ class AppOrder {
   double get subtotal => items.fold(0, (s, i) => s + i.total);
   double get total => subtotal + deliveryFee;
 
+  // TODO(phase14): these getters are deliberately uz-only because they're
+  // accessed from widget builds without `BuildContext`. The clean fix is to
+  // either (a) move the label/emoji mapping into a UI helper that takes
+  // (BuildContext, AppOrderStatus) and update all call sites, or (b) thread
+  // context through the providers. Both are non-trivial because tracking
+  // screens read the value from a `context.watch<OrderProvider>()` chain.
+  // Leaving as Uzbek-only literals for now — callers should migrate to a
+  // helper such as `orderStatusLabel(context, status)` when they touch this.
   String get statusLabel => switch (status) {
     AppOrderStatus.pending         => 'Yangi buyurtma',
     AppOrderStatus.confirmed       => 'Qabul qilindi',

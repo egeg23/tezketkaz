@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/l10n.dart';
 import '../../models/models.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
@@ -46,7 +47,7 @@ class RoleSwitcherScreen extends StatelessWidget {
                     child: Row(
                       children: [
                         Expanded(
-                          child: Text('Rejimni tanlang',
+                          child: Text(t(context, 'role_switcher.title'),
                               style: Theme.of(context).textTheme.headlineMedium),
                         ),
                         // Current role pill
@@ -57,7 +58,7 @@ class RoleSwitcherScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            _roleLabel(role),
+                            _roleLabel(context, role),
                             style: const TextStyle(
                               color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w600,
                             ),
@@ -70,7 +71,7 @@ class RoleSwitcherScreen extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
-                      'Ilovani yopmasdan rol almashtiring',
+                      t(context, 'role_switcher.subtitle'),
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
@@ -81,8 +82,8 @@ class RoleSwitcherScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: _RoleOption(
                       emoji: '🛒',
-                      title: 'Xaridor',
-                      subtitle: 'Mahsulot buyurtma qilish',
+                      title: t(context, 'role_switcher.buyer_title'),
+                      subtitle: t(context, 'role_switcher.buyer_sub'),
                       color: AppColors.primary,
                       isActive: role == UserRole.buyer,
                       onTap: () async {
@@ -98,11 +99,11 @@ class RoleSwitcherScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: _RoleOption(
                       emoji: '🛵',
-                      title: 'Kuryer',
-                      subtitle: _courierSub(user),
+                      title: t(context, 'role_switcher.courier_title'),
+                      subtitle: _courierSub(context, user),
                       color: AppColors.courier,
                       isActive: role == UserRole.courier,
-                      badge: _courierBadge(user),
+                      badge: _courierBadge(context, user),
                       onTap: () async {
                         if (user.courierStatus == CourierVerificationStatus.none) {
                           context.go('/courier-verification'); return;
@@ -125,13 +126,16 @@ class RoleSwitcherScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: _RoleOption(
                       emoji: '🏪',
-                      title: 'Do\'kon',
+                      title: t(context, 'role_switcher.shop_title'),
                       subtitle: user.isShopOwner
-                        ? user.shopName ?? 'Do\'kon boshqaruvi'
-                        : 'Do\'kon egasi? Ulaning',
+                        ? user.shopName ?? t(context, 'role_switcher.shop_sub_default')
+                        : t(context, 'role_switcher.shop_sub_connect'),
                       color: _kShopColor,
                       isActive: role == UserRole.shop,
-                      badge: user.isShopOwner ? _Badge('Ulangan', AppColors.success) : null,
+                      badge: user.isShopOwner
+                          ? _Badge(t(context, 'role_switcher.shop_badge_connected'),
+                              AppColors.success)
+                          : null,
                       onTap: () async {
                         if (!user.isShopOwner) {
                           _shopConnectSheet(context, auth);
@@ -152,7 +156,7 @@ class RoleSwitcherScreen extends StatelessWidget {
                         side: const BorderSide(color: AppColors.border),
                         foregroundColor: AppColors.textSecondary,
                       ),
-                      child: const Text('Bekor qilish'),
+                      child: Text(t(context, 'common.cancel')),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -166,28 +170,35 @@ class RoleSwitcherScreen extends StatelessWidget {
     );
   }
 
-  String _roleLabel(UserRole role) {
+  String _roleLabel(BuildContext context, UserRole role) {
     switch (role) {
-      case UserRole.buyer:   return '🛒 Xaridor';
-      case UserRole.courier: return '🛵 Kuryer';
-      case UserRole.shop:    return '🏪 Do\'kon';
+      case UserRole.buyer:   return t(context, 'role_switcher.buyer_emoji_label');
+      case UserRole.courier: return t(context, 'role_switcher.courier_emoji_label');
+      case UserRole.shop:    return t(context, 'role_switcher.shop_emoji_label');
     }
   }
 
-  String _courierSub(User user) {
+  String _courierSub(BuildContext context, User user) {
     switch (user.courierStatus) {
-      case CourierVerificationStatus.none:     return 'Ro\'yxatdan o\'ting va daromad oling';
-      case CourierVerificationStatus.pending:  return 'Ariza ko\'rib chiqilmoqda...';
-      case CourierVerificationStatus.approved: return 'Buyurtma qabul qilib ishlang';
-      case CourierVerificationStatus.rejected: return 'Rad etildi — qayta ariza bering';
+      case CourierVerificationStatus.none:
+        return t(context, 'role_switcher.courier_sub_none');
+      case CourierVerificationStatus.pending:
+        return t(context, 'role_switcher.courier_sub_pending');
+      case CourierVerificationStatus.approved:
+        return t(context, 'role_switcher.courier_sub_approved');
+      case CourierVerificationStatus.rejected:
+        return t(context, 'role_switcher.courier_sub_rejected');
     }
   }
 
-  Widget? _courierBadge(User user) {
+  Widget? _courierBadge(BuildContext context, User user) {
     switch (user.courierStatus) {
-      case CourierVerificationStatus.pending:  return _Badge('Tekshirilmoqda', AppColors.warning);
-      case CourierVerificationStatus.approved: return _Badge('Faol', AppColors.success);
-      case CourierVerificationStatus.rejected: return _Badge('Rad etildi', AppColors.error);
+      case CourierVerificationStatus.pending:
+        return _Badge(t(context, 'role_switcher.badge_pending'), AppColors.warning);
+      case CourierVerificationStatus.approved:
+        return _Badge(t(context, 'role_switcher.badge_approved'), AppColors.success);
+      case CourierVerificationStatus.rejected:
+        return _Badge(t(context, 'role_switcher.badge_rejected'), AppColors.error);
       default: return null;
     }
   }
@@ -197,15 +208,12 @@ class RoleSwitcherScreen extends StatelessWidget {
       context: ctx,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Ariza tekshirilmoqda'),
-        content: const Text(
-          'Arizangiz 1-2 ish kuni ichida ko\'rib chiqiladi. '
-          'Natija haqida SMS yuboramiz.',
-        ),
+        title: Text(t(ctx, 'role_switcher.pending_dialog_title')),
+        content: Text(t(ctx, 'role_switcher.pending_dialog_body')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Tushunarli'),
+            child: Text(t(ctx, 'role_switcher.pending_dialog_ok')),
           ),
         ],
       ),
@@ -228,11 +236,12 @@ class RoleSwitcherScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Do\'konni ulash', style: Theme.of(ctx).textTheme.headlineMedium),
+            Text(t(ctx, 'role_switcher.shop_connect_title'),
+                style: Theme.of(ctx).textTheme.headlineMedium),
             const SizedBox(height: 6),
-            const Text(
-              'Do\'koningizni TezKetKaz ga ulang va buyurtma qabul qiling.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            Text(
+              t(ctx, 'role_switcher.shop_connect_body'),
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
             ),
             const SizedBox(height: 20),
             // Demo: mock shop connect
@@ -246,11 +255,11 @@ class RoleSwitcherScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Prototip: demo do\'kon',
-                      style: TextStyle(fontWeight: FontWeight.w700, color: _kShopColor)),
+                  Text(t(ctx, 'role_switcher.shop_demo_title'),
+                      style: const TextStyle(fontWeight: FontWeight.w700, color: _kShopColor)),
                   const SizedBox(height: 4),
-                  const Text('«Korzinka — Yunusobod» do\'koni sifatida ulaning',
-                      style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                  Text(t(ctx, 'role_switcher.shop_demo_body'),
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
                 ],
               ),
             ),
@@ -262,7 +271,7 @@ class RoleSwitcherScreen extends StatelessWidget {
                 ctx.go('/shop');
               },
               style: ElevatedButton.styleFrom(backgroundColor: _kShopColor),
-              child: const Text('Do\'konni ulash'),
+              child: Text(t(ctx, 'role_switcher.shop_connect_cta')),
             ),
           ],
         ),

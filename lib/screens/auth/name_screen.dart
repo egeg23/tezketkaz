@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/l10n.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
 
@@ -32,17 +33,17 @@ class _NameScreenState extends State<NameScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Spacer(),
-              Center(
+              const Center(
                 child: Text('👋', style: TextStyle(fontSize: 64)),
               ),
               const SizedBox(height: 32),
               Text(
-                'Ismingiz nima?',
+                t(context, 'auth.name.title'),
                 style: Theme.of(context).textTheme.displayMedium,
               ),
               const SizedBox(height: 8),
               Text(
-                'Biz siz bilan bog\'lanishimiz uchun',
+                t(context, 'auth.name.subtitle'),
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: AppColors.textSecondary,
                 ),
@@ -52,7 +53,7 @@ class _NameScreenState extends State<NameScreen> {
                 controller: _ctrl,
                 textCapitalization: TextCapitalization.words,
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                decoration: const InputDecoration(hintText: 'Ism va familiya'),
+                decoration: InputDecoration(hintText: t(context, 'auth.name.hint')),
                 onChanged: (_) => setState(() {}),
                 onSubmitted: (_) => _continue(),
                 autofocus: true,
@@ -63,7 +64,7 @@ class _NameScreenState extends State<NameScreen> {
                 duration: const Duration(milliseconds: 200),
                 child: ElevatedButton(
                   onPressed: _isValid ? _continue : null,
-                  child: const Text('Davom etish'),
+                  child: Text(t(context, 'common.continue')),
                 ),
               ),
               const Spacer(flex: 2),

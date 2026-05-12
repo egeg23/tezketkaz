@@ -1,3 +1,18 @@
+-- CreateEnum
+CREATE TYPE "OrderStatus" AS ENUM ('pending', 'confirmed', 'paid', 'collecting', 'readyForPickup', 'courierSearching', 'courierAssigned', 'pickedUp', 'inDelivery', 'arrivedAtCustomer', 'delivered', 'confirmedByBuyer', 'cancelled', 'refunded', 'no_courier_found');
+
+-- CreateEnum
+CREATE TYPE "DisputeStatus" AS ENUM ('open', 'under_review', 'resolved', 'rejected');
+
+-- CreateEnum
+CREATE TYPE "SupportTicketStatus" AS ENUM ('open', 'in_progress', 'awaiting_user', 'closed', 'resolved');
+
+-- CreateEnum
+CREATE TYPE "PayoutStatus" AS ENUM ('pending', 'requested', 'processing', 'paid', 'failed', 'cancelled');
+
+-- CreateEnum
+CREATE TYPE "MembershipStatus" AS ENUM ('active', 'past_due', 'cancelled', 'expired', 'pending');
+
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
@@ -318,7 +333,7 @@ CREATE TABLE "ProductModifierOption" (
 -- CreateTable
 CREATE TABLE "Order" (
     "id" TEXT NOT NULL,
-    "status" TEXT NOT NULL DEFAULT 'pending',
+    "status" "OrderStatus" NOT NULL DEFAULT 'pending',
     "orderNumber" TEXT,
     "buyerId" TEXT NOT NULL,
     "customerName" TEXT NOT NULL,
@@ -521,7 +536,7 @@ CREATE TABLE "Payout" (
     "refundsTotal" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "netAmount" DOUBLE PRECISION NOT NULL,
     "ordersCount" INTEGER NOT NULL DEFAULT 0,
-    "status" TEXT NOT NULL DEFAULT 'pending',
+    "status" "PayoutStatus" NOT NULL DEFAULT 'pending',
     "paidAt" TIMESTAMP(3),
     "txnRef" TEXT,
     "notes" TEXT,
@@ -541,7 +556,7 @@ CREATE TABLE "Dispute" (
     "reason" TEXT NOT NULL,
     "description" TEXT,
     "evidence" TEXT,
-    "status" TEXT NOT NULL DEFAULT 'open',
+    "status" "DisputeStatus" NOT NULL DEFAULT 'open',
     "resolution" TEXT,
     "refundAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "resolvedById" TEXT,
@@ -592,7 +607,7 @@ CREATE TABLE "Membership" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "tier" TEXT NOT NULL DEFAULT 'plus',
-    "status" TEXT NOT NULL DEFAULT 'active',
+    "status" "MembershipStatus" NOT NULL DEFAULT 'active',
     "currency" TEXT NOT NULL DEFAULT 'UZS',
     "periodAmount" DOUBLE PRECISION NOT NULL,
     "billingPeriod" TEXT NOT NULL DEFAULT 'monthly',
@@ -743,7 +758,7 @@ CREATE TABLE "SupportTicket" (
     "category" TEXT,
     "orderId" TEXT,
     "subject" TEXT NOT NULL,
-    "status" TEXT NOT NULL DEFAULT 'open',
+    "status" "SupportTicketStatus" NOT NULL DEFAULT 'open',
     "priority" TEXT NOT NULL DEFAULT 'normal',
     "assigneeId" TEXT,
     "closedAt" TIMESTAMP(3),
