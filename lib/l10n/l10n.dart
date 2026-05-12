@@ -49,36 +49,43 @@ class L10n extends ChangeNotifier {
       'uz': 'Kirish',
       'ru': 'Вход',
       'en': 'Sign in',
+      'kk': 'Кіру',
     },
     'login.subtitle': {
       'uz': 'Telefon raqamingizni kiriting va SMS kod oling',
       'ru': 'Введите номер телефона и получите SMS-код',
       'en': 'Enter your phone number to receive an SMS code',
+      'kk': 'Телефон нөміріңізді енгізіп, SMS код алыңыз',
     },
     'login.cta': {
       'uz': 'SMS kod olish',
       'ru': 'Получить SMS-код',
       'en': 'Get SMS code',
+      'kk': 'SMS код алу',
     },
     'otp.title': {
       'uz': 'SMS kod',
       'ru': 'SMS-код',
       'en': 'SMS code',
+      'kk': 'SMS код',
     },
     'otp.sent_to': {
       'uz': 'Kod yuborildi:',
       'ru': 'Код отправлен:',
       'en': 'Code sent to:',
+      'kk': 'Код жіберілді:',
     },
     'otp.resend': {
       'uz': 'Kodni qayta yuborish',
       'ru': 'Отправить ещё раз',
       'en': 'Resend code',
+      'kk': 'Кодты қайта жіберу',
     },
     'otp.resend_in': {
       'uz': 'Qayta yuborish:',
       'ru': 'Повторно через:',
       'en': 'Resend in:',
+      'kk': 'Қайта жіберу:',
     },
     'otp.verify': {
       'uz': 'Tasdiqlash',
@@ -178,41 +185,49 @@ class L10n extends ChangeNotifier {
       'uz': 'Bekor qilish',
       'ru': 'Отмена',
       'en': 'Cancel',
+      'kk': 'Бас тарту',
     },
     'common.confirm': {
       'uz': 'Tasdiqlash',
       'ru': 'Подтвердить',
       'en': 'Confirm',
+      'kk': 'Растау',
     },
     'common.continue': {
       'uz': 'Davom etish',
       'ru': 'Продолжить',
       'en': 'Continue',
+      'kk': 'Жалғастыру',
     },
     'common.back': {
       'uz': 'Orqaga',
       'ru': 'Назад',
       'en': 'Back',
+      'kk': 'Артқа',
     },
     'common.save': {
       'uz': 'Saqlash',
       'ru': 'Сохранить',
       'en': 'Save',
+      'kk': 'Сақтау',
     },
     'common.error': {
       'uz': 'Xatolik',
       'ru': 'Ошибка',
       'en': 'Error',
+      'kk': 'Қате',
     },
     'common.retry': {
       'uz': 'Qayta urinish',
       'ru': 'Повторить',
       'en': 'Retry',
+      'kk': 'Қайталау',
     },
     'common.loading': {
       'uz': 'Yuklanmoqda...',
       'ru': 'Загрузка...',
       'en': 'Loading...',
+      'kk': 'Жүктелуде...',
     },
 
     // Buyer
@@ -220,46 +235,55 @@ class L10n extends ChangeNotifier {
       'uz': 'Bosh sahifa',
       'ru': 'Главная',
       'en': 'Home',
+      'kk': 'Басты бет',
     },
     'buyer.search_placeholder': {
       'uz': 'Mahsulot qidirish...',
       'ru': 'Поиск товаров...',
       'en': 'Search products...',
+      'kk': 'Тауар іздеу...',
     },
     'buyer.categories': {
       'uz': 'Kategoriyalar',
       'ru': 'Категории',
       'en': 'Categories',
+      'kk': 'Санаттар',
     },
     'buyer.popular': {
       'uz': 'Ommabop',
       'ru': 'Популярное',
       'en': 'Popular',
+      'kk': 'Танымал',
     },
     'buyer.cart_empty': {
       'uz': 'Savat bo\'sh',
       'ru': 'Корзина пуста',
       'en': 'Cart is empty',
+      'kk': 'Себет бос',
     },
     'buyer.place_order': {
       'uz': 'Buyurtma berish',
       'ru': 'Оформить заказ',
       'en': 'Place order',
+      'kk': 'Тапсырыс рәсімдеу',
     },
     'buyer.delivery_address': {
       'uz': 'Yetkazib berish manzili',
       'ru': 'Адрес доставки',
       'en': 'Delivery address',
+      'kk': 'Жеткізу мекенжайы',
     },
     'buyer.payment_method': {
       'uz': 'To\'lov usuli',
       'ru': 'Способ оплаты',
       'en': 'Payment method',
+      'kk': 'Төлем тәсілі',
     },
     'buyer.my_orders': {
       'uz': 'Mening buyurtmalarim',
       'ru': 'Мои заказы',
       'en': 'My orders',
+      'kk': 'Менің тапсырыстарым',
     },
 
     // Roles
@@ -267,16 +291,19 @@ class L10n extends ChangeNotifier {
       'uz': 'Xaridor',
       'ru': 'Покупатель',
       'en': 'Buyer',
+      'kk': 'Сатып алушы',
     },
     'role.courier': {
       'uz': 'Kuryer',
       'ru': 'Курьер',
       'en': 'Courier',
+      'kk': 'Курьер',
     },
     'role.shop': {
       'uz': 'Do\'kon',
       'ru': 'Магазин',
       'en': 'Shop',
+      'kk': 'Дүкен',
     },
 
     // Profile
@@ -284,16 +311,19 @@ class L10n extends ChangeNotifier {
       'uz': 'Profil',
       'ru': 'Профиль',
       'en': 'Profile',
+      'kk': 'Профиль',
     },
     'profile.logout': {
       'uz': 'Chiqish',
       'ru': 'Выйти',
       'en': 'Sign out',
+      'kk': 'Шығу',
     },
     'profile.language': {
       'uz': 'Til',
       'ru': 'Язык',
       'en': 'Language',
+      'kk': 'Тіл',
     },
 
     // Verticals
@@ -301,21 +331,25 @@ class L10n extends ChangeNotifier {
       'uz': 'Mahsulotlar',
       'ru': 'Продукты',
       'en': 'Grocery',
+      'kk': 'Азық-түлік',
     },
     'vertical_restaurant': {
       'uz': 'Ovqat',
       'ru': 'Еда',
       'en': 'Food',
+      'kk': 'Тағам',
     },
     'vertical_pharmacy': {
       'uz': 'Dorixona',
       'ru': 'Аптека',
       'en': 'Pharmacy',
+      'kk': 'Дәріхана',
     },
     'vertical_electronics': {
       'uz': 'Texnika',
       'ru': 'Техника',
       'en': 'Electronics',
+      'kk': 'Техника',
     },
 
     // Search
@@ -323,6 +357,7 @@ class L10n extends ChangeNotifier {
       'uz': "So'nggi qidiruvlar",
       'ru': 'Недавние запросы',
       'en': 'Recent searches',
+      'kk': 'Соңғы сұраныстар',
     },
 
     // Shops list
@@ -330,21 +365,25 @@ class L10n extends ChangeNotifier {
       'uz': "Do'konlar",
       'ru': 'Магазины',
       'en': 'Shops',
+      'kk': 'Дүкендер',
     },
     'shops.search_hint': {
       'uz': "Do'kon qidirish...",
       'ru': 'Поиск магазинов...',
       'en': 'Search shops...',
+      'kk': 'Дүкен іздеу...',
     },
     'shops.empty_title': {
       'uz': "Do'konlar topilmadi",
       'ru': 'Магазины не найдены',
       'en': 'No shops found',
+      'kk': 'Дүкендер табылмады',
     },
     'shops.empty_desc': {
       'uz': 'Boshqa kategoriya yoki radiusni sinab ko\'ring',
       'ru': 'Попробуйте другую категорию или радиус',
       'en': 'Try a different vertical or radius',
+      'kk': 'Басқа санатты немесе радиусты қолданып көріңіз',
     },
 
     // Product detail / modifiers
@@ -352,21 +391,25 @@ class L10n extends ChangeNotifier {
       'uz': 'Variantni tanlang',
       'ru': 'Выберите варианты',
       'en': 'Select options',
+      'kk': 'Нұсқаны таңдаңыз',
     },
     'min_select_violation': {
       'uz': 'Majburiy guruh',
       'ru': 'Не выбраны обязательные опции',
       'en': 'Required options missing',
+      'kk': 'Міндетті опциялар таңдалмаған',
     },
     'product.add_to_cart': {
       'uz': "Savatga qo'shish",
       'ru': 'В корзину',
       'en': 'Add to cart',
+      'kk': 'Себетке қосу',
     },
     'product.added_to_cart': {
       'uz': "Savatga qo'shildi",
       'ru': 'Добавлено в корзину',
       'en': 'Added to cart',
+      'kk': 'Себетке қосылды',
     },
 
     // Address book
@@ -374,81 +417,97 @@ class L10n extends ChangeNotifier {
       'uz': 'Manzillarim',
       'ru': 'Мои адреса',
       'en': 'My addresses',
+      'kk': 'Менің мекенжайларым',
     },
     'address.add': {
       'uz': "Manzil qo'shish",
       'ru': 'Добавить адрес',
       'en': 'Add address',
+      'kk': 'Мекенжай қосу',
     },
     'address.edit': {
       'uz': 'Manzilni tahrirlash',
       'ru': 'Редактировать адрес',
       'en': 'Edit address',
+      'kk': 'Мекенжайды өңдеу',
     },
     'address.delete': {
       'uz': "O'chirish",
       'ru': 'Удалить',
       'en': 'Delete',
+      'kk': 'Жою',
     },
     'address.confirm_delete': {
       'uz': "Manzilni o'chirilsinmi?",
       'ru': 'Удалить адрес?',
       'en': 'Delete this address?',
+      'kk': 'Мекенжайды жою керек пе?',
     },
     'address.empty_title': {
       'uz': "Manzillaringiz yo'q",
       'ru': 'У вас нет сохранённых адресов',
       'en': 'No saved addresses',
+      'kk': 'Сақталған мекенжайлар жоқ',
     },
     'address.empty_desc': {
       'uz': "Tezroq buyurtma berish uchun manzil qo'shing",
       'ru': 'Добавьте адрес, чтобы быстрее оформлять заказы',
       'en': 'Add an address to check out faster',
+      'kk': 'Тапсырысты тезірек рәсімдеу үшін мекенжай қосыңыз',
     },
     'address.label_hint': {
       'uz': 'Nomi (Uy / Ish)',
       'ru': 'Метка (Дом / Работа)',
       'en': 'Label (Home / Work)',
+      'kk': 'Белгі (Үй / Жұмыс)',
     },
     'address.default_badge': {
       'uz': 'Asosiy',
       'ru': 'По умолчанию',
       'en': 'Default',
+      'kk': 'Әдепкі',
     },
     'address.default_set': {
       'uz': 'Asosiy manzil yangilandi',
       'ru': 'Адрес по умолчанию обновлён',
       'en': 'Default address updated',
+      'kk': 'Әдепкі мекенжай жаңартылды',
     },
     'make_default_address': {
       'uz': 'Asosiy qilish',
       'ru': 'Сделать основным',
       'en': 'Make default',
+      'kk': 'Негізгі ету',
     },
     'address_entrance': {
       'uz': "Pod'ezd",
       'ru': 'Подъезд',
       'en': 'Entrance',
+      'kk': 'Кіреберіс',
     },
     'address_floor': {
       'uz': 'Qavat',
       'ru': 'Этаж',
       'en': 'Floor',
+      'kk': 'Қабат',
     },
     'address_apartment': {
       'uz': 'Xonadon',
       'ru': 'Квартира',
       'en': 'Apartment',
+      'kk': 'Пәтер',
     },
     'address_intercom': {
       'uz': 'Domofon',
       'ru': 'Домофон',
       'en': 'Intercom',
+      'kk': 'Домофон',
     },
     'address_instructions': {
       'uz': "Kuryer uchun izoh",
       'ru': 'Комментарий курьеру',
       'en': 'Courier notes',
+      'kk': 'Курьерге түсініктеме',
     },
 
     // Map
@@ -456,6 +515,7 @@ class L10n extends ChangeNotifier {
       'uz': 'Joylashuvni tanlang',
       'ru': 'Выберите местоположение',
       'en': 'Pick a location',
+      'kk': 'Орналасуды таңдаңыз',
     },
 
     // Phase 2 — courier shift / dispatch
@@ -463,41 +523,49 @@ class L10n extends ChangeNotifier {
       'uz': 'Smenani boshlash',
       'ru': 'Я на смене',
       'en': 'Go online',
+      'kk': 'Мен сменадамын',
     },
     'courier.go_offline': {
       'uz': 'Smenani tugatish',
       'ru': 'Off duty',
       'en': 'Go offline',
+      'kk': 'Сменадан шығу',
     },
     'courier.shift_duration': {
       'uz': 'Smena vaqti',
       'ru': 'Длительность смены',
       'en': 'Shift duration',
+      'kk': 'Смена ұзақтығы',
     },
     'courier.shift_earnings': {
       'uz': 'Smena daromadi',
       'ru': 'Заработок за смену',
       'en': 'Shift earnings',
+      'kk': 'Смена табысы',
     },
     'courier.pending_offer': {
       'uz': 'Yangi taklif',
       'ru': 'Новое предложение',
       'en': 'New offer',
+      'kk': 'Жаңа ұсыныс',
     },
     'courier.accept': {
       'uz': 'Qabul qilish',
       'ru': 'Принять',
       'en': 'Accept',
+      'kk': 'Қабылдау',
     },
     'courier.decline': {
       'uz': 'Rad etish',
       'ru': 'Отклонить',
       'en': 'Decline',
+      'kk': 'Бас тарту',
     },
     'courier.no_offers': {
       'uz': 'Buyurtmalar kutilmoqda',
       'ru': 'Ожидаем заказы',
       'en': 'Waiting for orders',
+      'kk': 'Тапсырыстар күтілуде',
     },
 
     // Phase 2 — cart pricing breakdown
@@ -505,16 +573,19 @@ class L10n extends ChangeNotifier {
       'uz': 'Mahsulotlar',
       'ru': 'Товары',
       'en': 'Subtotal',
+      'kk': 'Тауарлар',
     },
     'cart.delivery': {
       'uz': 'Yetkazib berish',
       'ru': 'Доставка',
       'en': 'Delivery',
+      'kk': 'Жеткізу',
     },
     'cart.total': {
       'uz': 'Jami',
       'ru': 'Итого',
       'en': 'Total',
+      'kk': 'Барлығы',
     },
     'cart.eta': {
       'uz': 'Yetkazib berish: ~{minutes} daqiqa',
@@ -530,11 +601,13 @@ class L10n extends ChangeNotifier {
       'uz': 'Yuklama',
       'ru': 'Повышенный спрос',
       'en': 'Surge',
+      'kk': 'Жоғары сұраныс',
     },
     'cart.out_of_zone': {
       'uz': "Adresga yetkazib bo'lmaydi",
       'ru': 'Доставка не доступна',
       'en': 'Address out of delivery zone',
+      'kk': 'Бұл мекенжайға жеткізу қолжетімсіз',
     },
     'cart.min_order_warn': {
       'uz': "Yana {amount} qo'shing",
@@ -547,16 +620,19 @@ class L10n extends ChangeNotifier {
       'uz': "Taklif muddati tugadi",
       'ru': 'Время предложения истекло',
       'en': 'Offer timed out',
+      'kk': 'Ұсыныс мерзімі өтті',
     },
     'dispatch.accepted': {
       'uz': 'Buyurtma sizga biriktirildi',
       'ru': 'Заказ закреплён за вами',
       'en': 'Order assigned to you',
+      'kk': 'Тапсырыс сізге бекітілді',
     },
     'dispatch.assigned_to_other': {
       'uz': 'Buyurtmani boshqa kuryer oldi',
       'ru': 'Заказ ушёл другому курьеру',
       'en': 'Assigned to another courier',
+      'kk': 'Тапсырыс басқа курьерге кетті',
     },
 
     // Orders
@@ -564,26 +640,31 @@ class L10n extends ChangeNotifier {
       'uz': 'Yangi',
       'ru': 'Новый',
       'en': 'New',
+      'kk': 'Жаңа',
     },
     'order.status.collecting': {
       'uz': 'Yig\'ilmoqda',
       'ru': 'Собирается',
       'en': 'Collecting',
+      'kk': 'Жиналуда',
     },
     'order.status.ready': {
       'uz': 'Tayyor',
       'ru': 'Готов',
       'en': 'Ready',
+      'kk': 'Дайын',
     },
     'order.status.in_delivery': {
       'uz': 'Yetkazilmoqda',
       'ru': 'В пути',
       'en': 'On the way',
+      'kk': 'Жолда',
     },
     'order.status.delivered': {
       'uz': 'Yetkazildi',
       'ru': 'Доставлен',
       'en': 'Delivered',
+      'kk': 'Жеткізілді',
     },
 
     // ── Phase 3 — Promo / coupons ─────────────────────────────────────────
@@ -591,31 +672,37 @@ class L10n extends ChangeNotifier {
       'uz': 'Promo kodlar',
       'ru': 'Промокоды',
       'en': 'Promo codes',
+      'kk': 'Промокодтар',
     },
     'promo.empty': {
       'uz': "Sizga mos promo kod yo'q",
       'ru': 'Нет доступных промокодов',
       'en': 'No eligible promo codes',
+      'kk': 'Қолжетімді промокодтар жоқ',
     },
     'promo.enter_code': {
       'uz': 'Promo kod',
       'ru': 'Введите код',
       'en': 'Enter code',
+      'kk': 'Промокод',
     },
     'promo.apply': {
       'uz': "Qo'llash",
       'ru': 'Применить',
       'en': 'Apply',
+      'kk': 'Қолдану',
     },
     'promo.until': {
       'uz': 'Amalda:',
       'ru': 'До:',
       'en': 'Until:',
+      'kk': 'Дейін:',
     },
     'promo.copied': {
       'uz': 'Nusxalandi',
       'ru': 'Скопировано',
       'en': 'Copied',
+      'kk': 'Көшірілді',
     },
 
     // ── Phase 3 — Cart promo / loyalty / scheduling ──────────────────────
@@ -623,51 +710,61 @@ class L10n extends ChangeNotifier {
       'uz': 'Promo kod',
       'ru': 'Промокод',
       'en': 'Promo code',
+      'kk': 'Промокод',
     },
     'cart.promo_hint': {
       'uz': 'Kodni kiriting',
       'ru': 'Введите код',
       'en': 'Enter code',
+      'kk': 'Кодты енгізіңіз',
     },
     'cart.promo_applied': {
       'uz': "Qo'llanildi",
       'ru': 'Применён',
       'en': 'Applied',
+      'kk': 'Қолданылды',
     },
     'cart.loyalty_points': {
       'uz': 'Bonus ballar',
       'ru': 'Бонусные баллы',
       'en': 'Loyalty points',
+      'kk': 'Бонустық ұпайлар',
     },
     'cart.points_available': {
       'uz': 'Mavjud',
       'ru': 'Доступно',
       'en': 'Available',
+      'kk': 'Қолжетімді',
     },
     'cart.points_too_small': {
       'uz': 'Ballarni ishlatish uchun summa yetarli emas',
       'ru': 'Сумма слишком маленькая для бонусов',
       'en': 'Subtotal is too small to spend points',
+      'kk': 'Ұпай жұмсау үшін сома жеткіліксіз',
     },
     'cart.plan_delivery': {
       'uz': 'Yetkazib berish vaqti',
       'ru': 'Время доставки',
       'en': 'Delivery time',
+      'kk': 'Жеткізу уақыты',
     },
     'cart.plan_asap': {
       'uz': 'Hozir',
       'ru': 'Сейчас',
       'en': 'ASAP',
+      'kk': 'Қазір',
     },
     'cart.plan_schedule': {
       'uz': 'Rejalashtirish',
       'ru': 'Запланировать',
       'en': 'Schedule',
+      'kk': 'Жоспарлау',
     },
     'cart.scheduled_for': {
       'uz': 'Tanlangan',
       'ru': 'Выбрано',
       'en': 'Scheduled for',
+      'kk': 'Таңдалған',
     },
 
     // ── Phase 3 — Loyalty screen ─────────────────────────────────────────
@@ -675,71 +772,85 @@ class L10n extends ChangeNotifier {
       'uz': 'Bonuslar',
       'ru': 'Бонусы',
       'en': 'Rewards',
+      'kk': 'Бонустар',
     },
     'loyalty.tier': {
       'uz': 'Daraja',
       'ru': 'Уровень',
       'en': 'Tier',
+      'kk': 'Деңгей',
     },
     'loyalty.points': {
       'uz': 'Ballar',
       'ru': 'Баллы',
       'en': 'Points',
+      'kk': 'Ұпайлар',
     },
     'loyalty.cashback': {
       'uz': 'Cashback',
       'ru': 'Кешбэк',
       'en': 'Cashback',
+      'kk': 'Кешбэк',
     },
     'loyalty.to_next': {
       'uz': 'Keyingi darajagacha:',
       'ru': 'До уровня:',
       'en': 'To next tier:',
+      'kk': 'Келесі деңгейге дейін:',
     },
     'loyalty.max_tier': {
       'uz': 'Eng yuqori daraja!',
       'ru': 'Максимальный уровень!',
       'en': 'Top tier reached!',
+      'kk': 'Ең жоғары деңгей!',
     },
     'loyalty.your_referral': {
       'uz': 'Sizning referal kodingiz',
       'ru': 'Ваш реферальный код',
       'en': 'Your referral code',
+      'kk': 'Сіздің рефералдық кодыңыз',
     },
     'loyalty.have_friend_code': {
       'uz': "Do'stning kodi bormi?",
       'ru': 'Есть код друга?',
       'en': 'Have a friend\'s code?',
+      'kk': 'Достың коды бар ма?',
     },
     'loyalty.enter_friend_code': {
       'uz': 'Kodni kiriting',
       'ru': 'Введите код',
       'en': 'Enter code',
+      'kk': 'Кодты енгізіңіз',
     },
     'loyalty.apply': {
       'uz': "Qo'llash",
       'ru': 'Применить',
       'en': 'Apply',
+      'kk': 'Қолдану',
     },
     'loyalty.referral_applied': {
       'uz': "Referal kodi qo'llanildi",
       'ru': 'Реферальный код применён',
       'en': 'Referral code applied',
+      'kk': 'Рефералдық код қолданылды',
     },
     'loyalty.copied': {
       'uz': 'Nusxalandi',
       'ru': 'Скопировано',
       'en': 'Copied',
+      'kk': 'Көшірілді',
     },
     'loyalty.recent_activity': {
       'uz': "So'nggi harakatlar",
       'ru': 'Недавняя активность',
       'en': 'Recent activity',
+      'kk': 'Соңғы әрекеттер',
     },
     'loyalty.no_activity': {
       'uz': "Hali harakat yo'q",
       'ru': 'Активности пока нет',
       'en': 'No activity yet',
+      'kk': 'Әзірге әрекет жоқ',
     },
 
     // ── Phase 3 — Reviews ────────────────────────────────────────────────
@@ -747,21 +858,25 @@ class L10n extends ChangeNotifier {
       'uz': 'Sharhlar',
       'ru': 'Отзывы',
       'en': 'Reviews',
+      'kk': 'Пікірлер',
     },
     'reviews.tab_all': {
       'uz': 'Hammasi',
       'ru': 'Все',
       'en': 'All',
+      'kk': 'Барлығы',
     },
     'reviews.empty': {
       'uz': "Sharhlar hali yo'q",
       'ru': 'Отзывов пока нет',
       'en': 'No reviews yet',
+      'kk': 'Әзірге пікір жоқ',
     },
     'reviews.count_suffix': {
       'uz': 'sharhlar',
       'ru': 'отзывов',
       'en': 'reviews',
+      'kk': 'пікір',
     },
 
     // ── Phase 3 — Chat ───────────────────────────────────────────────────
@@ -769,31 +884,37 @@ class L10n extends ChangeNotifier {
       'uz': 'Chat',
       'ru': 'Чат',
       'en': 'Chat',
+      'kk': 'Чат',
     },
     'chat.online': {
       'uz': 'tarmoqda',
       'ru': 'в сети',
       'en': 'online',
+      'kk': 'желіде',
     },
     'chat.offline': {
       'uz': 'tarmoqda emas',
       'ru': 'не в сети',
       'en': 'offline',
+      'kk': 'желіде емес',
     },
     'chat.input_hint': {
       'uz': "Xabar yozing…",
       'ru': 'Введите сообщение…',
       'en': 'Type a message…',
+      'kk': 'Хабарлама жазыңыз…',
     },
     'chat.send_failed': {
       'uz': 'Xabar yuborilmadi',
       'ru': 'Сообщение не отправлено',
       'en': 'Message failed',
+      'kk': 'Хабар жіберілмеді',
     },
     'chat.image_unavailable': {
       'uz': 'Rasm yuborish hozircha mavjud emas',
       'ru': 'Загрузка изображений пока недоступна',
       'en': 'Image upload not yet available',
+      'kk': 'Сурет жүктеу әзірге қолжетімсіз',
     },
 
     // ── Phase 3 — Time slots ─────────────────────────────────────────────
@@ -801,11 +922,13 @@ class L10n extends ChangeNotifier {
       'uz': 'Bugun',
       'ru': 'Сегодня',
       'en': 'Today',
+      'kk': 'Бүгін',
     },
     'slots.tomorrow': {
       'uz': 'Ertaga',
       'ru': 'Завтра',
       'en': 'Tomorrow',
+      'kk': 'Ертең',
     },
 
     // ── Phase 6 — Saved payment methods ──────────────────────────────────
@@ -813,31 +936,37 @@ class L10n extends ChangeNotifier {
       'uz': "Karta qo'shish",
       'ru': 'Добавить карту',
       'en': 'Add card',
+      'kk': 'Карта қосу',
     },
     'payment.cards_list': {
       'uz': 'Kartalarim',
       'ru': 'Мои карты',
       'en': 'My cards',
+      'kk': 'Менің карталарым',
     },
     'payment.set_default': {
       'uz': 'Asosiy qilish',
       'ru': 'Сделать основной',
       'en': 'Set as default',
+      'kk': 'Негізгі ету',
     },
     'payment.delete': {
       'uz': "Kartani o'chirish",
       'ru': 'Удалить карту',
       'en': 'Delete card',
+      'kk': 'Картаны жою',
     },
     'payment.no_cards': {
       'uz': "Saqlangan kartalar yo'q",
       'ru': 'Нет сохранённых карт',
       'en': 'No saved cards',
+      'kk': 'Сақталған карталар жоқ',
     },
     'payment.use_new_card': {
       'uz': 'Yangi karta bilan to\'lash',
       'ru': 'Оплатить новой картой',
       'en': 'Pay with new card',
+      'kk': 'Жаңа картамен төлеу',
     },
 
     // ── Phase 6 — Cart address tile ──────────────────────────────────────
@@ -845,16 +974,19 @@ class L10n extends ChangeNotifier {
       'uz': 'Yetkazib berish manzili',
       'ru': 'Адрес доставки',
       'en': 'Delivery address',
+      'kk': 'Жеткізу мекенжайы',
     },
     'cart.address_choose': {
       'uz': 'Manzilni tanlang',
       'ru': 'Выберите адрес',
       'en': 'Choose address',
+      'kk': 'Мекенжайды таңдаңыз',
     },
     'cart.no_address_warning': {
       'uz': "Avval manzilni tanlang",
       'ru': 'Сначала выберите адрес',
       'en': 'Pick an address first',
+      'kk': 'Алдымен мекенжайды таңдаңыз',
     },
 
     // ── Phase 6 — Tipping ────────────────────────────────────────────────
@@ -862,31 +994,37 @@ class L10n extends ChangeNotifier {
       'uz': "Kuryerga rahmat aytish",
       'ru': 'Поблагодарить курьера',
       'en': 'Tip the courier',
+      'kk': 'Курьерге шай ақы беру',
     },
     'tip.5_percent': {
       'uz': '5%',
       'ru': '5%',
       'en': '5%',
+      'kk': '5%',
     },
     'tip.10_percent': {
       'uz': '10%',
       'ru': '10%',
       'en': '10%',
+      'kk': '10%',
     },
     'tip.15_percent': {
       'uz': '15%',
       'ru': '15%',
       'en': '15%',
+      'kk': '15%',
     },
     'tip.custom': {
       'uz': 'Boshqa summa',
       'ru': 'Другая сумма',
       'en': 'Custom',
+      'kk': 'Басқа сома',
     },
     'tip.success': {
       'uz': 'Rahmat yuborildi 🙏',
       'ru': 'Чаевые отправлены 🙏',
       'en': 'Tip sent 🙏',
+      'kk': 'Шай ақы жіберілді 🙏',
     },
 
     // ── Phase 6 — Geolocation ────────────────────────────────────────────
@@ -894,11 +1032,13 @@ class L10n extends ChangeNotifier {
       'uz': "Geolokatsiya yo'q",
       'ru': 'Геолокация недоступна',
       'en': 'Location unavailable',
+      'kk': 'Геолокация қолжетімсіз',
     },
     'location.current': {
       'uz': 'Joriy joylashuv',
       'ru': 'Моё местоположение',
       'en': 'Use current location',
+      'kk': 'Менің орналасуым',
     },
 
     // ── Phase 7.2 — Subscription ─────────────────────────────────────────
@@ -1205,6 +1345,56 @@ class L10n extends ChangeNotifier {
       'ru': 'Все заказы',
       'en': 'View batch',
       'kk': 'Барлығын көру',
+    },
+
+    // ── Phase 13.2.5 — Courier delivery-photo proof ─────────────────────────
+    'delivery_photo.title': {
+      'uz': 'Yetkazib berish surati',
+      'ru': 'Фото доставки',
+      'en': 'Delivery photo',
+      'kk': 'Жеткізу фотосы',
+    },
+    'delivery_photo.preview_title': {
+      'uz': 'Suratni tasdiqlang',
+      'ru': 'Проверьте снимок',
+      'en': 'Confirm photo',
+      'kk': 'Суретті растаңыз',
+    },
+    'delivery_photo.retry': {
+      'uz': 'Qayta urinib',
+      'ru': 'Переснять',
+      'en': 'Retry',
+      'kk': 'Қайта түсіру',
+    },
+    'delivery_photo.submit': {
+      'uz': 'Yuborish',
+      'ru': 'Отправить',
+      'en': 'Submit',
+      'kk': 'Жіберу',
+    },
+    'delivery_photo.tap_to_view': {
+      'uz': 'Toʻliq koʻrish uchun bosing',
+      'ru': 'Нажмите, чтобы открыть',
+      'en': 'Tap to view',
+      'kk': 'Толық көру үшін басыңыз',
+    },
+    'delivery_photo.delivered_at': {
+      'uz': 'Topshirildi · {time}',
+      'ru': 'Доставлено · {time}',
+      'en': 'Delivered · {time}',
+      'kk': 'Жеткізілді · {time}',
+    },
+    'delivery_photo.camera_unavailable': {
+      'uz': 'Kamera ochilmadi. Ruxsatni tekshiring.',
+      'ru': 'Камера недоступна. Проверьте разрешения.',
+      'en': 'Camera unavailable. Check permissions.',
+      'kk': 'Камера қолжетімсіз. Рұқсаттарды тексеріңіз.',
+    },
+    'delivery_photo.upload_failed': {
+      'uz': 'Suratni yuklab boʻlmadi. Qayta urinib koʻring.',
+      'ru': 'Не удалось загрузить фото. Повторите попытку.',
+      'en': 'Failed to upload photo. Try again.',
+      'kk': 'Фотоны жүктеу мүмкін болмады. Қайталап көріңіз.',
     },
 
     // ── Phase 8.5 — Instant payout ───────────────────────────────────────
@@ -1702,6 +1892,662 @@ class L10n extends ChangeNotifier {
       'ru': 'Не удалось загрузить документ. Проверьте интернет и повторите.',
       'en': 'Could not load the document. Check your connection and retry.',
       'kk': 'Құжатты жүктеу мүмкін болмады. Интернетті тексеріп, қайталаңыз.',
+    },
+
+    // ── Phase 13.2 — Courier verification (KYC) ──────────────────────────
+    'courier.verification.title': {
+      'uz': "Kuryer ro'yxatdan o'tish",
+      'ru': 'Регистрация курьера',
+      'en': 'Courier sign-up',
+      'kk': 'Курьер тіркелуі',
+    },
+    'courier.verification.generic_error': {
+      'uz': 'Xatolik yuz berdi',
+      'ru': 'Произошла ошибка',
+      'en': 'Something went wrong',
+      'kk': 'Қате орын алды',
+    },
+    'courier.verification.submitted_title': {
+      'uz': 'Ariza yuborildi!',
+      'ru': 'Заявка отправлена!',
+      'en': 'Application submitted!',
+      'kk': 'Өтініш жіберілді!',
+    },
+    'courier.verification.submitted_body': {
+      'uz': "Arizangiz 1-2 ish kuni ichida ko'rib chiqiladi. Natija haqida SMS va push-xabar olasiz.",
+      'ru': 'Ваша заявка будет рассмотрена в течение 1-2 рабочих дней. Результат придёт по SMS и push-уведомлению.',
+      'en': 'Your application will be reviewed within 1-2 business days. You\'ll receive the result via SMS and push notification.',
+      'kk': 'Өтінішіңіз 1-2 жұмыс күні ішінде қаралады. Нәтиже туралы SMS және push хабарлама аласыз.',
+    },
+    'courier.verification.go_home': {
+      'uz': 'Bosh sahifaga qaytish',
+      'ru': 'Вернуться на главную',
+      'en': 'Back to home',
+      'kk': 'Басты бетке оралу',
+    },
+    'courier.verification.upload_failed': {
+      'uz': "Yuklab bo'lmadi",
+      'ru': 'Не удалось загрузить',
+      'en': 'Upload failed',
+      'kk': 'Жүктеу мүмкін болмады',
+    },
+    'courier.verification.source_camera': {
+      'uz': 'Kamera',
+      'ru': 'Камера',
+      'en': 'Camera',
+      'kk': 'Камера',
+    },
+    'courier.verification.source_gallery': {
+      'uz': 'Galereya',
+      'ru': 'Галерея',
+      'en': 'Gallery',
+      'kk': 'Галерея',
+    },
+    'courier.verification.next_cta': {
+      'uz': 'Keyingisi',
+      'ru': 'Далее',
+      'en': 'Next',
+      'kk': 'Келесі',
+    },
+    'courier.verification.submit_cta': {
+      'uz': 'Ariza yuborish',
+      'ru': 'Отправить заявку',
+      'en': 'Submit application',
+      'kk': 'Өтінішті жіберу',
+    },
+    'courier.verification.personal_title': {
+      'uz': "Shaxsiy ma'lumot",
+      'ru': 'Личные данные',
+      'en': 'Personal info',
+      'kk': 'Жеке деректер',
+    },
+    'courier.verification.personal_subtitle': {
+      'uz': "To'liq ism-sharifingizni kiriting",
+      'ru': 'Введите ваше ФИО',
+      'en': 'Enter your full name',
+      'kk': 'Толық аты-жөніңізді енгізіңіз',
+    },
+    'courier.verification.full_name_label': {
+      'uz': "To'liq ism-sharif",
+      'ru': 'ФИО',
+      'en': 'Full name',
+      'kk': 'Толық аты-жөні',
+    },
+    'courier.verification.full_name_hint': {
+      'uz': 'Ism Familiya Otasining ismi',
+      'ru': 'Имя Фамилия Отчество',
+      'en': 'First Last Middle',
+      'kk': 'Аты Тегі Әкесінің аты',
+    },
+    'courier.verification.docs_title': {
+      'uz': 'Hujjatlar',
+      'ru': 'Документы',
+      'en': 'Documents',
+      'kk': 'Құжаттар',
+    },
+    'courier.verification.docs_subtitle': {
+      'uz': "Hujjatlar Soliq qo'mitasi orqali tekshiriladi",
+      'ru': 'Документы проверяются через налоговый комитет',
+      'en': 'Documents are verified through the tax authority',
+      'kk': 'Құжаттар салық комитеті арқылы тексеріледі',
+    },
+    'courier.verification.stir_label': {
+      'uz': 'STIR (INN)',
+      'ru': 'СТИР (ИНН)',
+      'en': 'TIN (STIR)',
+      'kk': 'СТИР (ЖСН)',
+    },
+    'courier.verification.stir_hint': {
+      'uz': '9 ta raqam',
+      'ru': '9 цифр',
+      'en': '9 digits',
+      'kk': '9 сан',
+    },
+    'courier.verification.stir_helper': {
+      'uz': "Soliq to'lovchining individual raqami",
+      'ru': 'Индивидуальный номер налогоплательщика',
+      'en': 'Individual taxpayer number',
+      'kk': 'Жеке салық төлеушінің нөмірі',
+    },
+    'courier.verification.passport_label': {
+      'uz': 'Pasport seriyasi va raqami',
+      'ru': 'Серия и номер паспорта',
+      'en': 'Passport series and number',
+      'kk': 'Паспорт сериясы мен нөмірі',
+    },
+    'courier.verification.passport_hint': {
+      'uz': 'AA 1234567',
+      'ru': 'AA 1234567',
+      'en': 'AA 1234567',
+      'kk': 'AA 1234567',
+    },
+    'courier.verification.passport_helper': {
+      'uz': '2 harf + 7 raqam',
+      'ru': '2 буквы + 7 цифр',
+      'en': '2 letters + 7 digits',
+      'kk': '2 әріп + 7 сан',
+    },
+    'courier.verification.doc_photos_title': {
+      'uz': 'Hujjat fotosuratlari',
+      'ru': 'Фото документов',
+      'en': 'Document photos',
+      'kk': 'Құжат суреттері',
+    },
+    'courier.verification.doc_photos_subtitle': {
+      'uz': "Har bir hujjat aniq va to'liq ko'rinadigan bo'lsin",
+      'ru': 'Каждый документ должен быть чётко и полностью виден',
+      'en': 'Each document should be clear and fully visible',
+      'kk': 'Әр құжат анық және толық көрінуі керек',
+    },
+    'courier.verification.docs_load_error': {
+      'uz': "Hujjatlarni yuklab bo'lmadi",
+      'ru': 'Не удалось загрузить документы',
+      'en': 'Could not load documents',
+      'kk': 'Құжаттарды жүктеу мүмкін болмады',
+    },
+    'courier.verification.privacy_note': {
+      'uz': "Ma'lumotlaringiz shifrlangan holda saqlanadi va faqat tekshirish uchun ishlatiladi.",
+      'ru': 'Ваши данные хранятся в зашифрованном виде и используются только для проверки.',
+      'en': 'Your data is stored encrypted and used only for verification.',
+      'kk': 'Деректеріңіз шифрланған түрде сақталады және тек тексеру үшін пайдаланылады.',
+    },
+    'courier.verification.doc_passport_front': {
+      'uz': 'Pasport (old tomoni)',
+      'ru': 'Паспорт (лицевая сторона)',
+      'en': 'Passport (front)',
+      'kk': 'Паспорт (алдыңғы жағы)',
+    },
+    'courier.verification.doc_passport_back': {
+      'uz': 'Pasport (orqa tomoni)',
+      'ru': 'Паспорт (обратная сторона)',
+      'en': 'Passport (back)',
+      'kk': 'Паспорт (артқы жағы)',
+    },
+    'courier.verification.doc_selfie': {
+      'uz': 'Selfie pasport bilan',
+      'ru': 'Селфи с паспортом',
+      'en': 'Selfie with passport',
+      'kk': 'Паспортпен селфи',
+    },
+    'courier.verification.doc_self_employed_cert': {
+      'uz': "Samozanyatiy ma'lumotnomasi",
+      'ru': 'Справка самозанятого',
+      'en': 'Self-employed certificate',
+      'kk': 'Өзін-өзі жұмыспен қамту анықтамасы',
+    },
+    'courier.verification.status_not_uploaded': {
+      'uz': 'Yuklanmagan',
+      'ru': 'Не загружено',
+      'en': 'Not uploaded',
+      'kk': 'Жүктелмеген',
+    },
+    'courier.verification.status_approved': {
+      'uz': '✓ Tasdiqlangan',
+      'ru': '✓ Подтверждено',
+      'en': '✓ Approved',
+      'kk': '✓ Расталды',
+    },
+    'courier.verification.status_rejected': {
+      'uz': '✗ Rad etilgan',
+      'ru': '✗ Отклонено',
+      'en': '✗ Rejected',
+      'kk': '✗ Қабылданбады',
+    },
+    'courier.verification.status_pending': {
+      'uz': '⏳ Tekshirilmoqda',
+      'ru': '⏳ На проверке',
+      'en': '⏳ Pending',
+      'kk': '⏳ Тексерілуде',
+    },
+    'courier.verification.self_emp_title': {
+      'uz': "O'z-o'zini band qilish",
+      'ru': 'Самозанятость',
+      'en': 'Self-employment',
+      'kk': 'Өзін-өзі жұмыспен қамту',
+    },
+    'courier.verification.self_emp_body': {
+      'uz': "O'zbekistonda kuryer sifatida ishlash uchun o'z-o'zini band qilgan (самозанятый) maqomiga ega bo'lishingiz kerak.",
+      'ru': 'Чтобы работать курьером в Узбекистане, нужно иметь статус самозанятого.',
+      'en': 'To work as a courier in Uzbekistan you must have self-employed status.',
+      'kk': 'Өзбекстанда курьер болып жұмыс істеу үшін өзін-өзі жұмыспен қамтыған мәртебесі болуы керек.',
+    },
+    'courier.verification.self_emp_step1_title': {
+      'uz': 'my.soliq.uz saytiga kiring',
+      'ru': 'Перейдите на сайт my.soliq.uz',
+      'en': 'Visit my.soliq.uz',
+      'kk': 'my.soliq.uz сайтына кіріңіз',
+    },
+    'courier.verification.self_emp_step1_subtitle': {
+      'uz': "Soliq qo'mitasining rasmiy portali",
+      'ru': 'Официальный портал налогового комитета',
+      'en': 'Official tax authority portal',
+      'kk': 'Салық комитетінің ресми порталы',
+    },
+    'courier.verification.self_emp_step2_title': {
+      'uz': "\"O'z-o'zini band qilish\" bo'limini toping",
+      'ru': 'Найдите раздел «Самозанятость»',
+      'en': 'Find the "Self-employment" section',
+      'kk': '«Өзін-өзі жұмыспен қамту» бөлімін табыңыз',
+    },
+    'courier.verification.self_emp_step2_subtitle': {
+      'uz': "Ro'yxatdan o'tish bepul va tezkor",
+      'ru': 'Регистрация бесплатная и быстрая',
+      'en': 'Registration is free and quick',
+      'kk': 'Тіркелу тегін және жылдам',
+    },
+    'courier.verification.self_emp_step3_title': {
+      'uz': 'Ariza toldiring',
+      'ru': 'Заполните заявление',
+      'en': 'Fill out the application',
+      'kk': 'Өтінішті толтырыңыз',
+    },
+    'courier.verification.self_emp_step3_subtitle': {
+      'uz': "Daromaddan 1% soliq — tovar aylanmasi 1 mlrd so'mgacha",
+      'ru': '1% налог с дохода — оборот до 1 млрд сум',
+      'en': '1% tax on income — turnover up to 1 bn UZS',
+      'kk': 'Кірістен 1% салық — айналым 1 млрд сомға дейін',
+    },
+    'courier.verification.self_emp_confirm': {
+      'uz': "Men o'z-o'zini band qilgan maqomiga egaman yoki uni olishga roziman",
+      'ru': 'У меня есть статус самозанятого или я согласен(а) его получить',
+      'en': 'I have self-employed status or I agree to get it',
+      'kk': 'Менде өзін-өзі жұмыспен қамтыған мәртебесі бар немесе оны алуға келісемін',
+    },
+
+    // ── Phase 13.2 — Shop settings ───────────────────────────────────────
+    'shop_settings.title': {
+      'uz': "Do'kon sozlamalari",
+      'ru': 'Настройки магазина',
+      'en': 'Shop settings',
+      'kk': 'Дүкен баптаулары',
+    },
+    'shop_settings.tab_hours': {
+      'uz': 'Ish vaqti',
+      'ru': 'Часы работы',
+      'en': 'Working hours',
+      'kk': 'Жұмыс уақыты',
+    },
+    'shop_settings.tab_settings': {
+      'uz': 'Sozlamalar',
+      'ru': 'Настройки',
+      'en': 'Settings',
+      'kk': 'Баптаулар',
+    },
+    'shop_settings.shop_not_found': {
+      'uz': "Do'kon topilmadi",
+      'ru': 'Магазин не найден',
+      'en': 'Shop not found',
+      'kk': 'Дүкен табылмады',
+    },
+    'shop_settings.saved': {
+      'uz': '✅ Ish vaqti saqlandi',
+      'ru': '✅ Часы работы сохранены',
+      'en': '✅ Working hours saved',
+      'kk': '✅ Жұмыс уақыты сақталды',
+    },
+    'shop_settings.error_prefix': {
+      'uz': 'Xatolik',
+      'ru': 'Ошибка',
+      'en': 'Error',
+      'kk': 'Қате',
+    },
+    'shop_settings.open_label': {
+      'uz': 'Ochiq',
+      'ru': 'Открыто',
+      'en': 'Open',
+      'kk': 'Ашық',
+    },
+    'shop_settings.closed_label': {
+      'uz': 'Yopiq',
+      'ru': 'Закрыто',
+      'en': 'Closed',
+      'kk': 'Жабық',
+    },
+    'shop_settings.opens_at': {
+      'uz': 'Ochilish',
+      'ru': 'Открытие',
+      'en': 'Opens',
+      'kk': 'Ашылу',
+    },
+    'shop_settings.closes_at': {
+      'uz': 'Yopilish',
+      'ru': 'Закрытие',
+      'en': 'Closes',
+      'kk': 'Жабылу',
+    },
+    'shop_settings.currency_title': {
+      'uz': 'Valyuta',
+      'ru': 'Валюта',
+      'en': 'Currency',
+      'kk': 'Валюта',
+    },
+    'shop_settings.currency_uzs': {
+      'uz': "UZS — so'm",
+      'ru': 'UZS — сум',
+      'en': 'UZS — som',
+      'kk': 'UZS — сом',
+    },
+    'shop_settings.currency_phase7_note': {
+      'uz': 'KZT / KGS — Phase 7da faollashadi',
+      'ru': 'KZT / KGS — будут активированы в Phase 7',
+      'en': 'KZT / KGS — activated in Phase 7',
+      'kk': 'KZT / KGS — Phase 7 кезінде іске қосылады',
+    },
+    'shop_settings.notifications_title': {
+      'uz': 'Bildirishnomalar',
+      'ru': 'Уведомления',
+      'en': 'Notifications',
+      'kk': 'Хабарламалар',
+    },
+    'shop_settings.notifications_body': {
+      'uz': 'Yangi buyurtmalar push + ovoz orqali keladi',
+      'ru': 'Новые заказы приходят через push + звук',
+      'en': 'New orders arrive via push + sound',
+      'kk': 'Жаңа тапсырыстар push + дыбыс арқылы келеді',
+    },
+
+    // Day names
+    'day.sunday': {
+      'uz': 'Yakshanba',
+      'ru': 'Воскресенье',
+      'en': 'Sunday',
+      'kk': 'Жексенбі',
+    },
+    'day.monday': {
+      'uz': 'Dushanba',
+      'ru': 'Понедельник',
+      'en': 'Monday',
+      'kk': 'Дүйсенбі',
+    },
+    'day.tuesday': {
+      'uz': 'Seshanba',
+      'ru': 'Вторник',
+      'en': 'Tuesday',
+      'kk': 'Сейсенбі',
+    },
+    'day.wednesday': {
+      'uz': 'Chorshanba',
+      'ru': 'Среда',
+      'en': 'Wednesday',
+      'kk': 'Сәрсенбі',
+    },
+    'day.thursday': {
+      'uz': 'Payshanba',
+      'ru': 'Четверг',
+      'en': 'Thursday',
+      'kk': 'Бейсенбі',
+    },
+    'day.friday': {
+      'uz': 'Juma',
+      'ru': 'Пятница',
+      'en': 'Friday',
+      'kk': 'Жұма',
+    },
+    'day.saturday': {
+      'uz': 'Shanba',
+      'ru': 'Суббота',
+      'en': 'Saturday',
+      'kk': 'Сенбі',
+    },
+
+    // ── Phase 13.2 — Courier home extras ─────────────────────────────────
+    'courier.shift_on': {
+      'uz': 'Smenadaman',
+      'ru': 'Я на смене',
+      'en': 'On shift',
+      'kk': 'Сменадамын',
+    },
+    'courier.shift_off': {
+      'uz': 'Smenada emasman',
+      'ru': 'Не на смене',
+      'en': 'Off duty',
+      'kk': 'Сменада емеспін',
+    },
+    'courier.offline_title': {
+      'uz': 'Siz oflayn rejimdasiz',
+      'ru': 'Вы офлайн',
+      'en': 'You are offline',
+      'kk': 'Сіз желіде емессіз',
+    },
+    'courier.offline_subtitle': {
+      'uz': 'Buyurtma olish uchun smenani boshlang',
+      'ru': 'Начните смену, чтобы получать заказы',
+      'en': 'Start your shift to receive orders',
+      'kk': 'Тапсырыс алу үшін сменаны бастаңыз',
+    },
+    'courier.waiting_active': {
+      'uz': 'Joriy buyurtmani yetkazing',
+      'ru': 'Доставьте текущий заказ',
+      'en': 'Deliver your active order',
+      'kk': 'Ағымдағы тапсырысты жеткізіңіз',
+    },
+    'courier.waiting_idle': {
+      'uz': 'Buyurtmalar kutilmoqda...',
+      'ru': 'Ожидаем заказы...',
+      'en': 'Waiting for orders...',
+      'kk': 'Тапсырыстар күтілуде...',
+    },
+    'courier.waiting_subtitle': {
+      'uz': 'Yangi taklif kelganda sizga xabar beramiz',
+      'ru': 'Сообщим, когда придёт новое предложение',
+      'en': 'We\'ll notify you when a new offer arrives',
+      'kk': 'Жаңа ұсыныс келгенде хабарлаймыз',
+    },
+
+    // ── Phase 13.2 — Cart screen literals ─────────────────────────────────
+    'cart.eta_short': {
+      'uz': '~{minutes} daqiqada yetkaziladi',
+      'ru': 'Доставка через ~{minutes} мин',
+      'en': 'Delivery in ~{minutes} min',
+      'kk': '~{minutes} мин ішінде жеткізіледі',
+    },
+    'cart.distance_short': {
+      'uz': '{km} km',
+      'ru': '{km} км',
+      'en': '{km} km',
+      'kk': '{km} км',
+    },
+    'cart.min_order_subtitle': {
+      'uz': 'Minimal buyurtma {amount}',
+      'ru': 'Минимальный заказ {amount}',
+      'en': 'Minimum order {amount}',
+      'kk': 'Минималды тапсырыс {amount}',
+    },
+
+    // ── Phase 13.2 — Auth fallback errors ────────────────────────────────
+    'login.send_otp_failed': {
+      'uz': 'Xatolik',
+      'ru': 'Ошибка',
+      'en': 'Error',
+      'kk': 'Қате',
+    },
+    'otp.invalid_code': {
+      'uz': "Noto'g'ri kod",
+      'ru': 'Неверный код',
+      'en': 'Invalid code',
+      'kk': 'Қате код',
+    },
+    'otp.prototype_hint': {
+      'uz': "Prototip: 123456 kodidan foydalaning",
+      'ru': 'Прототип: используйте код 123456',
+      'en': 'Prototype: use code 123456',
+      'kk': 'Прототип: 123456 кодын пайдаланыңыз',
+    },
+
+    // ── Phase 13.2.3 — Role selection (first-run after OTP / onboarding) ───
+    'role_select.title': {
+      'uz': 'Qanday foydalanasiz?',
+      'ru': 'Как будете пользоваться?',
+      'en': 'How will you use the app?',
+      'kk': 'Қалай қолданасыз?',
+    },
+    'role_select.subtitle': {
+      'uz': 'Sizga mos rejimni tanlang. Keyin profil orqali almashtirish mumkin.',
+      'ru': 'Выберите подходящий режим. Позже его можно сменить в профиле.',
+      'en': 'Pick a mode that fits you. You can switch later from the profile.',
+      'kk': 'Өзіңізге қолайлы режимді таңдаңыз. Кейін профильден ауыстыруға болады.',
+    },
+    'role_select.buyer_desc': {
+      'uz': 'Mahsulot va ovqat buyurtma qiling, eshikgacha yetkazib beramiz.',
+      'ru': 'Заказывайте товары и еду — доставим до двери.',
+      'en': 'Order groceries and food, delivered to your door.',
+      'kk': 'Тауар мен тағам тапсырыс беріңіз — есікке дейін жеткіземіз.',
+    },
+    'role_select.courier_desc': {
+      'uz': 'Buyurtma yetkazib daromad qiling — moslashuvchan jadval.',
+      'ru': 'Доставляйте заказы и зарабатывайте — гибкий график.',
+      'en': 'Earn by delivering orders on a flexible schedule.',
+      'kk': 'Тапсырыс жеткізіп табыс табыңыз — икемді кесте.',
+    },
+    'role_select.shop_desc': {
+      'uz': "Do'koningizni ulang va onlayn buyurtma qabul qiling.",
+      'ru': 'Подключите свой магазин и принимайте онлайн-заказы.',
+      'en': 'Connect your shop and start accepting online orders.',
+      'kk': 'Дүкеніңізді қосып, онлайн тапсырыс қабылдаңыз.',
+    },
+    'role_select.switch_later_hint': {
+      'uz': "Profil → \"Rejimni almashtirish\" orqali istalgan vaqtda almashtirishingiz mumkin.",
+      'ru': 'Сменить режим можно в любой момент: Профиль → «Сменить режим».',
+      'en': 'You can switch modes anytime from Profile → "Switch role".',
+      'kk': 'Профиль → «Режимді ауыстыру» арқылы кез келген уақытта ауыстыруға болады.',
+    },
+
+    // ── Phase 13.2.3 — Courier onboarding (perks → KYC CTA) ────────────────
+    'courier_onboarding.title': {
+      'uz': "Kuryer bo'ling",
+      'ru': 'Станьте курьером',
+      'en': 'Become a courier',
+      'kk': 'Курьер болыңыз',
+    },
+    'courier_onboarding.subtitle': {
+      'uz': "Bo'sh vaqtingizda ishlang, har bir buyurtma uchun haq oling.",
+      'ru': 'Работайте в свободное время и получайте оплату за каждый заказ.',
+      'en': 'Work on your own schedule and get paid for every delivery.',
+      'kk': 'Бос уақытыңызда жұмыс істеп, әр тапсырыс үшін ақы алыңыз.',
+    },
+    'courier_onboarding.perk1_title': {
+      'uz': "Haftalik to'lovlar",
+      'ru': 'Еженедельные выплаты',
+      'en': 'Weekly payouts',
+      'kk': 'Апта сайынғы төлемдер',
+    },
+    'courier_onboarding.perk1_body': {
+      'uz': "Daromadingiz har hafta kartangizga o'tkaziladi. Tezkor yechib olish ham mavjud.",
+      'ru': 'Заработок переводится на карту каждую неделю. Можно вывести мгновенно.',
+      'en': 'Earnings hit your card every week, with instant cash-out available.',
+      'kk': 'Табысыңыз картаңызға апта сайын аударылады. Жедел шығаруға болады.',
+    },
+    'courier_onboarding.perk2_title': {
+      'uz': 'Moslashuvchan smenalar',
+      'ru': 'Гибкий график',
+      'en': 'Flexible shifts',
+      'kk': 'Икемді ауысымдар',
+    },
+    'courier_onboarding.perk2_body': {
+      'uz': "O'zingiz xohlagan vaqtda online bo'ling va buyurtma qabul qiling.",
+      'ru': 'Выходите на смену когда удобно — заказы поступают автоматически.',
+      'en': 'Go online whenever you want — orders are dispatched to you.',
+      'kk': 'Қалаған уақытыңызда онлайн болып, тапсырыс қабылдаңыз.',
+    },
+    'courier_onboarding.perk3_title': {
+      'uz': 'Sizning hududingizdagi buyurtmalar',
+      'ru': 'Заказы рядом с вами',
+      'en': 'Orders near you',
+      'kk': 'Жаныңыздағы тапсырыстар',
+    },
+    'courier_onboarding.perk3_body': {
+      'uz': "Eng yaqin yetkazib berishlar — kam vaqt, ko'p qatnov.",
+      'ru': 'Получайте ближайшие заказы — меньше километров, больше доставок.',
+      'en': 'Get the closest deliveries — less driving, more drops.',
+      'kk': 'Ең жақын тапсырыстар — аз жол, көп жеткізу.',
+    },
+    'courier_onboarding.cta': {
+      'uz': 'Kuryer sifatida ariza berish',
+      'ru': 'Подать заявку курьера',
+      'en': 'Apply as courier',
+      'kk': 'Курьерге өтінім беру',
+    },
+
+    // ── Phase 13.2.3 — Shop onboarding (perks → settings/connect CTA) ──────
+    'shop_onboarding.title': {
+      'uz': "Do'koningizni ulang",
+      'ru': 'Подключите свой магазин',
+      'en': 'Bring your shop online',
+      'kk': 'Дүкеніңізді қосыңыз',
+    },
+    'shop_onboarding.subtitle': {
+      'uz': 'Onlayn buyurtmalarni qabul qiling, mahsulotlaringizni boshqaring.',
+      'ru': 'Принимайте онлайн-заказы и управляйте каталогом из приложения.',
+      'en': 'Accept online orders and manage your catalogue from one app.',
+      'kk': 'Онлайн тапсырыс қабылдаңыз және каталогты қосымшадан басқарыңыз.',
+    },
+    'shop_onboarding.perk1_title': {
+      'uz': 'Yagona buyurtma paneli',
+      'ru': 'Единая панель заказов',
+      'en': 'One inbox for orders',
+      'kk': 'Тапсырыстарға арналған бір тақта',
+    },
+    'shop_onboarding.perk1_body': {
+      'uz': 'Yangi buyurtmalar, tayyorlash holati va kuryer biriktirish — bir ekranda.',
+      'ru': 'Новые заказы, статус сборки и закрепление курьера — на одном экране.',
+      'en': 'New orders, prep state and courier handoff — all in one place.',
+      'kk': 'Жаңа тапсырыстар, дайындық күйі және курьер тағайындау — бір экранда.',
+    },
+    'shop_onboarding.perk2_title': {
+      'uz': "O'sish hisobotlari",
+      'ru': 'Отчёты по росту',
+      'en': 'Growth reports',
+      'kk': 'Өсу есептері',
+    },
+    'shop_onboarding.perk2_body': {
+      'uz': "Sotuv, top mahsulotlar va o'rtacha chek — ko'rgazmali grafiklarda.",
+      'ru': 'Выручка, топ-товары, средний чек — в наглядных графиках.',
+      'en': 'Revenue, best-sellers and average cheque — in clear charts.',
+      'kk': 'Кіріс, ең көп сатылатын тауарлар, орташа чек — кестелерде.',
+    },
+    'shop_onboarding.perk3_title': {
+      'uz': "Tezkor to'lovlar",
+      'ru': 'Быстрые выплаты',
+      'en': 'Fast payouts',
+      'kk': 'Жылдам төлемдер',
+    },
+    'shop_onboarding.perk3_body': {
+      'uz': "Tushumlar haftalik tarzda do'kon hisobiga o'tkaziladi.",
+      'ru': 'Выплаты на счёт магазина — еженедельно.',
+      'en': 'Payouts settle to your shop account every week.',
+      'kk': 'Төлемдер дүкен шотына апта сайын түседі.',
+    },
+    'shop_onboarding.cta_create': {
+      'uz': "Do'kon yaratish",
+      'ru': 'Создать магазин',
+      'en': 'Create your shop',
+      'kk': 'Дүкен жасау',
+    },
+    'shop_onboarding.cta_open_dashboard': {
+      'uz': "Do'kon paneliga o'tish",
+      'ru': 'Открыть панель магазина',
+      'en': 'Open shop dashboard',
+      'kk': 'Дүкен панелін ашу',
+    },
+
+    // ── Phase 13.2.4 — KYC re-upload (rejected documents) ──────────────────
+    'kyc.reupload_cta': {
+      'uz': 'Qayta yuklash',
+      'ru': 'Загрузить заново',
+      'en': 'Re-upload',
+      'kk': 'Қайта жүктеу',
+    },
+    'kyc.reupload_success': {
+      'uz': 'Hujjat qayta yuklandi — qayta tekshiriladi',
+      'ru': 'Документ загружен повторно — снова на проверке',
+      'en': 'Document re-uploaded — pending review',
+      'kk': 'Құжат қайта жүктелді — қайта тексеріледі',
+    },
+    'kyc.rejection_generic': {
+      'uz': 'Hujjat rad etildi. Iltimos, qayta yuklang.',
+      'ru': 'Документ отклонён. Пожалуйста, загрузите заново.',
+      'en': 'Document rejected. Please re-upload.',
+      'kk': 'Құжат қабылданбады. Қайта жүктеңіз.',
     },
   };
 }

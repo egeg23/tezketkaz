@@ -126,6 +126,85 @@ router.post(
   },
 );
 
+// ─── User: PUT /api/verification/:id — Phase 13.2.4 re-upload ──────────────
+// Replace a previously REJECTED document with a fresh file. Resets the row
+// back to status='pending' and clears the prior rejection metadata so the
+// admin queue picks it up as a new submission.
+//
+// Multipart body: `file` (image). Owner-only. Rejected docs only — pending /
+// approved rows are off-limits (use POST /upload for a brand-new doc and
+// admin /reject first to undo an approval).
+router.put(
+  '/verification/:id',
+  authMiddleware,
+  uploadDoc.single('file'),
+  async (req, res, next) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'file required' });
+      }
+      const existing = await prisma.verificationDocument.findUnique({
+        where: { id: req.params.id },
+      });
+      if (!existing) {
+        try { fs.unlinkSync(req.file.path); } catch { /* noop */ }
+        return res.status(404).json({ error: 'Not found' });
+      }
+      if (existing.userId !== req.user.id) {
+        try { fs.unlinkSync(req.file.path); } catch { /* noop */ }
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      // Only rejected docs can be re-uploaded. Pending = still being reviewed;
+      // approved = already accepted (admin must reject first).
+      if (existing.status !== 'rejected') {
+        try { fs.unlinkSync(req.file.path); } catch { /* noop */ }
+        return res.status(409).json({
+          error: 'Only rejected documents can be re-uploaded',
+        });
+      }
+
+      // Push the new file through the storage abstraction first; only then
+      // unlink the previous file on disk so a storage failure doesn't leave
+      // the user without any document at all.
+      const { url } = await putFromMulterFile(
+        req.file,
+        `verification/${req.file.filename}`,
+      );
+
+      const doc = await prisma.verificationDocument.update({
+        where: { id: existing.id },
+        data: {
+          url,
+          status: 'pending',
+          rejectionReason: null,
+          reviewedById: null,
+          reviewedAt: null,
+        },
+      });
+
+      // Best-effort cleanup of the OLD file on disk (only when it was locally
+      // stored under /uploads/verification/*).
+      if (existing.url && existing.url.startsWith('/uploads/verification/')) {
+        const fname = path.basename(existing.url);
+        try {
+          fs.unlinkSync(path.join(UPLOAD_ROOT, 'verification', fname));
+        } catch { /* noop */ }
+      }
+
+      await audit({
+        actorId: req.user.id,
+        action: 'verification.reupload',
+        targetType: 'VerificationDocument',
+        targetId: doc.id,
+        metadata: { type: doc.type, previousStatus: 'rejected' },
+        ipAddress: req.ip,
+      });
+
+      res.json({ doc });
+    } catch (err) { next(err); }
+  },
+);
+
 // ─── User: DELETE /api/verification/:id ─────────────────────────────────────
 // Owner can delete only own docs that are still pending.
 router.delete('/verification/:id', authMiddleware, async (req, res, next) => {

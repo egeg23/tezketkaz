@@ -355,6 +355,8 @@ CREATE TABLE "Order" (
     "fiscalIssuedAt" TIMESTAMP(3),
     "fiscalFailureCount" INTEGER NOT NULL DEFAULT 0,
     "fiscalLastError" TEXT,
+    "deliveryPhotoUrl" TEXT,
+    "deliveryPhotoAt" TIMESTAMP(3),
     "batchId" TEXT,
     "batchSequence" INTEGER,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

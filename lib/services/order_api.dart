@@ -1,3 +1,8 @@
+import 'dart:io';
+
+import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
+
 import '../models/models.dart';
 import '../providers/cart_provider.dart';
 import '../providers/order_provider.dart';
@@ -45,6 +50,11 @@ class OrderApi {
       batchSequence: (json['batchSequence'] as num?)?.toInt(),
       batchTotal: (json['batchTotal'] as num?)?.toInt() ??
           (json['totalDeliveries'] as num?)?.toInt(),
+      // Phase 13.2.5 — courier delivery-photo proof.
+      deliveryPhotoUrl: json['deliveryPhotoUrl'] as String?,
+      deliveryPhotoAt: json['deliveryPhotoAt'] != null
+          ? DateTime.tryParse(json['deliveryPhotoAt'] as String)
+          : null,
       createdAt: DateTime.parse(json['createdAt']),
     );
   }
@@ -218,6 +228,33 @@ class OrderApi {
 
   Future<AppOrder> courierComplete(String orderId) async {
     final res = await _api.post('/api/orders/$orderId/courier/complete');
+    return _parseOrder(res.data['order']);
+  }
+
+  /// Phase 13.2.5 — courier marks the order delivered with a fresh camera
+  /// photo. The bytes are POSTed as multipart `photo` to the backend, which
+  /// uploads them to storage and stamps `deliveryPhotoUrl` / `deliveryPhotoAt`
+  /// on the Order row before flipping status to `delivered`.
+  Future<AppOrder> courierMarkDelivered(String orderId, File photo) async {
+    final filename = photo.path.split(Platform.pathSeparator).last;
+    // Guess mime from extension — backend filters JPEG/PNG/WebP.
+    final lower = filename.toLowerCase();
+    final mimeType = lower.endsWith('.png')
+        ? MediaType('image', 'png')
+        : lower.endsWith('.webp')
+            ? MediaType('image', 'webp')
+            : MediaType('image', 'jpeg');
+    final form = FormData.fromMap({
+      'photo': await MultipartFile.fromFile(
+        photo.path,
+        filename: filename,
+        contentType: mimeType,
+      ),
+    });
+    final res = await _api.postMultipart(
+      '/api/orders/$orderId/courier/delivered',
+      form,
+    );
     return _parseOrder(res.data['order']);
   }
 
