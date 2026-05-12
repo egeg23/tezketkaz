@@ -8,6 +8,9 @@ import 'api_client.dart';
 /// Endpoints:
 ///   GET    /api/verification/me       → list of own documents
 ///   POST   /api/verification/upload   → multipart {type, file}
+///   PUT    /api/verification/:id      → multipart {file} — re-upload a
+///                                       rejected document (Phase 13.2.4).
+///                                       Status flips back to 'pending'.
 ///   DELETE /api/verification/:id
 class VerificationApi {
   VerificationApi._();
@@ -47,6 +50,22 @@ class VerificationApi {
 
   Future<void> delete(String id) async {
     await _api.delete('/api/verification/$id');
+  }
+
+  /// Phase 13.2.4 — replace a previously rejected document. Backend resets
+  /// status to 'pending' and clears the rejection reason. Returns the
+  /// updated document row.
+  Future<VerificationDocument> replace(String id, File file) async {
+    final filename = file.path.split(RegExp(r'[\\/]+')).last;
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(file.path, filename: filename),
+    });
+    final res = await _api.putMultipart('/api/verification/$id', formData);
+    final raw = res.data;
+    final doc = raw is Map ? (raw['document'] ?? raw['doc'] ?? raw) : raw;
+    return VerificationDocument.fromJson(
+      doc is Map ? Map<String, dynamic>.from(doc) : <String, dynamic>{},
+    );
   }
 }
 

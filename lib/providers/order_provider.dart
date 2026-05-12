@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/order_api.dart';
@@ -35,6 +37,10 @@ class AppOrder {
   final String? batchId;
   final int? batchSequence;
   final int? batchTotal;
+  // Phase 13.2.5 — courier delivery-photo proof. Surfaced on the buyer's
+  // tracking screen once the courier marks the order delivered.
+  final String? deliveryPhotoUrl;
+  final DateTime? deliveryPhotoAt;
   final DateTime createdAt;
 
   AppOrder({
@@ -58,6 +64,8 @@ class AppOrder {
     this.batchId,
     this.batchSequence,
     this.batchTotal,
+    this.deliveryPhotoUrl,
+    this.deliveryPhotoAt,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -301,6 +309,15 @@ class OrderProvider extends ChangeNotifier {
 
   Future<void> courierComplete(String orderId) async {
     final updated = await OrderApi.instance.courierComplete(orderId);
+    _replace(updated);
+  }
+
+  /// Phase 13.2.5 — mark delivered with the courier's freshly-captured photo.
+  /// The Flutter active-order screen drives this; tests for the underlying
+  /// multipart upload live in the backend (delivery-photo.test.js).
+  Future<void> courierMarkDelivered(String orderId, File photoFile) async {
+    final updated =
+        await OrderApi.instance.courierMarkDelivered(orderId, photoFile);
     _replace(updated);
   }
 

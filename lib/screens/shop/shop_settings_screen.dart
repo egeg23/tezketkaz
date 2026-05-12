@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/l10n.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_client.dart';
 import '../../services/shop_settings_api.dart';
@@ -29,15 +30,26 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen>
   /// Local working copy — index by `dayOfWeek` (0..6, Sunday=0).
   final Map<int, ShopWorkingHoursRow> _rows = {};
 
-  static const _dayNames = <int, String>{
-    0: 'Yakshanba',
-    1: 'Dushanba',
-    2: 'Seshanba',
-    3: 'Chorshanba',
-    4: 'Payshanba',
-    5: 'Juma',
-    6: 'Shanba',
-  };
+  String _dayName(BuildContext context, int day) {
+    switch (day) {
+      case 0:
+        return t(context, 'day.sunday');
+      case 1:
+        return t(context, 'day.monday');
+      case 2:
+        return t(context, 'day.tuesday');
+      case 3:
+        return t(context, 'day.wednesday');
+      case 4:
+        return t(context, 'day.thursday');
+      case 5:
+        return t(context, 'day.friday');
+      case 6:
+        return t(context, 'day.saturday');
+      default:
+        return '';
+    }
+  }
 
   @override
   void initState() {
@@ -58,7 +70,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen>
     if (_shopId == null) {
       setState(() {
         _loading = false;
-        _error = 'Do\'kon topilmadi';
+        _error = t(context, 'shop_settings.shop_not_found');
       });
       return;
     }
@@ -107,8 +119,8 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen>
       await ShopSettingsApi.instance.putWorkingHours(_shopId!, list);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Ish vaqti saqlandi'),
+        SnackBar(
+          content: Text(t(context, 'shop_settings.saved')),
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
         ),
@@ -116,7 +128,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen>
     } on ApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Xatolik: ${e.message}')),
+        SnackBar(content: Text('${t(context, 'shop_settings.error_prefix')}: ${e.message}')),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -158,15 +170,15 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen>
       appBar: AppBar(
         backgroundColor: kShopColor,
         foregroundColor: Colors.white,
-        title: const Text("Do'kon sozlamalari"),
+        title: Text(t(context, 'shop_settings.title')),
         bottom: TabBar(
           controller: _tabs,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white60,
           indicatorColor: Colors.white,
-          tabs: const [
-            Tab(text: 'Ish vaqti'),
-            Tab(text: 'Sozlamalar'),
+          tabs: [
+            Tab(text: t(context, 'shop_settings.tab_hours')),
+            Tab(text: t(context, 'shop_settings.tab_settings')),
           ],
         ),
       ),
@@ -197,7 +209,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen>
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: AppColors.textSecondary)),
               const SizedBox(height: 16),
-              FilledButton(onPressed: _load, child: const Text('Qayta')),
+              FilledButton(onPressed: _load, child: Text(t(context, 'common.retry'))),
             ],
           ),
         ),
@@ -232,7 +244,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen>
                             color: Colors.white, strokeWidth: 2),
                       )
                     : const Icon(Icons.save_outlined),
-                label: const Text('Saqlash'),
+                label: Text(t(context, 'common.save')),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: kShopColor,
                   minimumSize: const Size(double.infinity, 50),
@@ -262,12 +274,15 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen>
           Row(
             children: [
               Expanded(
-                child: Text(_dayNames[day]!,
+                child: Text(_dayName(context, day),
                     style: const TextStyle(
                       fontWeight: FontWeight.w700, fontSize: 15,
                     )),
               ),
-              Text(isOpen ? 'Ochiq' : 'Yopiq',
+              Text(
+                  isOpen
+                      ? t(context, 'shop_settings.open_label')
+                      : t(context, 'shop_settings.closed_label'),
                   style: TextStyle(
                     color: isOpen ? AppColors.success : AppColors.textHint,
                     fontWeight: FontWeight.w600,
@@ -289,7 +304,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen>
               children: [
                 Expanded(
                   child: _TimePill(
-                    label: 'Ochilish',
+                    label: t(context, 'shop_settings.opens_at'),
                     value: row.startsAt,
                     onTap: () => _editTime(day, true),
                   ),
@@ -297,7 +312,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen>
                 const SizedBox(width: 10),
                 Expanded(
                   child: _TimePill(
-                    label: 'Yopilish',
+                    label: t(context, 'shop_settings.closes_at'),
                     value: row.endsAt,
                     onTap: () => _editTime(day, false),
                   ),
@@ -321,17 +336,18 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen>
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppColors.border),
           ),
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Valyuta',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-              SizedBox(height: 6),
-              Text('UZS — so\'m',
-                  style: TextStyle(color: AppColors.textSecondary)),
-              SizedBox(height: 12),
-              Text('KZT / KGS — Phase 7da faollashadi',
-                  style: TextStyle(
+              Text(t(context, 'shop_settings.currency_title'),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 14)),
+              const SizedBox(height: 6),
+              Text(t(context, 'shop_settings.currency_uzs'),
+                  style: const TextStyle(color: AppColors.textSecondary)),
+              const SizedBox(height: 12),
+              Text(t(context, 'shop_settings.currency_phase7_note'),
+                  style: const TextStyle(
                     color: AppColors.textHint,
                     fontSize: 12,
                   )),
@@ -346,14 +362,15 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen>
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppColors.border),
           ),
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Bildirishnomalar',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-              SizedBox(height: 6),
-              Text('Yangi buyurtmalar push + ovoz orqali keladi',
-                  style: TextStyle(color: AppColors.textSecondary)),
+              Text(t(context, 'shop_settings.notifications_title'),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 14)),
+              const SizedBox(height: 6),
+              Text(t(context, 'shop_settings.notifications_body'),
+                  style: const TextStyle(color: AppColors.textSecondary)),
             ],
           ),
         ),

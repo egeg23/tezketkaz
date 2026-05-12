@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/l10n.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_client.dart';
 import '../../services/verification_api.dart';
@@ -97,7 +98,9 @@ class _CourierVerificationScreenState
         _showSuccessAndPop();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Xatolik yuz berdi')),
+          SnackBar(
+            content: Text(t(context, 'courier.verification.generic_error')),
+          ),
         );
       }
     }
@@ -124,16 +127,15 @@ class _CourierVerificationScreenState
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Ariza yuborildi!',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            Text(
+              t(context, 'courier.verification.submitted_title'),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Arizangiz 1-2 ish kuni ichida ko\'rib chiqiladi. '
-              'Natija haqida SMS va push-xabar olasiz.',
+            Text(
+              t(context, 'courier.verification.submitted_body'),
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary),
+              style: const TextStyle(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
@@ -141,7 +143,7 @@ class _CourierVerificationScreenState
                 Navigator.pop(context);
                 context.go('/buyer');
               },
-              child: const Text('Bosh sahifaga qaytish'),
+              child: Text(t(context, 'courier.verification.go_home')),
             ),
           ],
         ),
@@ -168,29 +170,50 @@ class _CourierVerificationScreenState
     });
 
     try {
-      // Replace previous upload (delete old + insert new).
-      if (existing != null) {
-        try {
-          await VerificationApi.instance.delete(existing.id);
-        } catch (_) {
-          // Silently ignore — server may have already cleaned it up.
+      VerificationDocument doc;
+      // Phase 13.2.4 — rejected docs use PUT /api/verification/:id which
+      // keeps the same row id, flips status back to 'pending', and clears
+      // the rejection reason server-side. Pending docs can be safely
+      // deleted+re-uploaded (admin hasn't reviewed yet). Approved docs are
+      // immutable — the picker shouldn't surface them but we treat
+      // approved-as-replace as a server-side no-op (will 409 anyway).
+      if (existing != null && existing.isRejected) {
+        doc = await VerificationApi.instance.replace(existing.id, file);
+      } else {
+        if (existing != null) {
+          try {
+            await VerificationApi.instance.delete(existing.id);
+          } catch (_) {
+            // Silently ignore — server may have already cleaned it up,
+            // or the doc is approved (409) which we can't replace through
+            // the user flow anyway.
+          }
         }
+        doc = await VerificationApi.instance.upload(type, file);
       }
-      final doc = await VerificationApi.instance.upload(type, file);
       if (!mounted) return;
       setState(() => _docs[type] = doc);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'kyc.reupload_success'))),
+      );
     } on ApiException catch (e) {
       if (!mounted) return;
       // Roll back optimistic removal.
       if (existing != null) setState(() => _docs[type] = existing);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Yuklab bo\'lmadi: ${e.message}')),
+        SnackBar(
+          content: Text(
+              '${t(context, 'courier.verification.upload_failed')}: ${e.message}'),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       if (existing != null) setState(() => _docs[type] = existing);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Yuklab bo\'lmadi: $e')),
+        SnackBar(
+          content:
+              Text('${t(context, 'courier.verification.upload_failed')}: $e'),
+        ),
       );
     }
   }
@@ -205,12 +228,12 @@ class _CourierVerificationScreenState
           children: [
             ListTile(
               leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Kamera'),
+              title: Text(t(context, 'courier.verification.source_camera')),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Galereya'),
+              title: Text(t(context, 'courier.verification.source_gallery')),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
           ],
@@ -227,7 +250,7 @@ class _CourierVerificationScreenState
           icon: const Icon(Icons.close),
           onPressed: () => context.pop(),
         ),
-        title: const Text('Kuryer ro\'yxatdan o\'tish'),
+        title: Text(t(context, 'courier.verification.title')),
       ),
       body: Column(
         children: [
@@ -286,7 +309,9 @@ class _CourierVerificationScreenState
                       color: Colors.white, strokeWidth: 2,
                     ),
                   )
-                : Text(_step < 2 ? 'Keyingisi' : 'Ariza yuborish'),
+                : Text(_step < 2
+                    ? t(context, 'courier.verification.next_cta')
+                    : t(context, 'courier.verification.submit_cta')),
             ),
           ),
         ],
@@ -318,11 +343,11 @@ class _StepPersonal extends StatelessWidget {
         children: [
           const Text('👤', style: TextStyle(fontSize: 48)),
           const SizedBox(height: 16),
-          Text('Shaxsiy ma\'lumot',
+          Text(t(context, 'courier.verification.personal_title'),
               style: Theme.of(context).textTheme.displayMedium),
           const SizedBox(height: 8),
           Text(
-            'To\'liq ism-sharifingizni kiriting',
+            t(context, 'courier.verification.personal_subtitle'),
             style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(color: AppColors.textSecondary),
           ),
@@ -330,9 +355,9 @@ class _StepPersonal extends StatelessWidget {
           TextFormField(
             controller: nameCtrl,
             textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'To\'liq ism-sharif',
-              hintText: 'Ism Familiya Otasining ismi',
+            decoration: InputDecoration(
+              labelText: t(context, 'courier.verification.full_name_label'),
+              hintText: t(context, 'courier.verification.full_name_hint'),
             ),
             onChanged: (_) => onChanged(),
           ),
@@ -361,16 +386,27 @@ class _StepDocuments extends StatelessWidget {
     required this.onPickDoc,
   });
 
-  static const _docMeta = <String, ({String label, String emoji})>{
-    VerificationDocType.passportFront:
-        (label: 'Pasport (old tomoni)', emoji: '🪪'),
-    VerificationDocType.passportBack:
-        (label: 'Pasport (orqa tomoni)', emoji: '🪪'),
-    VerificationDocType.selfie:
-        (label: 'Selfie pasport bilan', emoji: '🤳'),
-    VerificationDocType.selfEmployedCert:
-        (label: 'Samozanyatiy ma\'lumotnomasi', emoji: '📄'),
+  static const _docEmoji = <String, String>{
+    VerificationDocType.passportFront: '🪪',
+    VerificationDocType.passportBack: '🪪',
+    VerificationDocType.selfie: '🤳',
+    VerificationDocType.selfEmployedCert: '📄',
   };
+
+  static String _docLabel(BuildContext context, String type) {
+    switch (type) {
+      case VerificationDocType.passportFront:
+        return t(context, 'courier.verification.doc_passport_front');
+      case VerificationDocType.passportBack:
+        return t(context, 'courier.verification.doc_passport_back');
+      case VerificationDocType.selfie:
+        return t(context, 'courier.verification.doc_selfie');
+      case VerificationDocType.selfEmployedCert:
+        return t(context, 'courier.verification.doc_self_employed_cert');
+      default:
+        return type;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -381,10 +417,11 @@ class _StepDocuments extends StatelessWidget {
         children: [
           const Text('📄', style: TextStyle(fontSize: 48)),
           const SizedBox(height: 16),
-          Text('Hujjatlar', style: Theme.of(context).textTheme.displayMedium),
+          Text(t(context, 'courier.verification.docs_title'),
+              style: Theme.of(context).textTheme.displayMedium),
           const SizedBox(height: 8),
           Text(
-            'Hujjatlar Soliq qo\'mitasi orqali tekshiriladi',
+            t(context, 'courier.verification.docs_subtitle'),
             style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(color: AppColors.textSecondary),
           ),
@@ -398,10 +435,10 @@ class _StepDocuments extends StatelessWidget {
               FilteringTextInputFormatter.digitsOnly,
               LengthLimitingTextInputFormatter(9),
             ],
-            decoration: const InputDecoration(
-              labelText: 'STIR (INN)',
-              hintText: '9 ta raqam',
-              helperText: 'Soliq to\'lovchining individual raqami',
+            decoration: InputDecoration(
+              labelText: t(context, 'courier.verification.stir_label'),
+              hintText: t(context, 'courier.verification.stir_hint'),
+              helperText: t(context, 'courier.verification.stir_helper'),
             ),
             onChanged: (_) => onChanged(),
           ),
@@ -414,21 +451,21 @@ class _StepDocuments extends StatelessWidget {
             inputFormatters: [
               LengthLimitingTextInputFormatter(9),
             ],
-            decoration: const InputDecoration(
-              labelText: 'Pasport seriyasi va raqami',
-              hintText: 'AA 1234567',
-              helperText: '2 harf + 7 raqam',
+            decoration: InputDecoration(
+              labelText: t(context, 'courier.verification.passport_label'),
+              hintText: t(context, 'courier.verification.passport_hint'),
+              helperText: t(context, 'courier.verification.passport_helper'),
             ),
             onChanged: (_) => onChanged(),
           ),
 
           const SizedBox(height: 24),
-          Text('Hujjat fotosuratlari',
+          Text(t(context, 'courier.verification.doc_photos_title'),
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
-          const Text(
-            'Har bir hujjat aniq va to\'liq ko\'rinadigan bo\'lsin',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          Text(
+            t(context, 'courier.verification.doc_photos_subtitle'),
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 12),
 
@@ -445,7 +482,7 @@ class _StepDocuments extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                'Hujjatlarni yuklab bo\'lmadi: $docsError',
+                '${t(context, 'courier.verification.docs_load_error')}: $docsError',
                 style: const TextStyle(color: AppColors.error, fontSize: 12),
               ),
             )
@@ -454,8 +491,8 @@ class _StepDocuments extends StatelessWidget {
               children: [
                 for (final type in VerificationDocType.all)
                   _DocTile(
-                    label: _docMeta[type]!.label,
-                    emoji: _docMeta[type]!.emoji,
+                    label: _docLabel(context, type),
+                    emoji: _docEmoji[type] ?? '📄',
                     doc: docs[type],
                     onTap: () => onPickDoc(type),
                   ),
@@ -471,16 +508,15 @@ class _StepDocuments extends StatelessWidget {
               color: AppColors.primaryLight,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Row(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.lock_outline, color: AppColors.primary, size: 18),
-                SizedBox(width: 10),
+                const Icon(Icons.lock_outline, color: AppColors.primary, size: 18),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Ma\'lumotlaringiz shifrlangan holda saqlanadi va '
-                    'faqat tekshirish uchun ishlatiladi.',
-                    style: TextStyle(
+                    t(context, 'courier.verification.privacy_note'),
+                    style: const TextStyle(
                       color: AppColors.primaryDark, fontSize: 13,
                     ),
                   ),
@@ -507,22 +543,38 @@ class _DocTile extends StatelessWidget {
     required this.onTap,
   });
 
-  (String, Color, Color) get _statusInfo {
+  (String, Color, Color) _statusInfo(BuildContext context) {
     if (doc == null) {
-      return ('Yuklanmagan', AppColors.textHint, AppColors.surfaceMuted);
+      return (
+        t(context, 'courier.verification.status_not_uploaded'),
+        AppColors.textHint,
+        AppColors.surfaceMuted,
+      );
     }
     if (doc!.isApproved) {
-      return ('✓ Tasdiqlangan', AppColors.success, AppColors.primaryLight);
+      return (
+        t(context, 'courier.verification.status_approved'),
+        AppColors.success,
+        AppColors.primaryLight,
+      );
     }
     if (doc!.isRejected) {
-      return ('✗ Rad etilgan', AppColors.error, AppColors.errorLight);
+      return (
+        t(context, 'courier.verification.status_rejected'),
+        AppColors.error,
+        AppColors.errorLight,
+      );
     }
-    return ('⏳ Tekshirilmoqda', AppColors.warning, AppColors.warningLight);
+    return (
+      t(context, 'courier.verification.status_pending'),
+      AppColors.warning,
+      AppColors.warningLight,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final (statusLabel, color, bg) = _statusInfo;
+    final (statusLabel, color, bg) = _statusInfo(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       child: Material(
@@ -581,8 +633,7 @@ class _DocTile extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (doc?.isRejected == true &&
-                    doc!.rejectionReason != null) ...[
+                if (doc?.isRejected == true) ...[
                   const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -590,16 +641,43 @@ class _DocTile extends StatelessWidget {
                       color: AppColors.errorLight,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Row(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.info_outline,
-                            size: 16, color: AppColors.error),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(doc!.rejectionReason!,
-                              style: const TextStyle(
-                                  color: AppColors.error, fontSize: 12)),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.info_outline,
+                                size: 16, color: AppColors.error),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                doc!.rejectionReason ??
+                                    t(context, 'kyc.rejection_generic'),
+                                style: const TextStyle(
+                                    color: AppColors.error, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        // Phase 13.2.4 — explicit re-upload CTA so the user
+                        // sees a fix path right under the rejection reason.
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: onTap,
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: Text(t(context, 'kyc.reupload_cta')),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.error,
+                              side: const BorderSide(color: AppColors.error),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -632,12 +710,11 @@ class _StepSelfEmployed extends StatelessWidget {
         children: [
           const Text('💼', style: TextStyle(fontSize: 48)),
           const SizedBox(height: 16),
-          Text('O\'z-o\'zini band qilish',
+          Text(t(context, 'courier.verification.self_emp_title'),
               style: Theme.of(context).textTheme.displayMedium),
           const SizedBox(height: 8),
           Text(
-            'O\'zbekistonda kuryer sifatida ishlash uchun '
-            'o\'z-o\'zini band qilgan (самозанятый) maqomiga ega bo\'lishingiz kerak.',
+            t(context, 'courier.verification.self_emp_body'),
             style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(color: AppColors.textSecondary),
           ),
@@ -646,18 +723,21 @@ class _StepSelfEmployed extends StatelessWidget {
           // How to get self-employed status
           _InfoStep(
             num: '1',
-            title: 'my.soliq.uz saytiga kiring',
-            subtitle: 'Soliq qo\'mitasining rasmiy portali',
+            title: t(context, 'courier.verification.self_emp_step1_title'),
+            subtitle:
+                t(context, 'courier.verification.self_emp_step1_subtitle'),
           ),
           _InfoStep(
             num: '2',
-            title: '"O\'z-o\'zini band qilish" bo\'limini toping',
-            subtitle: 'Ro\'yxatdan o\'tish bepul va tezkor',
+            title: t(context, 'courier.verification.self_emp_step2_title'),
+            subtitle:
+                t(context, 'courier.verification.self_emp_step2_subtitle'),
           ),
           _InfoStep(
             num: '3',
-            title: 'Ariza toldiring',
-            subtitle: 'Daromaddan 1% soliq — tovar aylanmasi 1 mlrd so\'mgacha',
+            title: t(context, 'courier.verification.self_emp_step3_title'),
+            subtitle:
+                t(context, 'courier.verification.self_emp_step3_subtitle'),
           ),
           const SizedBox(height: 24),
 
@@ -694,11 +774,10 @@ class _StepSelfEmployed extends StatelessWidget {
                       : null,
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Men o\'z-o\'zini band qilgan maqomiga egaman '
-                      'yoki uni olishga roziman',
-                      style: TextStyle(
+                      t(context, 'courier.verification.self_emp_confirm'),
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                         color: AppColors.textPrimary,

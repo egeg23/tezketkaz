@@ -1,3 +1,6 @@
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const router = require('express').Router();
 const prisma = require('../db');
 const env = require('../config/env');
@@ -19,6 +22,36 @@ const money = require('../lib/money');
 // Phase 7 — multi-country VAT + country-aware estimate.
 const tax = require('../services/tax');
 const country = require('../services/country');
+// Phase 13.2.5 — courier delivery-photo proof. Same storage abstraction as
+// product images / KYC docs (Phase 9): bytes land on disk under
+// backend/uploads/ or in S3/R2 depending on env config.
+const { putFromMulterFile } = require('../lib/storage');
+
+// ─── Multer setup for delivery-photo upload (Phase 13.2.5) ──────────────────
+// Mirror the verification.js / products.js conventions: 8 MB cap, JPEG/PNG
+// only (delivery photos are taken with the rear camera, so WebP is unusual
+// but allowed for parity).
+const DELIVERY_UPLOAD_ROOT = path.resolve(__dirname, '..', '..', 'uploads', 'delivery-photos');
+fs.mkdirSync(DELIVERY_UPLOAD_ROOT, { recursive: true });
+
+const deliveryPhotoStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, DELIVERY_UPLOAD_ROOT),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '') || '.jpg';
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`);
+  },
+});
+
+const uploadDeliveryPhoto = multer({
+  storage: deliveryPhotoStorage,
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8 MB — accept full-res phone JPEGs
+  fileFilter: (req, file, cb) => {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.mimetype)) {
+      return cb(new Error('Only JPEG/PNG/WebP allowed'));
+    }
+    cb(null, true);
+  },
+});
 
 // Phase 6 — backwards-compatible Money envelope. We keep the raw Float fields
 // (subtotal, total, etc.) AND emit a sibling `*_money` object so the Flutter
@@ -1042,7 +1075,74 @@ router.post('/:id/courier/arrived', authMiddleware, requireRole('courier'), asyn
   } catch (err) { next(err); }
 });
 
+// Phase 13.2.5 — shared post-delivery side-effects: batch advancement,
+// courier counter, loyalty credit, real-time emits, push, notifications.
+// Used by both `/courier/complete` (legacy) and `/courier/delivered`
+// (photo-required). `originalOrder` is the row BEFORE the status transition,
+// `updated` is the row AFTER.
+async function applyPostDeliveryEffects(req, originalOrder, updated) {
+  // Phase 8.1 — batch advancement.
+  let nextActiveOrderId = null;
+  if (originalOrder.batchId) {
+    const batch = await prisma.orderBatch.update({
+      where: { id: originalOrder.batchId },
+      data: { deliveriesCompleted: { increment: 1 } },
+    });
+    if (batch.deliveriesCompleted >= batch.totalDeliveries) {
+      await prisma.orderBatch.update({
+        where: { id: batch.id },
+        data: { status: 'completed', completedAt: new Date() },
+      });
+    } else {
+      const next = await prisma.order.findFirst({
+        where: {
+          batchId: batch.id,
+          id: { not: originalOrder.id },
+          status: { not: STATUS.DELIVERED },
+        },
+        orderBy: { batchSequence: 'asc' },
+      });
+      if (next) nextActiveOrderId = next.id;
+    }
+  }
+
+  await prisma.user.update({
+    where: { id: req.user.id },
+    data: {
+      ordersCount: { increment: 1 },
+      activeOrderId: nextActiveOrderId,
+    },
+  });
+
+  // Phase 3 — loyalty credit + referral bonus.
+  try {
+    const credit = await loyalty.creditOrder(prisma, updated.buyerId, updated.id, updated.total);
+    if (credit && credit.pointsAdded) {
+      await prisma.order.update({
+        where: { id: updated.id },
+        data: { loyaltyEarned: credit.pointsAdded },
+      });
+    }
+  } catch (err) {
+    logger.warn({ err: err.message, orderId: updated.id }, 'loyalty credit failed');
+  }
+  try {
+    await loyalty.bonusReferral(prisma, updated.buyerId);
+  } catch (err) {
+    logger.warn({ err: err.message, orderId: updated.id }, 'referral bonus failed');
+  }
+
+  emit(req, `order:${originalOrder.id}`, 'order:updated', updated);
+  emit(req, `buyer:${originalOrder.buyerId}`, 'order:updated', updated);
+  emit(req, `shop:${originalOrder.shopId}`, 'order:updated', updated);
+  push.notifyBuyerStatusUpdate(updated).catch(() => {});
+  notifyOrder(req, updated, 'order_delivered').catch(() => {});
+}
+
 // ─── POST /api/orders/:id/courier/complete ───────────────────────────────────
+// Legacy JSON endpoint — keeps working for backwards compat. The Flutter
+// courier UI uses `/courier/delivered` (multipart, photo required) from
+// Phase 13.2.5 onward.
 router.post('/:id/courier/complete', authMiddleware, requireRole('courier'), async (req, res, next) => {
   try {
     const order = await prisma.order.findUnique({ where: { id: req.params.id } });
@@ -1056,71 +1156,91 @@ router.post('/:id/courier/complete', authMiddleware, requireRole('courier'), asy
       include: { items: true, shop: true, courier: { select: { id: true, name: true, phone: true } } },
     });
 
-    // Phase 8.1 — if this order is part of a batch, advance the batch's
-    // progress counter and either advance the courier to the next order in
-    // the sequence, or close the batch when all members are delivered.
-    let nextActiveOrderId = null;
-    if (order.batchId) {
-      const batch = await prisma.orderBatch.update({
-        where: { id: order.batchId },
-        data: { deliveriesCompleted: { increment: 1 } },
-      });
-      if (batch.deliveriesCompleted >= batch.totalDeliveries) {
-        await prisma.orderBatch.update({
-          where: { id: batch.id },
-          data: { status: 'completed', completedAt: new Date() },
-        });
-      } else {
-        // Find the next undelivered member by sequence.
-        const next = await prisma.order.findFirst({
-          where: {
-            batchId: batch.id,
-            id: { not: order.id },
-            status: { not: STATUS.DELIVERED },
-          },
-          orderBy: { batchSequence: 'asc' },
-        });
-        if (next) nextActiveOrderId = next.id;
-      }
-    }
-
-    await prisma.user.update({
-      where: { id: req.user.id },
-      data: {
-        ordersCount: { increment: 1 },
-        // Free the courier (or advance to next batch member) so the
-        // dispatcher can offer them new orders.
-        activeOrderId: nextActiveOrderId,
-      },
-    });
-
-    // Phase 3: credit loyalty points + referral bonus on delivery.
-    try {
-      const credit = await loyalty.creditOrder(prisma, updated.buyerId, updated.id, updated.total);
-      if (credit && credit.pointsAdded) {
-        await prisma.order.update({
-          where: { id: updated.id },
-          data: { loyaltyEarned: credit.pointsAdded },
-        });
-      }
-    } catch (err) {
-      logger.warn({ err: err.message, orderId: updated.id }, 'loyalty credit failed');
-    }
-    try {
-      await loyalty.bonusReferral(prisma, updated.buyerId);
-    } catch (err) {
-      logger.warn({ err: err.message, orderId: updated.id }, 'referral bonus failed');
-    }
-
-    emit(req, `order:${order.id}`, 'order:updated', updated);
-    emit(req, `buyer:${order.buyerId}`, 'order:updated', updated);
-    emit(req, `shop:${order.shopId}`, 'order:updated', updated);
-    push.notifyBuyerStatusUpdate(updated).catch(() => {});
-    notifyOrder(req, updated, 'order_delivered').catch(() => {});
+    await applyPostDeliveryEffects(req, order, updated);
 
     res.json({ order: updated });
   } catch (err) { next(err); }
 });
+
+// ─── POST /api/orders/:id/courier/delivered ──────────────────────────────────
+// Phase 13.2.5 — courier marks order delivered with a fresh photo proof.
+//
+// Multipart body:
+//   • photo (file, required): JPEG/PNG/WebP, ≤8 MB. Captured from the rear
+//     camera on the Flutter side; we do no compression/resize server-side.
+//
+// Auth: must be the courier assigned to this order. Order must be in
+// `inDelivery` or `arrivedAtCustomer` status (either is a valid pre-delivered
+// hand-off state). Missing photo → 400 `delivery_photo_required`. Wrong
+// status → 409. Wrong courier → 403.
+router.post(
+  '/:id/courier/delivered',
+  authMiddleware,
+  requireRole('courier'),
+  // multer error → forward to JSON error handler so we never blow up with HTML.
+  (req, res, next) => uploadDeliveryPhoto.single('photo')(req, res, (err) => {
+    if (err) {
+      // File-size / mime errors land here. Surface as 400 so the Flutter
+      // client can show a friendly message rather than treat as 500.
+      return res.status(400).json({ error: 'invalid_photo', message: err.message });
+    }
+    next();
+  }),
+  async (req, res, next) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'delivery_photo_required' });
+      }
+
+      const order = await prisma.order.findUnique({ where: { id: req.params.id } });
+      if (!order) {
+        try { fs.unlinkSync(req.file.path); } catch { /* noop */ }
+        return res.status(404).json({ error: 'Not found' });
+      }
+      if (order.courierId !== req.user.id) {
+        try { fs.unlinkSync(req.file.path); } catch { /* noop */ }
+        return res.status(403).json({ error: 'Not your order' });
+      }
+      // Accept either inDelivery or arrivedAtCustomer — both are valid
+      // hand-off precursors to delivered. Any other status is a state-machine
+      // violation, surfaced as 409 (matches the existing courier/accept
+      // 'Order already taken' convention).
+      if (![STATUS.IN_DELIVERY, STATUS.ARRIVED_AT_CUSTOMER].includes(order.status)) {
+        try { fs.unlinkSync(req.file.path); } catch { /* noop */ }
+        return res.status(409).json({ error: 'invalid_status', status: order.status });
+      }
+
+      // Upload to storage. Local driver leaves the bytes on disk; S3 driver
+      // pushes them to the bucket and unlinks the temp copy.
+      const key = `delivery-photos/${req.file.filename}`;
+      const { url } = await putFromMulterFile(req.file, key);
+
+      const now = new Date();
+      const updated = await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          status: STATUS.DELIVERED,
+          deliveredAt: now,
+          deliveryPhotoUrl: url,
+          deliveryPhotoAt: now,
+        },
+        include: { items: true, shop: true, courier: { select: { id: true, name: true, phone: true } } },
+      });
+
+      await applyPostDeliveryEffects(req, order, updated);
+
+      audit({
+        actorId: req.user.id,
+        action: 'order.delivered_with_photo',
+        targetType: 'Order',
+        targetId: order.id,
+        metadata: { photoUrl: url },
+      });
+
+      res.json({ order: updated });
+    } catch (err) { next(err); }
+  },
+);
 
 // ─── POST /api/orders/:id/buyer/confirm ──────────────────────────────────────
 router.post('/:id/buyer/confirm', authMiddleware, async (req, res, next) => {

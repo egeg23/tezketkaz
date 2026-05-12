@@ -74,7 +74,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       OnboardingApi.instance.markOnboarded().catchError((_) {}),
     );
     if (!mounted) return;
-    context.go('/buyer');
+    // Phase 13.2.3 — after the 4-slide tutorial we now route to the
+    // role-selection screen so couriers and shop owners aren't dropped on
+    // the buyer shell with no way to switch.
+    context.go('/select-role');
   }
 
   void _next() {

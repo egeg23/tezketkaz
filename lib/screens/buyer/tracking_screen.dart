@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import '../../config/api_config.dart';
 import '../../l10n/l10n.dart';
 import '../../models/money.dart';
 import '../../providers/order_provider.dart';
@@ -273,6 +274,20 @@ class _TrackingScreenState extends State<TrackingScreen> {
                                 )),
                           ],
                         ),
+                      ),
+                    ],
+
+                    // Phase 13.2.5 — delivery-photo proof. Shows once the
+                    // courier has marked the order delivered (status =
+                    // delivered) or after the buyer confirms (confirmedByBuyer).
+                    // Tap opens a full-screen viewer.
+                    if ((isHandedOver || isFullyDone) &&
+                        order.deliveryPhotoUrl != null &&
+                        order.deliveryPhotoUrl!.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      _DeliveryPhotoCard(
+                        url: order.deliveryPhotoUrl!,
+                        takenAt: order.deliveryPhotoAt,
                       ),
                     ],
 
@@ -650,6 +665,149 @@ class _TipCardState extends State<_TipCard> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Delivery-photo card + fullscreen viewer (Phase 13.2.5) ──────────────────
+
+/// Shows the courier's hand-off photo with a receipt-style "delivered at HH:MM"
+/// stamp. Tapping the thumbnail opens a fullscreen pinch-zoom viewer.
+class _DeliveryPhotoCard extends StatelessWidget {
+  final String url;
+  final DateTime? takenAt;
+  const _DeliveryPhotoCard({required this.url, this.takenAt});
+
+  String get _resolvedUrl =>
+      url.startsWith('http') ? url : '${ApiConfig.baseUrl}$url';
+
+  String _stamp() {
+    if (takenAt == null) return '';
+    final local = takenAt!.toLocal();
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    return L10n.instance
+        .t('delivery_photo.delivered_at')
+        .replaceAll('{time}', '$hh:$mm');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => _DeliveryPhotoViewer(url: _resolvedUrl),
+        ),
+      ),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.photo_camera_outlined,
+                    color: AppColors.primary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    L10n.instance.t('delivery_photo.title'),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                if (takenAt != null)
+                  Text(
+                    _stamp(),
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: AspectRatio(
+                aspectRatio: 4 / 3,
+                child: Image.network(
+                  _resolvedUrl,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return Container(
+                      color: AppColors.border,
+                      child: const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    );
+                  },
+                  errorBuilder: (_, __, ___) => Container(
+                    color: AppColors.border,
+                    height: 160,
+                    child: const Center(
+                      child: Icon(Icons.broken_image_outlined,
+                          color: AppColors.textHint),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              L10n.instance.t('delivery_photo.tap_to_view'),
+              style: const TextStyle(
+                color: AppColors.textHint,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeliveryPhotoViewer extends StatelessWidget {
+  final String url;
+  const _DeliveryPhotoViewer({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(L10n.instance.t('delivery_photo.title')),
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: Center(
+          child: InteractiveViewer(
+            child: Image.network(
+              url,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.broken_image_outlined,
+                color: Colors.white54,
+                size: 64,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

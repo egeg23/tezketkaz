@@ -226,6 +226,20 @@ class ApiClient {
     }
   }
 
+  /// Multipart PUT helper. Mirrors [postMultipart] but uses HTTP PUT; used by
+  /// `VerificationApi.replace` for rejected KYC document re-uploads.
+  Future<Response> putMultipart(String path, FormData formData) async {
+    try {
+      return await _dio.put(
+        path,
+        data: formData,
+        options: Options(contentType: 'multipart/form-data'),
+      );
+    } on DioException catch (e) {
+      throw _toException(e);
+    }
+  }
+
   ApiException _toException(DioException e) {
     if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.connectionError) {

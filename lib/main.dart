@@ -21,6 +21,9 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/otp_screen.dart';
 import 'screens/auth/name_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
+import 'screens/onboarding/role_selection_screen.dart';
+import 'screens/onboarding/courier_onboarding_screen.dart';
+import 'screens/onboarding/shop_onboarding_screen.dart';
 import 'screens/buyer/buyer_shell.dart';
 import 'screens/buyer/home_screen.dart';
 import 'screens/buyer/catalog_screen.dart';
@@ -237,6 +240,11 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       GoRoute(path: '/auth/otp', builder: (_, s) => OtpScreen(phone: s.extra as String? ?? '')),
       GoRoute(path: '/auth/name', builder: (_, __) => const NameScreen()),
       GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
+      // Phase 13.2.3 — first-run role selection (buyer / courier / shop) +
+      // per-role onboarding info screens.
+      GoRoute(path: '/select-role', builder: (_, __) => const RoleSelectionScreen()),
+      GoRoute(path: '/courier/onboarding', builder: (_, __) => const CourierOnboardingScreen()),
+      GoRoute(path: '/shop/onboarding', builder: (_, __) => const ShopOnboardingScreen()),
       GoRoute(path: '/switch-role', builder: (_, __) => const RoleSwitcherScreen()),
       GoRoute(path: '/courier-verification', builder: (_, __) => const CourierVerificationScreen()),
       // Phase 12 — read-only Privacy / Terms viewer (tabbed). Auth-agnostic so

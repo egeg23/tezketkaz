@@ -191,6 +191,154 @@ describe('non-admin guards', () => {
   });
 });
 
+describe('PUT /api/verification/:id — Phase 13.2.4 re-upload', () => {
+  test('replace rejected doc → status returns to pending and reason is cleared', async () => {
+    const admin = await createUser(prisma, { isAdmin: true });
+    const u = await createUser(prisma);
+
+    // 1) Upload an initial doc.
+    const file1 = tmpPng();
+    const up = await request(ctx.app)
+      .post('/api/verification/upload')
+      .set('Authorization', u.auth)
+      .field('type', 'passport_front')
+      .attach('file', file1);
+    fs.unlinkSync(file1);
+    expect(up.status).toBe(201);
+    const docId = up.body.doc.id;
+
+    // 2) Admin rejects it.
+    const rej = await request(ctx.app)
+      .post(`/api/admin/verification/${docId}/reject`)
+      .set('Authorization', admin.auth)
+      .send({ reason: 'blurry' });
+    expect(rej.status).toBe(200);
+    expect(rej.body.doc.status).toBe('rejected');
+
+    // 3) Owner re-uploads via PUT.
+    const file2 = tmpPng();
+    const replace = await request(ctx.app)
+      .put(`/api/verification/${docId}`)
+      .set('Authorization', u.auth)
+      .attach('file', file2);
+    fs.unlinkSync(file2);
+
+    expect(replace.status).toBe(200);
+    expect(replace.body.doc.id).toBe(docId);
+    expect(replace.body.doc.status).toBe('pending');
+    expect(replace.body.doc.rejectionReason).toBeNull();
+    expect(replace.body.doc.reviewedById).toBeNull();
+    expect(replace.body.doc.reviewedAt).toBeNull();
+    expect(replace.body.doc.url).toMatch(/^\/uploads\/verification\//);
+    // URL must point at a brand-new file, not the original.
+    expect(replace.body.doc.url).not.toBe(up.body.doc.url);
+  });
+
+  test('admin sees the replaced doc as pending', async () => {
+    const admin = await createUser(prisma, { isAdmin: true });
+    const u = await createUser(prisma);
+    const doc = await prisma.verificationDocument.create({
+      data: {
+        userId: u.user.id,
+        type: 'selfie',
+        url: '/uploads/verification/old.png',
+        status: 'rejected',
+        rejectionReason: 'too dark',
+      },
+    });
+    const file = tmpPng();
+    const replace = await request(ctx.app)
+      .put(`/api/verification/${doc.id}`)
+      .set('Authorization', u.auth)
+      .attach('file', file);
+    fs.unlinkSync(file);
+    expect(replace.status).toBe(200);
+
+    const list = await request(ctx.app)
+      .get('/api/admin/verification?status=pending')
+      .set('Authorization', admin.auth);
+    expect(list.status).toBe(200);
+    const ids = list.body.docs.map((d) => d.id);
+    expect(ids).toContain(doc.id);
+  });
+
+  test('non-owner cannot replace someone else\'s doc → 403', async () => {
+    const a = await createUser(prisma);
+    const b = await createUser(prisma);
+    const doc = await prisma.verificationDocument.create({
+      data: {
+        userId: a.user.id,
+        type: 'selfie',
+        url: '/uploads/verification/a.png',
+        status: 'rejected',
+        rejectionReason: 'nope',
+      },
+    });
+    const file = tmpPng();
+    const res = await request(ctx.app)
+      .put(`/api/verification/${doc.id}`)
+      .set('Authorization', b.auth)
+      .attach('file', file);
+    fs.unlinkSync(file);
+    expect(res.status).toBe(403);
+  });
+
+  test('cannot replace pending doc → 409', async () => {
+    const u = await createUser(prisma);
+    const doc = await prisma.verificationDocument.create({
+      data: {
+        userId: u.user.id,
+        type: 'selfie',
+        url: '/uploads/verification/p.png',
+        status: 'pending',
+      },
+    });
+    const file = tmpPng();
+    const res = await request(ctx.app)
+      .put(`/api/verification/${doc.id}`)
+      .set('Authorization', u.auth)
+      .attach('file', file);
+    fs.unlinkSync(file);
+    expect(res.status).toBe(409);
+  });
+
+  test('cannot replace approved doc → 409 (admin must reject first)', async () => {
+    const u = await createUser(prisma);
+    const doc = await prisma.verificationDocument.create({
+      data: {
+        userId: u.user.id,
+        type: 'selfie',
+        url: '/uploads/verification/ok.png',
+        status: 'approved',
+      },
+    });
+    const file = tmpPng();
+    const res = await request(ctx.app)
+      .put(`/api/verification/${doc.id}`)
+      .set('Authorization', u.auth)
+      .attach('file', file);
+    fs.unlinkSync(file);
+    expect(res.status).toBe(409);
+  });
+
+  test('missing file → 400', async () => {
+    const u = await createUser(prisma);
+    const doc = await prisma.verificationDocument.create({
+      data: {
+        userId: u.user.id,
+        type: 'selfie',
+        url: '/uploads/verification/x.png',
+        status: 'rejected',
+        rejectionReason: 'r',
+      },
+    });
+    const res = await request(ctx.app)
+      .put(`/api/verification/${doc.id}`)
+      .set('Authorization', u.auth);
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('user delete own pending doc', () => {
   test('owner can delete pending doc; cannot delete reviewed doc', async () => {
     const u = await createUser(prisma);

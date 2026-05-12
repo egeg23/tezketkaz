@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../l10n/l10n.dart';
@@ -116,10 +119,11 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
         break;
 
       case DeliveryStep.atCustomer:
-        // "Topshirildi" → handed over
-        await orders.courierComplete(widget.orderId);
-        if (!mounted) return;
-        setState(() => _step = DeliveryStep.done);
+        // Phase 13.2.5 — "Topshirildi" requires a fresh delivery-photo proof.
+        // We open the rear camera, let the courier preview, then POST the
+        // multipart upload. The legacy `courierComplete()` is no longer used
+        // here — the new endpoint flips status AND stamps the photo URL.
+        await _captureAndSubmitDeliveryPhoto();
         break;
 
       case DeliveryStep.done:
@@ -130,6 +134,67 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
         await _finishAndAdvance(order?.batchId);
         break;
     }
+  }
+
+  /// Phase 13.2.5 — open the rear camera, let the courier preview the shot,
+  /// and POST it to `/api/orders/:id/courier/delivered`. On a successful
+  /// upload we flip the local order state to `delivered` and advance to the
+  /// done screen. The image_picker hands us a temp `XFile` we wrap as `File`.
+  Future<void> _captureAndSubmitDeliveryPhoto() async {
+    final picker = ImagePicker();
+    XFile? shot;
+    try {
+      // Camera-only (no gallery), rear lens for clarity at the door.
+      shot = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+        // 8 MB cap matches backend Multer config; default JPEG is plenty.
+        imageQuality: 85,
+      );
+    } catch (_) {
+      // pickImage throws on permission denial or no-camera devices.
+      if (!mounted) return;
+      _showSnack(L10n.instance.t('delivery_photo.camera_unavailable'));
+      return;
+    }
+    if (shot == null) {
+      // Courier cancelled the camera — stay on atCustomer.
+      return;
+    }
+
+    final retake = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _DeliveryPhotoPreview(file: File(shot!.path)),
+      ),
+    );
+    if (!mounted) return;
+    if (retake == true) {
+      // Courier hit retry — recurse to capture a fresh shot.
+      await _captureAndSubmitDeliveryPhoto();
+      return;
+    }
+    if (retake != false) {
+      // Treat back-button (null) as cancel: stay on the atCustomer step.
+      return;
+    }
+
+    final orders = context.read<OrderProvider>();
+    try {
+      await orders.courierMarkDelivered(widget.orderId, File(shot.path));
+    } catch (err) {
+      if (!mounted) return;
+      _showSnack(L10n.instance.t('delivery_photo.upload_failed'));
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _step = DeliveryStep.done);
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   /// Phase 8.1 — when finishing a batch leg, jump to the courier's next
@@ -1074,4 +1139,78 @@ class _DoneScreenState extends State<_DoneScreen> with SingleTickerProviderState
       ),
     ),
   );
+}
+
+// ─── Delivery photo preview (Phase 13.2.5) ───────────────────────────────────
+//
+// Full-screen preview that pops `true` on retry, `false` on submit, and `null`
+// on back-button (treated as cancel). Stateless because the file is captured
+// upstream by image_picker.
+class _DeliveryPhotoPreview extends StatelessWidget {
+  final File file;
+  const _DeliveryPhotoPreview({required this.file});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(L10n.instance.t('delivery_photo.preview_title')),
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: InteractiveViewer(
+                child: Center(
+                  child: Image.file(file, fit: BoxFit.contain),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white54),
+                        minimumSize: const Size(double.infinity, 52),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      icon: const Icon(Icons.refresh),
+                      label: Text(L10n.instance.t('delivery_photo.retry')),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 52),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      icon: const Icon(Icons.check),
+                      label: Text(L10n.instance.t('delivery_photo.submit')),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
