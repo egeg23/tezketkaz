@@ -303,7 +303,8 @@ class _CartScreenState extends State<CartScreen> {
         setState(() => _promoError = null);
         HapticFeedback.lightImpact();
       } else {
-        setState(() => _promoError = result.reason ?? 'Promo kod yaroqsiz');
+        setState(() => _promoError =
+            result.reason ?? t(context, 'cart.promo_invalid'));
       }
     } catch (e) {
       if (!mounted) return;
@@ -437,7 +438,7 @@ class _CartScreenState extends State<CartScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isPlacing = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Xatolik: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${t(context, 'common.error')}: $e')));
       }
     }
   }
@@ -1173,7 +1174,9 @@ class _PricingBreakdown extends StatelessWidget {
                     const Icon(Icons.timer_outlined,
                         size: 14, color: AppColors.textSecondary),
                     const SizedBox(width: 4),
-                    Text('Доставка через ~${est!.etaMinutes} мин',
+                    Text(
+                        t(context, 'cart.eta').replaceAll(
+                            '{minutes}', '${est!.etaMinutes}'),
                         style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary)),
@@ -1183,7 +1186,9 @@ class _PricingBreakdown extends StatelessWidget {
                     const Icon(Icons.place_outlined,
                         size: 14, color: AppColors.textSecondary),
                     const SizedBox(width: 4),
-                    Text('${est!.distanceKm!.toStringAsFixed(1)} км',
+                    Text(
+                        t(context, 'cart.distance').replaceAll(
+                            '{km}', est!.distanceKm!.toStringAsFixed(1)),
                         style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary)),

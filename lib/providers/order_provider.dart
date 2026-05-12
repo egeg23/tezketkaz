@@ -334,31 +334,69 @@ class OrderProvider extends ChangeNotifier {
 
     s.on('order:new', (data) {
       try {
-        final order = OrderApi.instance.byId(data['id']);
-        order.then((o) { _orders.insert(0, o); notifyListeners(); });
-      } catch (_) {}
+        final id = data is Map ? data['id'] : null;
+        if (id == null) return;
+        OrderApi.instance.byId(id).then(
+          (o) {
+            _orders.insert(0, o);
+            notifyListeners();
+          },
+          // Phase 13 audit — surface socket-driven fetch errors instead of
+          // silently dropping; they're a strong signal something is wrong
+          // with the order pipeline.
+          onError: (Object e, StackTrace st) {
+            if (kDebugMode) debugPrint('order:new fetch failed: $e');
+          },
+        );
+      } catch (e) {
+        if (kDebugMode) debugPrint('order:new handler error: $e');
+      }
     });
 
     s.on('order:updated', (data) {
       try {
-        OrderApi.instance.byId(data['id']).then((o) => _replace(o));
-      } catch (_) {}
+        final id = data is Map ? data['id'] : null;
+        if (id == null) return;
+        OrderApi.instance.byId(id).then(
+          _replace,
+          onError: (Object e, StackTrace st) {
+            if (kDebugMode) debugPrint('order:updated fetch failed: $e');
+          },
+        );
+      } catch (e) {
+        if (kDebugMode) debugPrint('order:updated handler error: $e');
+      }
     });
 
     s.on('order:available', (data) {
       try {
-        OrderApi.instance.byId(data['id']).then((o) {
-          if (!_orders.any((x) => x.id == o.id)) {
-            _orders.insert(0, o);
-            notifyListeners();
-          }
-        });
-      } catch (_) {}
+        final id = data is Map ? data['id'] : null;
+        if (id == null) return;
+        OrderApi.instance.byId(id).then(
+          (o) {
+            if (!_orders.any((x) => x.id == o.id)) {
+              _orders.insert(0, o);
+              notifyListeners();
+            }
+          },
+          onError: (Object e, StackTrace st) {
+            if (kDebugMode) debugPrint('order:available fetch failed: $e');
+          },
+        );
+      } catch (e) {
+        if (kDebugMode) debugPrint('order:available handler error: $e');
+      }
     });
 
     s.on('order:taken', (data) {
-      _orders.removeWhere((o) => o.id == data['orderId']);
-      notifyListeners();
+      try {
+        final id = data is Map ? data['orderId'] : null;
+        if (id == null) return;
+        _orders.removeWhere((o) => o.id == id);
+        notifyListeners();
+      } catch (e) {
+        if (kDebugMode) debugPrint('order:taken handler error: $e');
+      }
     });
   }
 

@@ -24,7 +24,7 @@ class ProfileScreen extends StatelessWidget {
     final deliveredCount = orders.all.where((o) => o.status == AppOrderStatus.delivered).length;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profil')),
+      appBar: AppBar(title: Text(t(context, 'profile.title'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -231,7 +231,7 @@ class ProfileScreen extends StatelessWidget {
               context.go('/auth/login');
             },
             icon: const Icon(Icons.logout, color: AppColors.error, size: 18),
-            label: const Text('Chiqish', style: TextStyle(color: AppColors.error)),
+            label: Text(t(context, 'profile.logout'), style: const TextStyle(color: AppColors.error)),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: AppColors.error),
               minimumSize: const Size(double.infinity, 48),

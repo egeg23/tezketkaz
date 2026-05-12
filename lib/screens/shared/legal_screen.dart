@@ -11,7 +11,11 @@ import '../../theme/app_theme.dart';
 /// rich formatting; the heading detection logic is good enough for the kind
 /// of plain-prose policy text we ship.
 class LegalScreen extends StatefulWidget {
-  const LegalScreen({super.key});
+  /// Phase 13.1.5 — optional initial tab selection. Accepts `'terms'` or
+  /// `'privacy'`. When null (or any other value) the screen opens on
+  /// Privacy by default (tab index 0).
+  final String? initialTab;
+  const LegalScreen({super.key, this.initialTab});
 
   @override
   State<LegalScreen> createState() => _LegalScreenState();
@@ -28,7 +32,10 @@ class _LegalScreenState extends State<LegalScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
+    // Privacy at index 0, Terms at index 1 — matches the TabBar definition
+    // below. Any unknown value falls back to Privacy.
+    final initial = widget.initialTab == 'terms' ? 1 : 0;
+    _tabs = TabController(length: 2, vsync: this, initialIndex: initial);
     _load();
   }
 

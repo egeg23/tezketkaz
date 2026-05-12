@@ -140,7 +140,10 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
     await Clipboard.setData(ClipboardData(text: g.joinCode));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Code copied'), duration: Duration(seconds: 1)),
+      SnackBar(
+        content: Text(t(context, 'group.code_copied')),
+        duration: const Duration(seconds: 1),
+      ),
     );
   }
 
@@ -739,8 +742,8 @@ class _MyBasketCard extends StatelessWidget {
               const Icon(Icons.shopping_basket_outlined,
                   color: AppColors.primary),
               const SizedBox(width: 8),
-              const Text('My basket',
-                  style: TextStyle(
+              Text(t(context, 'group.my_basket'),
+                  style: const TextStyle(
                       fontWeight: FontWeight.w800, fontSize: 14)),
               const Spacer(),
               if (me != null)
@@ -784,7 +787,7 @@ class _MyBasketCard extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: onAddItems,
             icon: const Icon(Icons.add_rounded),
-            label: const Text('Add items'),
+            label: Text(t(context, 'group.add_items')),
           ),
         ],
       ),
@@ -820,7 +823,7 @@ class _PaidSuccessCard extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: onViewOrder,
               icon: const Icon(Icons.local_shipping_outlined),
-              label: const Text('View order tracking'),
+              label: Text(t(context, 'group.view_tracking')),
             ),
         ],
       ),

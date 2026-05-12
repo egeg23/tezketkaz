@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/product_api.dart';
@@ -186,8 +187,12 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
                           )
                         : ClipRRect(
                             borderRadius: BorderRadius.circular(14),
-                            child: Image.network(_imageUrl, fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.broken_image_outlined))),
+                            child: CachedNetworkImage(
+                              imageUrl: _imageUrl,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => const Center(
+                                  child: Icon(Icons.broken_image_outlined)),
+                            ),
                           ),
               ),
             ),

@@ -69,8 +69,20 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } else if (auth.error != null) {
-      _showError(auth.error!);
+      _showError(_translateAuthError(auth.error!));
     }
+  }
+
+  /// Auth provider stores either a raw backend message or a sentinel l10n key
+  /// (e.g. `auth.social_apple_error`). When the value starts with a known
+  /// prefix we translate via l10n; otherwise we surface the raw message.
+  String _translateAuthError(String msg) {
+    if (msg.startsWith('auth.') || msg.startsWith('common.')) {
+      final translated = t(context, msg);
+      // L10n.t returns the key itself if missing — fall back to a generic.
+      return translated == msg ? t(context, 'common.error') : translated;
+    }
+    return msg;
   }
 
   Future<void> _sendOtp() async {
@@ -85,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (ok) {
         context.push('/auth/otp', extra: _rawPhone);
       } else {
-        _showError(auth.error ?? 'Ошибка');
+        _showError(_translateAuthError(auth.error ?? 'common.error'));
       }
     }
   }
@@ -129,12 +141,12 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 32),
 
               Text(
-                'Kirish',
+                t(context, 'login.title'),
                 style: Theme.of(context).textTheme.displayMedium,
               ),
               const SizedBox(height: 8),
               Text(
-                'Telefon raqamingizni kiriting\nva SMS kod oling',
+                t(context, 'login.subtitle'),
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: AppColors.textSecondary,
                 ),
@@ -185,7 +197,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: Colors.white, strokeWidth: 2.5,
                         ),
                       )
-                    : const Text('SMS kod olish'),
+                    : Text(t(context, 'login.cta')),
                 ),
               ),
 
@@ -245,7 +257,7 @@ class _LoginScreenState extends State<LoginScreen> {
               // Terms
               Center(
                 child: Text(
-                  'Kirish orqali siz\nFoydalanish shartlarimizga rozilik bildirasiz',
+                  t(context, 'login.terms_blurb'),
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -90,7 +91,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
       await context.read<OrderProvider>().buyerConfirm(widget.orderId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Yetkazib berish tasdiqlandi 🎉')));
+        SnackBar(content: Text(t(context, 'tracking.confirm_received_snack'))));
       // Phase 12 — bump the per-user "completed orders" counter; once it hits
       // the threshold (5) we surface the native review sheet exactly once.
       // Fire-and-forget — the rating-dialog snackbar above is the primary UX
@@ -103,7 +104,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Xatolik: $e')));
+        SnackBar(content: Text('${t(context, 'tracking.error_prefix')}: $e')));
     } finally {
       if (mounted) setState(() => _confirming = false);
     }
@@ -113,7 +114,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
   Widget build(BuildContext context) {
     final order = context.watch<OrderProvider>().findById(widget.orderId);
     if (order == null) {
-      return Scaffold(appBar: AppBar(), body: const Center(child: Text('Buyurtma topilmadi')));
+      return Scaffold(
+        appBar: AppBar(),
+        body: Center(child: Text(t(context, 'tracking.order_not_found'))),
+      );
     }
 
     final isHandedOver = order.status == AppOrderStatus.delivered;
@@ -130,7 +134,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline_rounded),
-            tooltip: 'Chat',
+            tooltip: t(context, 'tracking.chat_tooltip'),
             onPressed: () => context.push('/order/${order.id}/chat'),
           ),
         ],
@@ -270,8 +274,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Kuryer',
-                                      style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                                  Text(t(context, 'tracking.courier_label'),
+                                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
                                   Text(order.courierName!,
                                       style: const TextStyle(fontWeight: FontWeight.w700)),
                                 ],
@@ -295,8 +299,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
                           children: [
                             const Text('🏷️', style: TextStyle(fontSize: 14)),
                             const SizedBox(width: 8),
-                            const Text('Buyurtma raqami: ',
-                                style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                            Text('${t(context, 'tracking.order_number_prefix')} ',
+                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
                             Text(order.orderNumber!,
                                 style: const TextStyle(
                                   color: AppColors.primary,
@@ -331,7 +335,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                           icon: _confirming
                               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                               : const Icon(Icons.check_circle_outline),
-                          label: const Text("Qabul qildim", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                          label: Text(t(context, 'tracking.confirm_cta'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.success,
                             foregroundColor: Colors.white,
@@ -350,7 +354,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                       ElevatedButton.icon(
                         onPressed: () => context.go('/buyer'),
                         icon: const Icon(Icons.star_outline),
-                        label: const Text('Baholash va yopish'),
+                        label: Text(t(context, 'tracking.rate_and_close')),
                       ),
                     ],
 
@@ -792,19 +796,16 @@ class _DeliveryPhotoCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               child: AspectRatio(
                 aspectRatio: 4 / 3,
-                child: Image.network(
-                  _resolvedUrl,
+                child: CachedNetworkImage(
+                  imageUrl: _resolvedUrl,
                   fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return Container(
-                      color: AppColors.border,
-                      child: const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    );
-                  },
-                  errorBuilder: (_, __, ___) => Container(
+                  placeholder: (_, __) => Container(
+                    color: AppColors.border,
+                    child: const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                  errorWidget: (_, __, ___) => Container(
                     color: AppColors.border,
                     height: 160,
                     child: const Center(
@@ -847,10 +848,10 @@ class _DeliveryPhotoViewer extends StatelessWidget {
       body: SafeArea(
         child: Center(
           child: InteractiveViewer(
-            child: Image.network(
-              url,
+            child: CachedNetworkImage(
+              imageUrl: url,
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Icon(
+              errorWidget: (_, __, ___) => const Icon(
                 Icons.broken_image_outlined,
                 color: Colors.white54,
                 size: 64,

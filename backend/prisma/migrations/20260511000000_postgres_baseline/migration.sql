@@ -833,7 +833,13 @@ CREATE INDEX "User_isCourier_courierStatus_idx" ON "User"("isCourier", "courierS
 CREATE INDEX "User_isOnline_courierStatus_idx" ON "User"("isOnline", "courierStatus");
 
 -- CreateIndex
+CREATE INDEX "User_referredById_idx" ON "User"("referredById");
+
+-- CreateIndex
 CREATE INDEX "OtpCode_phone_idx" ON "OtpCode"("phone");
+
+-- CreateIndex
+CREATE INDEX "OtpCode_userId_idx" ON "OtpCode"("userId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "FcmToken_token_key" ON "FcmToken"("token");
@@ -860,10 +866,19 @@ CREATE INDEX "AuditLog_targetType_targetId_idx" ON "AuditLog"("targetType", "tar
 CREATE INDEX "AuditLog_createdAt_idx" ON "AuditLog"("createdAt");
 
 -- CreateIndex
+CREATE INDEX "AuditLog_actorId_createdAt_idx" ON "AuditLog"("actorId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "AuditLog_targetType_targetId_createdAt_idx" ON "AuditLog"("targetType", "targetId", "createdAt");
+
+-- CreateIndex
 CREATE INDEX "ProcessedWebhook_orderId_idx" ON "ProcessedWebhook"("orderId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ProcessedWebhook_provider_externalId_key" ON "ProcessedWebhook"("provider", "externalId");
+
+-- CreateIndex
+CREATE INDEX "Address_userId_idx" ON "Address"("userId");
 
 -- CreateIndex
 CREATE INDEX "Shop_vertical_idx" ON "Shop"("vertical");
@@ -908,6 +923,9 @@ CREATE INDEX "Category_shopId_idx" ON "Category"("shopId");
 CREATE UNIQUE INDEX "Category_slug_shopId_key" ON "Category"("slug", "shopId");
 
 -- CreateIndex
+CREATE INDEX "ShopMember_shopId_idx" ON "ShopMember"("shopId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "ShopMember_userId_shopId_key" ON "ShopMember"("userId", "shopId");
 
 -- CreateIndex
@@ -942,6 +960,24 @@ CREATE INDEX "Order_status_idx" ON "Order"("status");
 
 -- CreateIndex
 CREATE INDEX "Order_scheduledFor_idx" ON "Order"("scheduledFor");
+
+-- CreateIndex
+CREATE INDEX "Order_buyerId_createdAt_idx" ON "Order"("buyerId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "Order_shopId_status_createdAt_idx" ON "Order"("shopId", "status", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "Order_paymentMethodId_idx" ON "Order"("paymentMethodId");
+
+-- CreateIndex
+CREATE INDEX "Order_batchId_idx" ON "Order"("batchId");
+
+-- CreateIndex
+CREATE INDEX "OrderItem_orderId_idx" ON "OrderItem"("orderId");
+
+-- CreateIndex
+CREATE INDEX "OrderItem_productId_idx" ON "OrderItem"("productId");
 
 -- CreateIndex
 CREATE INDEX "Notification_userId_isRead_idx" ON "Notification"("userId", "isRead");
@@ -986,6 +1022,9 @@ CREATE INDEX "ChatMessage_orderId_createdAt_idx" ON "ChatMessage"("orderId", "cr
 CREATE INDEX "ChatMessage_receiverId_isRead_idx" ON "ChatMessage"("receiverId", "isRead");
 
 -- CreateIndex
+CREATE INDEX "ChatMessage_senderId_idx" ON "ChatMessage"("senderId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "ScheduledOrder_orderId_key" ON "ScheduledOrder"("orderId");
 
 -- CreateIndex
@@ -1025,6 +1064,9 @@ CREATE UNIQUE INDEX "Membership_userId_key" ON "Membership"("userId");
 CREATE INDEX "Membership_status_currentPeriodEnd_idx" ON "Membership"("status", "currentPeriodEnd");
 
 -- CreateIndex
+CREATE INDEX "Membership_paymentMethodId_idx" ON "Membership"("paymentMethodId");
+
+-- CreateIndex
 CREATE INDEX "Banner_isActive_priority_idx" ON "Banner"("isActive", "priority");
 
 -- CreateIndex
@@ -1041,6 +1083,12 @@ CREATE INDEX "BannerImpression_userId_kind_idx" ON "BannerImpression"("userId", 
 
 -- CreateIndex
 CREATE INDEX "Favorite_userId_idx" ON "Favorite"("userId");
+
+-- CreateIndex
+CREATE INDEX "Favorite_productId_idx" ON "Favorite"("productId");
+
+-- CreateIndex
+CREATE INDEX "Favorite_shopId_idx" ON "Favorite"("shopId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Favorite_userId_productId_key" ON "Favorite"("userId", "productId");
@@ -1079,6 +1127,9 @@ CREATE INDEX "OrderGroup_status_expiresAt_idx" ON "OrderGroup"("status", "expire
 CREATE INDEX "OrderGroup_hostUserId_idx" ON "OrderGroup"("hostUserId");
 
 -- CreateIndex
+CREATE INDEX "OrderGroup_shopId_idx" ON "OrderGroup"("shopId");
+
+-- CreateIndex
 CREATE INDEX "OrderGroupMember_userId_status_idx" ON "OrderGroupMember"("userId", "status");
 
 -- CreateIndex
@@ -1094,7 +1145,13 @@ CREATE INDEX "SupportTicket_authorId_status_idx" ON "SupportTicket"("authorId", 
 CREATE INDEX "SupportTicket_assigneeId_status_idx" ON "SupportTicket"("assigneeId", "status");
 
 -- CreateIndex
+CREATE INDEX "SupportTicket_orderId_idx" ON "SupportTicket"("orderId");
+
+-- CreateIndex
 CREATE INDEX "SupportMessage_ticketId_createdAt_idx" ON "SupportMessage"("ticketId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "SupportMessage_senderId_idx" ON "SupportMessage"("senderId");
 
 -- CreateIndex
 CREATE INDEX "PushCampaign_status_scheduledFor_idx" ON "PushCampaign"("status", "scheduledFor");

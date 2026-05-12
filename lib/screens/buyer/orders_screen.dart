@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/l10n.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../services/order_api.dart';
 import '../../services/review_api.dart';
+import '../../services/sentry_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_shimmer.dart';
 import '../../widgets/rating_dialog.dart';
@@ -51,16 +55,16 @@ class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
       // Wrap empty state in a scrollable so pull-to-refresh still works.
       body = ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
-          SizedBox(height: 120),
+        children: [
+          const SizedBox(height: 120),
           Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('📦', style: TextStyle(fontSize: 64)),
-                SizedBox(height: 16),
-                Text('Hali buyurtma yo\'q',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
+                const Text('📦', style: TextStyle(fontSize: 64)),
+                const SizedBox(height: 16),
+                Text(t(context, 'orders.empty'),
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 16)),
               ],
             ),
           ),
@@ -72,12 +76,12 @@ class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           if (active.isNotEmpty) ...[
-            const _SectionHeader('Faol buyurtmalar'),
+            _SectionHeader(t(context, 'orders.active_section')),
             ...active.map((o) => _OrderCard(order: o)),
             const SizedBox(height: 8),
           ],
           if (history.isNotEmpty) ...[
-            const _SectionHeader('Tarix'),
+            _SectionHeader(t(context, 'orders.history_section')),
             ...history.map((o) => _OrderCard(order: o)),
           ],
         ],
@@ -85,7 +89,7 @@ class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mening buyurtmalarim')),
+      appBar: AppBar(title: Text(t(context, 'orders.title'))),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: body,
@@ -128,8 +132,8 @@ class _OrderCard extends StatelessWidget {
       final cart = context.read<CartProvider>();
       final skipped = cart.replaceFromDraft(draft);
       final snackText = skipped.isEmpty
-          ? 'Savat yangilandi'
-          : "Bu mahsulotlar mavjud emas: ${skipped.join(', ')}";
+          ? t(context, 'orders.cart_updated')
+          : "${t(context, 'orders.items_unavailable_prefix')} ${skipped.join(', ')}";
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(snackText)),
       );
@@ -137,7 +141,7 @@ class _OrderCard extends StatelessWidget {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Xatolik: $e')),
+        SnackBar(content: Text('${t(context, 'common.error')}: $e')),
       );
     }
   }
@@ -149,7 +153,7 @@ class _OrderCard extends StatelessWidget {
     // Shop
     final shopRes = await RatingDialog.show(
       context,
-      title: 'Do\'konni baholang',
+      title: t(context, 'orders.rate_shop_title'),
       subtitle: order.shopName,
     );
     if (shopRes != null) {
@@ -160,14 +164,18 @@ class _OrderCard extends StatelessWidget {
             rating: shopRes.rating,
             text: shopRes.text,
             photos: shopRes.photos);
-      } catch (_) {}
+      } catch (e, st) {
+        // Best-effort — surface to Sentry so we notice silent rating failures
+        // without blocking the user from continuing to the next step.
+        unawaited(SentryService.capture(e, st));
+      }
     }
     // Courier (if assigned)
     if (order.courierId != null) {
       if (!context.mounted) return;
       final courierRes = await RatingDialog.show(
         context,
-        title: 'Kuryerni baholang',
+        title: t(context, 'orders.rate_courier_title'),
         subtitle: order.courierName,
         allowPhotos: false,
       );
@@ -178,7 +186,9 @@ class _OrderCard extends StatelessWidget {
               targetId: order.courierId!,
               rating: courierRes.rating,
               text: courierRes.text);
-        } catch (_) {}
+        } catch (e, st) {
+          unawaited(SentryService.capture(e, st));
+        }
       }
     }
     // Optional product review for first item
@@ -187,7 +197,7 @@ class _OrderCard extends StatelessWidget {
       final p = order.items.first.product;
       final productRes = await RatingDialog.show(
         context,
-        title: 'Mahsulotni baholang',
+        title: t(context, 'orders.rate_product_title'),
         subtitle: p.name,
       );
       if (productRes != null) {
@@ -198,12 +208,14 @@ class _OrderCard extends StatelessWidget {
               rating: productRes.rating,
               text: productRes.text,
               photos: productRes.photos);
-        } catch (_) {}
+        } catch (e, st) {
+          unawaited(SentryService.capture(e, st));
+        }
       }
     }
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Rahmat! Baho yuborildi.')),
+        SnackBar(content: Text(t(context, 'orders.rating_thanks'))),
       );
     }
   }
@@ -334,7 +346,7 @@ class _OrderCard extends StatelessWidget {
                         children: [
                           const Text('🛵', style: TextStyle(fontSize: 14)),
                           const SizedBox(width: 6),
-                          Text('Kuryer: ${order.courierName}',
+                          Text('${t(context, 'orders.courier_prefix')} ${order.courierName}',
                               style: const TextStyle(
                                 color: AppColors.courier,
                                 fontSize: 12, fontWeight: FontWeight.w600,
@@ -351,7 +363,7 @@ class _OrderCard extends StatelessWidget {
                       child: OutlinedButton.icon(
                         onPressed: () => context.go('/buyer/tracking/${order.id}'),
                         icon: const Icon(Icons.location_on_outlined, size: 16),
-                        label: const Text('Buyurtmani kuzatish'),
+                        label: Text(t(context, 'orders.track_cta')),
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size(0, 40),
                           side: const BorderSide(color: AppColors.primary),
@@ -369,7 +381,7 @@ class _OrderCard extends StatelessWidget {
                             onPressed: () => _rateOrder(context),
                             icon: const Icon(Icons.star_outline_rounded,
                                 size: 18),
-                            label: const Text('Baholash'),
+                            label: Text(t(context, 'orders.rate_cta')),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.warning,
                               foregroundColor: Colors.white,
@@ -382,7 +394,7 @@ class _OrderCard extends StatelessWidget {
                           child: OutlinedButton.icon(
                             onPressed: () => _reorder(context),
                             icon: const Icon(Icons.refresh_rounded, size: 18),
-                            label: const Text('Qayta buyurtma'),
+                            label: Text(t(context, 'orders.reorder_cta')),
                             style: OutlinedButton.styleFrom(
                               minimumSize: const Size(0, 40),
                               side: const BorderSide(color: AppColors.primary),

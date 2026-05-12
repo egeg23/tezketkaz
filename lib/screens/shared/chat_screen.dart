@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../l10n/l10n.dart';
@@ -61,7 +62,11 @@ class _ChatScreenState extends State<ChatScreen> {
         if (_myUserId != null && m.senderId != _myUserId) {
           ChatApi.instance.markRead(widget.orderId).catchError((_) {});
         }
-      } catch (_) {}
+      } catch (e) {
+        // Malformed payload — log so we can spot backend regressions
+        // without crashing the chat surface.
+        debugPrint('chat:message parse error: $e');
+      }
     };
     socket.onChatMessage(_socketHandler);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadHistory());
@@ -287,11 +292,11 @@ class _Bubble extends StatelessWidget {
               if (message.imageUrl != null)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    message.imageUrl!,
+                  child: CachedNetworkImage(
+                    imageUrl: message.imageUrl!,
                     width: 200,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+                    errorWidget: (_, __, ___) => Container(
                       width: 200,
                       height: 120,
                       color: AppColors.surfaceMuted,

@@ -61,7 +61,12 @@ class AuthProvider extends ChangeNotifier {
     try {
       _membership = await MembershipApi.instance.me();
       notifyListeners();
-    } catch (_) {/* silent */}
+    } catch (e) {
+      // Membership refresh failing isn't fatal — buyer can still order,
+      // they just won't see their subscription tier. Log debug-only so we
+      // don't pollute Sentry with expected 404s on free users.
+      if (kDebugMode) debugPrint('refreshMembership failed: $e');
+    }
   }
 
   void _startMembershipTimer() {
@@ -229,7 +234,9 @@ class AuthProvider extends ChangeNotifier {
       _setLoading(false);
       return false;
     } catch (e) {
-      _error = 'Apple sign-in xatosi';
+      // Sentinel error code — UI translates via l10n key
+      // `auth.social_apple_error`. Falls back to the raw key when missing.
+      _error = 'auth.social_apple_error';
       _setLoading(false);
       return false;
     }
@@ -253,7 +260,7 @@ class AuthProvider extends ChangeNotifier {
       _setLoading(false);
       return false;
     } catch (e) {
-      _error = 'Google sign-in xatosi';
+      _error = 'auth.social_google_error';
       _setLoading(false);
       return false;
     }

@@ -214,17 +214,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         border: Border.all(color: AppColors.border),
                       ),
                       child: Row(
-                        children: const [
-                          Icon(Icons.star_rounded,
+                        children: [
+                          const Icon(Icons.star_rounded,
                               color: AppColors.warning, size: 20),
-                          SizedBox(width: 10),
+                          const SizedBox(width: 10),
                           Expanded(
-                            child: Text('Sharhlar',
-                                style: TextStyle(
+                            child: Text(t(context, 'reviews.title'),
+                                style: const TextStyle(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 14)),
                           ),
-                          Icon(Icons.chevron_right_rounded,
+                          const Icon(Icons.chevron_right_rounded,
                               color: AppColors.textHint),
                         ],
                       ),

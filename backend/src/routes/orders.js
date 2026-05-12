@@ -831,6 +831,13 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
 function receiptAuth(req, res, next) {
   if (!req.headers.authorization && typeof req.query.token === 'string' && req.query.token) {
     req.headers.authorization = `Bearer ${req.query.token}`;
+    // Strip the token from query + url so pino-http's serializer doesn't
+    // emit it into request logs (the Authorization header is already redacted).
+    delete req.query.token;
+    if (typeof req.url === 'string') {
+      req.url = req.url.replace(/([?&])token=[^&]*(&?)/, (_m, p, n) => (n ? p : ''))
+        .replace(/[?&]$/, '');
+    }
   }
   return authMiddleware(req, res, next);
 }
@@ -1051,6 +1058,11 @@ router.post('/:id/courier/pickup', authMiddleware, requireRole('courier'), async
     if (order.courierId !== req.user.id) {
       return res.status(403).json({ error: 'Not your order' });
     }
+    // State-machine guard: the order must be ready or just assigned for pickup.
+    // Allow pickedUp as a no-op for retry idempotency.
+    if (![STATUS.COURIER_ASSIGNED, STATUS.READY_FOR_PICKUP, STATUS.PICKED_UP].includes(order.status)) {
+      return res.status(409).json({ error: 'invalid_status', status: order.status });
+    }
     if (order.orderNumber?.toLowerCase() !== orderNumber?.toLowerCase()?.trim()) {
       return res.status(400).json({ error: 'Wrong order number' });
     }
@@ -1077,6 +1089,11 @@ router.post('/:id/courier/start', authMiddleware, requireRole('courier'), async 
     const order = await prisma.order.findUnique({ where: { id: req.params.id } });
     if (!order || order.courierId !== req.user.id) {
       return res.status(404).json({ error: 'Not found' });
+    }
+    // State-machine guard: must currently be picked up. Allow inDelivery as a
+    // no-op so duplicate taps from flaky network don't 400.
+    if (![STATUS.PICKED_UP, STATUS.IN_DELIVERY].includes(order.status)) {
+      return res.status(400).json({ error: 'invalid_status', status: order.status });
     }
 
     const updated = await prisma.order.update({
@@ -1191,6 +1208,21 @@ router.post('/:id/courier/complete', authMiddleware, requireRole('courier'), asy
     const order = await prisma.order.findUnique({ where: { id: req.params.id } });
     if (!order || order.courierId !== req.user.id) {
       return res.status(404).json({ error: 'Not found' });
+    }
+    // State-machine guard: only orders the courier has already been assigned
+    // or is actively delivering can be marked delivered. Anything earlier
+    // (pending/confirmed/collecting/readyForPickup) or already terminal
+    // (delivered/cancelled/refunded) is rejected so we never silently jump
+    // backwards or replay. The legacy endpoint must also accept
+    // `courierAssigned` because some batched dispatch paths skip pickup.
+    const COMPLETE_OK = new Set([
+      STATUS.COURIER_ASSIGNED,
+      STATUS.PICKED_UP,
+      STATUS.IN_DELIVERY,
+      STATUS.ARRIVED_AT_CUSTOMER,
+    ]);
+    if (!COMPLETE_OK.has(order.status)) {
+      return res.status(409).json({ error: 'invalid_status', status: order.status });
     }
 
     const updated = await prisma.order.update({

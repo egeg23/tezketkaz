@@ -76,7 +76,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     if (methods.isEmpty) {
       // No saved methods — push the management screen and bail.
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Avval karta qoshing')),
+        SnackBar(content: Text(t(context, 'subscription.add_card_first'))),
       );
       await context.push('/buyer/payment-methods');
       return null;

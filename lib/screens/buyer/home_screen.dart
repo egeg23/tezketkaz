@@ -102,10 +102,10 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Kategoriyalar', style: Theme.of(context).textTheme.headlineMedium),
+                  Text(t(context, 'buyer.categories'), style: Theme.of(context).textTheme.headlineMedium),
                   TextButton(
                     onPressed: () => context.go('/buyer/catalog/all'),
-                    child: const Text('Barchasi'),
+                    child: Text(t(context, 'common.see_all')),
                   ),
                 ],
               ),
@@ -145,10 +145,10 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Ommabop tovarlar', style: Theme.of(context).textTheme.headlineMedium),
+                  Text(t(context, 'buyer.popular'), style: Theme.of(context).textTheme.headlineMedium),
                   TextButton(
                     onPressed: () => context.go('/buyer/catalog/all'),
-                    child: const Text('Barchasi'),
+                    child: Text(t(context, 'common.see_all')),
                   ),
                 ],
               ),

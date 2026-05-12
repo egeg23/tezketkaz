@@ -253,10 +253,8 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       GoRoute(path: '/courier-verification', builder: (_, __) => const CourierVerificationScreen()),
       // Phase 12 — read-only Privacy / Terms viewer (tabbed). Auth-agnostic so
       // store reviewers can reach it from the profile screen during review.
-      GoRoute(path: '/legal', builder: (_, __) => const LegalScreen()),
-
-      // Phase 13.1.5 — legal viewer (T&C + Privacy Policy). Tab is selected
-      // via ?tab=terms|privacy.
+      // Phase 13.1.5 — accepts `?tab=terms|privacy` to deep-link to either
+      // tab (used by OTP consent links).
       GoRoute(
         path: '/legal',
         builder: (_, s) => LegalScreen(

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
@@ -223,8 +224,14 @@ class _Row extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: p.imageUrl.isNotEmpty
-                    ? Image.network(p.imageUrl, width: 56, height: 56, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _ph())
+                    ? CachedNetworkImage(
+                        imageUrl: p.imageUrl,
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => _ph(),
+                        placeholder: (_, __) => _ph(),
+                      )
                     : _ph(),
               ),
               const SizedBox(width: 12),

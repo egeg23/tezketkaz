@@ -18,6 +18,9 @@ const REFUNDABLE_STATUSES = new Set([
   'in_delivery', // tolerate alt spelling
 ]);
 
+// eslint-disable-next-line global-require
+const logger = require('../lib/logger');
+
 async function refundOrder(prisma, { orderId, amount, reason, actorId, ipAddress }) {
   if (!orderId) {
     throw Object.assign(new Error('orderId required'), { status: 400 });
@@ -44,9 +47,12 @@ async function refundOrder(prisma, { orderId, amount, reason, actorId, ipAddress
   try {
     await loyalty.refundOrder(prisma, order.buyerId, order.id);
   } catch (err) {
-    // Don't block refund on loyalty failure; log via audit.
-    // eslint-disable-next-line no-console
-    // (logger import avoided to keep service-pure)
+    // Don't block refund on loyalty failure, but DO emit a structured log so
+    // support can see when loyalty reversal needs manual cleanup.
+    logger.warn(
+      { err: err.message, orderId, userId: order.buyerId },
+      'refund: loyalty reversal failed',
+    );
   }
 
   const newRefunded = alreadyRefunded + amt;

@@ -6,6 +6,31 @@
 - 🟠 **SOON** — нужно сделать в течение Phase 13 (4-6 недель), иначе блокирует определённые фичи
 - 🟢 **BEFORE PILOT** — нужно сделать до первого магазина, можно отложить на конец Phase 13
 
+## Граф зависимостей (что блокирует что)
+
+```
+A. Merchant credentials  ──► payments-go-live (block D в payments-go-live.md)
+                         ──► поставить USE_MOCK_PAYMENTS=false
+B. Firebase project      ──► FCM push-уведомления
+                         ──► flutterfire configure → lib/firebase_options.dart
+C. Android signing       ──► (нужно перед D) GitHub release CI tag v1.0.x
+D. Play Console          ──► требует C (keystore) и B (google-services.json)
+E. Apple Developer       ──► требует D-U-N-S (1-5 дней) — старт ВМЕСТЕ с A!
+                         ──► требует B (GoogleService-Info.plist)
+F. iOS match (signing)   ──► требует E (developer account)
+G. Домен + Cloudflare    ──► требует .uz регистратора (часы-сутки)
+                         ──► блокирует marketing-deploy + production URLs
+H. Soliq.uz fiscal       ──► требует EDS USB key (1-3 дня)
+                         ──► блокирует cashless > 100k UZS в проде
+I. Hosting/Deploy        ──► требует G (домен) + H2 (env vars) + B (FCM creds)
+                         ──► блокирует smoke tests против прода
+J. Контракты магазинов   ──► требует I (api.tezketkaz.uz онлайн) и vendor-next deploy
+K. Курьеры               ──► требует D+E (приложения в сторах) или TestFlight build
+```
+
+**Главное:** `A. Merchant credentials` и `E. Apple Developer` оба занимают
+1-2 недели wall-time. Если не подал заявки в первый день — сдвинется ВСЁ.
+
 ---
 
 ## 🔴 NOW (срочно — на этой неделе)
@@ -97,9 +122,18 @@ base64 release.jks > release.jks.base64
 - [ ] Internal Testing track → добавить себя как tester
 - [ ] Загрузить первый APK вручную (через UI) или дождаться когда я докручу CI и просто запушить `git tag v1.0.1`
 
-### E. Apple Developer + App Store Connect (~30 минут)
+### E. Apple Developer + App Store Connect (1–2 недели wall-time, ~30 минут активной работы)
+
+> **Внимание:** Apple Developer enrollment для юр.лица — это **1–2 недели**
+> wall-time (Apple вручную верифицирует D-U-N-S номер компании, иногда требует
+> повторных документов). Individual enrollment быстрее (часы–день). **Начинай
+> в одно время с merchant accounts**, не позже.
 
 - [ ] **Apple Developer account** ($99/год): https://developer.apple.com/programs/enroll/
+  - Для юр.лица: D-U-N-S Number обязателен (можно получить бесплатно через
+    https://www.dnb.com/duns-number.html — 1–5 рабочих дней).
+  - Apple ID, привязанный к корпоративной почте (`ops@tezketkaz.uz`), а не к
+    личной — если человек уйдёт, доступ останется.
 - [ ] **App ID**: developer.apple.com → Certificates, IDs & Profiles → Identifiers → "+" → App IDs → Bundle ID `uz.tezketkaz.app`
 - [ ] **App Store Connect**: https://appstoreconnect.apple.com → "+" → New App → Bundle ID = `uz.tezketkaz.app`
 - [ ] **App Store Connect API Key** (для CI):
@@ -153,6 +187,57 @@ base64 release.jks > release.jks.base64
   - STIR/ИНН (9 или 14 цифр)
   - VAT number (если плательщик НДС)
   - Класс активности (ОКЭД код)
+
+### H2. Дополнительные env-переменные production-бэкенда
+
+Кроме платёжных и Firebase кредов (выше) бэкенду в проде нужны ещё несколько
+переменных. Полный шаблон — `backend/.env.example`. Кратко то, что часто
+забывают:
+
+```env
+# Auth — обязательно сгенерировать УНИКАЛЬНЫЕ secrets (≥32 символа)
+JWT_SECRET=<pwgen -s 48 1>
+REFRESH_SECRET=<pwgen -s 48 1>
+
+# Storage (после R2 setup — block I ниже)
+STORAGE_PROVIDER=r2
+S3_BUCKET=tezketkaz-prod
+S3_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com
+S3_REGION=auto
+S3_ACCESS_KEY=<R2 API token access key>
+S3_SECRET_KEY=<R2 API token secret>
+S3_PUBLIC_BASE=https://cdn.tezketkaz.uz   # или прямая R2 ссылка
+PUBLIC_URL=https://api.tezketkaz.uz
+
+# SMS — Eskiz прод-режим (после получения корпоративного аккаунта)
+USE_MOCK_SMS=false
+ESKIZ_EMAIL=<регистрация на https://my.eskiz.uz>
+ESKIZ_PASSWORD=<пароль из кабинета Eskiz>
+ESKIZ_FROM=4546   # одобренный sender ID
+
+# Maps (опционально, для road-aware ETA)
+YANDEX_ROUTING_KEY=<https://developer.tech.yandex.ru>
+DGIS_API_KEY=<https://dev.2gis.ru>
+
+# Транзакционный email (опционально, для KYC / invoices)
+RESEND_API_KEY=<https://resend.com>
+
+# Soliq (Wave 3 / block H выше)
+USE_MOCK_SOLIQ=false
+SOLIQ_API_KEY=<из кабинета Soliq.uz, см. soliq-fiscal-setup.md>
+
+# Observability
+SENTRY_DSN=<из https://sentry.io/settings/ → Projects → tezketkaz-backend>
+LOG_LEVEL=info
+
+# Smoke-тестовый телефон (нужен и на бэке, и в GitHub secrets)
+TEST_PHONES_ACCEPT_123456=+998900000001
+```
+
+В GitHub repo secrets дополнительно:
+- `SMOKE_BASE_URL` = `https://api.tezketkaz.uz`
+- `SMOKE_TEST_PHONE` = `+998900000001` (тот же что в `TEST_PHONES_ACCEPT_123456`)
+- `SENTRY_AUTH_TOKEN` + `SENTRY_ORG` — для тегов релизов из CI (опционально)
 
 ### I. Hosting / Deploy
 

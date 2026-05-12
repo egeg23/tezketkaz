@@ -68,7 +68,7 @@ class _OtpScreenState extends State<OtpScreen> {
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(auth.error ?? 'Неверный код'),
+          content: Text(auth.error ?? t(context, 'otp.invalid_code')),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -116,7 +116,7 @@ class _OtpScreenState extends State<OtpScreen> {
                 if (!ok) {
                   ScaffoldMessenger.of(dialogCtx).showSnackBar(
                     SnackBar(
-                      content: Text(auth.error ?? 'Error'),
+                      content: Text(auth.error ?? t(dialogCtx, 'common.error')),
                       backgroundColor: AppColors.error,
                       behavior: SnackBarBehavior.floating,
                     ),
@@ -163,7 +163,7 @@ class _OtpScreenState extends State<OtpScreen> {
             children: [
               const SizedBox(height: 16),
               Text(
-                'SMS kod',
+                t(context, 'otp.title'),
                 style: Theme.of(context).textTheme.displayMedium,
               ),
               const SizedBox(height: 8),
@@ -173,7 +173,7 @@ class _OtpScreenState extends State<OtpScreen> {
                     color: AppColors.textSecondary,
                   ),
                   children: [
-                    const TextSpan(text: 'Kod yuborildi: '),
+                    TextSpan(text: '${t(context, 'otp.sent_to')} '),
                     TextSpan(
                       text: widget.phone,
                       style: const TextStyle(
@@ -239,14 +239,14 @@ class _OtpScreenState extends State<OtpScreen> {
               Center(
                 child: _resendSeconds > 0
                   ? Text(
-                      'Qayta yuborish: $_resendSeconds s',
+                      '${t(context, 'otp.resend_in')} $_resendSeconds s',
                       style: Theme.of(context).textTheme.bodyMedium,
                     )
                   : TextButton(
                       onPressed: _resend,
-                      child: const Text(
-                        'Kodni qayta yuborish',
-                        style: TextStyle(color: AppColors.primary),
+                      child: Text(
+                        t(context, 'otp.resend'),
+                        style: const TextStyle(color: AppColors.primary),
                       ),
                     ),
               ),
@@ -259,15 +259,17 @@ class _OtpScreenState extends State<OtpScreen> {
                   color: AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: AppColors.primary, size: 16),
-                    SizedBox(width: 8),
-                    Text(
-                      'Прототип: используйте код 123456',
-                      style: TextStyle(
-                        color: AppColors.primaryDark,
-                        fontSize: 13,
+                    const Icon(Icons.info_outline, color: AppColors.primary, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        t(context, 'otp.prototype_hint'),
+                        style: const TextStyle(
+                          color: AppColors.primaryDark,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ],
