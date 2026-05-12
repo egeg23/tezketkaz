@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/order_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/loading_shimmer.dart';
 import 'shop_shell.dart';
 
 class ShopOrdersScreen extends StatefulWidget {
@@ -135,26 +136,47 @@ class _OrdersList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (orders.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(emptyEmoji, style: const TextStyle(fontSize: 56)),
-            const SizedBox(height: 12),
-            Text(emptyText,
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 16)),
-          ],
+    // Phase 13.3.4 — RefreshIndicator wraps every tab so the operator can
+    // pull-to-refresh from any of the three (Yangi / Jarayonda / Tayyor).
+    // Shimmer kicks in during the initial load when the list is empty AND
+    // the provider is actively loading.
+    final provider = context.watch<OrderProvider>();
+    Widget content;
+    if (provider.isLoading && orders.isEmpty) {
+      content = const LoadingShimmer(itemCount: 4, itemHeight: 140);
+    } else if (orders.isEmpty) {
+      content = ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          const SizedBox(height: 120),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(emptyEmoji, style: const TextStyle(fontSize: 56)),
+                const SizedBox(height: 12),
+                Text(emptyText,
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 16)),
+              ],
+            ),
+          ),
+        ],
+      );
+    } else {
+      content = ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        itemCount: orders.length,
+        itemBuilder: (_, i) => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _ShopOrderCard(order: orders[i], readonly: readonly),
         ),
       );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: orders.length,
-      itemBuilder: (_, i) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: _ShopOrderCard(order: orders[i], readonly: readonly),
-      ),
+    return RefreshIndicator(
+      onRefresh: () =>
+          context.read<OrderProvider>().loadShopOrders('shop_korzinka'),
+      child: content,
     );
   }
 }

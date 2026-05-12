@@ -4,6 +4,7 @@ import '../../models/models.dart';
 import '../../providers/cart_provider.dart';
 import '../../services/catalog_api.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/loading_shimmer.dart';
 import '../../widgets/product_card.dart';
 
 const _categoryLabels = {
@@ -142,38 +143,47 @@ class _CatalogScreenState extends State<CatalogScreen> {
         ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _filtered.isEmpty
-              ? Center(child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('🔍', style: TextStyle(fontSize: 56)),
-                      const SizedBox(height: 12),
-                      Text('Topilmadi',
-                          style: Theme.of(context).textTheme.headlineMedium),
-                      const SizedBox(height: 4),
-                      const Text(
-                        "Boshqa kategoriya yoki so'rovni sinab ko'ring",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: AppColors.textSecondary),
+          // Phase 13.3.4 — shimmer grid keeps the UI shape consistent during load.
+          ? const LoadingShimmerGrid(itemCount: 6, aspectRatio: 0.74)
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: _filtered.isEmpty
+                  // Wrap empty state in a scrollable so pull-to-refresh still works.
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        const SizedBox(height: 80),
+                        Center(child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('🔍', style: TextStyle(fontSize: 56)),
+                              const SizedBox(height: 12),
+                              Text('Topilmadi',
+                                  style: Theme.of(context).textTheme.headlineMedium),
+                              const SizedBox(height: 4),
+                              const Text(
+                                "Boshqa kategoriya yoki so'rovni sinab ko'ring",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        )),
+                      ],
+                    )
+                  : GridView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2, crossAxisSpacing: 14,
+                        mainAxisSpacing: 14, childAspectRatio: 0.74,
                       ),
-                    ],
-                  ),
-                ))
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: GridView.builder(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2, crossAxisSpacing: 14,
-                      mainAxisSpacing: 14, childAspectRatio: 0.74,
+                      itemCount: _filtered.length,
+                      itemBuilder: (context, i) => ProductCard(product: _filtered[i]),
                     ),
-                    itemCount: _filtered.length,
-                    itemBuilder: (context, i) => ProductCard(product: _filtered[i]),
-                  ),
-                ),
+            ),
     );
   }
 }

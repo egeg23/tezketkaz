@@ -10,6 +10,7 @@ import '../../services/favorite_api.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/banner_carousel.dart';
 import '../../widgets/common.dart';
+import '../../widgets/loading_shimmer.dart';
 import '../../widgets/search_bar.dart';
 
 /// Shops catalogue with 4 vertical tabs (grocery / restaurant / pharmacy /
@@ -185,9 +186,11 @@ class _ShopsTabViewState extends State<_ShopsTabView>
           ),
           const SizedBox(height: 16),
           if (_loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 60),
-              child: Center(child: CircularProgressIndicator()),
+            // Phase 13.3.4 — Wolt-style skeleton replaces the spinner so the
+            // page has the same shape during load as after data lands.
+            const SizedBox(
+              height: 420,
+              child: LoadingShimmer(itemCount: 4, itemHeight: 110),
             )
           else if (_error != null)
             ErrorView(message: _error!, onRetry: _load)

@@ -186,11 +186,44 @@ base64 release.jks > release.jks.base64
 
 ---
 
-## Запланировано на следующие волны (ничего не нужно делать сейчас)
+## Phase 13 — статус волн (все код-работы завершены)
 
-- **Wave 3** (в работе): Soliq integration, marketing landing, payment creds runbook
-- **Wave 4**: hardcoded l10n → ru/uz/en/kk; role selection screen; KYC re-upload; delivery photo proof
-- **Wave 5**: Shop mobile refund/promo/analytics; vendor 403 fixes; heatmap UI; cookie banner; Privacy Nutrition Labels
-- **Wave 6**: Smoke tests; DR runbooks; receipts PDF; pull-to-refresh; onboarding playbooks
+- ✅ **Wave 1**: Postgres миграция + R2/S3 storage + T&C enforcement
+- ✅ **Wave 2**: App icons (Pin+Lightning) + Fastfile + Firebase prep
+- ✅ **Wave 3**: Soliq.uz fiscal integration + Marketing landing + Payment audit + diagnose CLI
+- ✅ **Wave 4**: l10n hardcoded → keys + Kazakh translation + role selection + KYC re-upload + delivery photo proof
+- ✅ **Wave 5**: Shop mobile refund/promo/analytics + vendor-next 403 fixes + heatmap UI + cookie banner + Privacy labels
+- ✅ **Wave 6**: Smoke test CLI + DR runbooks + receipts PDF + pull-to-refresh/skeleton states + onboarding playbooks
 
-После Wave 6 → пилот в Ташкенте → сбор фидбека → Phase 14.
+**Тестовая база:** 560/560 backend тестов зелёные на Postgres.
+
+## После Wave 6 → запуск пилота
+
+Чек-лист сжатый — раскрытие в runbook'ах:
+
+1. **Реги­стра­ции и креды** (см. блоки 🔴 NOW и 🟠 SOON выше)
+2. **Деплой инфраструктуры** (см. `docs/runbooks/marketing-deploy.md`, hosting в блоке I выше)
+3. **Smoke test после каждого деплоя** — `node backend/scripts/smoke-test.js` (`docs/runbooks/smoke-tests.md`)
+4. **DR подготовка** — изучить `docs/runbooks/disaster-recovery.md` ДО запуска, чтобы при сбое не паниковать
+5. **Онбординг магазинов** — `docs/runbooks/shop-onboarding.md` (5-10 партнёров для пилота)
+6. **Онбординг курьеров** — `docs/runbooks/courier-onboarding.md` (10-20 курьеров)
+7. **Запуск пилота** — `docs/runbooks/pilot-launch-checklist.md` (2 недели → 1 неделя → запуск → 1-я неделя → 1-й месяц)
+
+После пилота → сбор фидбека → Phase 14 (улучшения по результатам пилота).
+
+## Все runbook'и (в `docs/runbooks/`)
+
+| Файл | Что описывает |
+|------|---------------|
+| `firebase-prod-setup.md` | Создание Firebase проекта, FCM, service account |
+| `soliq-fiscal-setup.md` | Регистрация в Soliq.uz, fiscal API, per-shop onboarding |
+| `marketing-deploy.md` | Cloudflare Pages, домен, DNS |
+| `payments-go-live.md` | Активация Click/Payme/Uzum/Kaspi из mock-mode |
+| `smoke-tests.md` | Post-deploy smoke verification |
+| `disaster-recovery.md` | 9 сценариев отказа + recovery procedures |
+| `shop-onboarding.md` | Подключение первых магазинов-партнёров |
+| `courier-onboarding.md` | Найм и обучение курьеров |
+| `pilot-launch-checklist.md` | Тайминг запуска пилота |
+| `fastlane/README.md` | iOS/Android signing setup |
+| `docs/privacy/ios-privacy-labels.md` | App Store Privacy Labels |
+| `docs/privacy/android-data-safety.md` | Play Store Data Safety |

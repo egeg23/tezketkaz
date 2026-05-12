@@ -6,14 +6,34 @@ import '../../providers/order_provider.dart';
 import '../../services/order_api.dart';
 import '../../services/review_api.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/loading_shimmer.dart';
 import '../../widgets/rating_dialog.dart';
 
-class BuyerOrdersScreen extends StatelessWidget {
+class BuyerOrdersScreen extends StatefulWidget {
   const BuyerOrdersScreen({super.key});
 
   @override
+  State<BuyerOrdersScreen> createState() => _BuyerOrdersScreenState();
+}
+
+class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Phase 13.3.4 — kick off a reload on entry so the user always sees
+    // fresh data; the shimmer fills the visual gap until it lands.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<OrderProvider>().loadBuyerOrders();
+    });
+  }
+
+  Future<void> _refresh() => context.read<OrderProvider>().loadBuyerOrders();
+
+  @override
   Widget build(BuildContext context) {
-    final orders = context.watch<OrderProvider>().all;
+    final provider = context.watch<OrderProvider>();
+    final orders = provider.all;
     final active = orders.where((o) =>
       o.status != AppOrderStatus.delivered &&
       o.status != AppOrderStatus.confirmedByBuyer &&
@@ -23,10 +43,17 @@ class BuyerOrdersScreen extends StatelessWidget {
       o.status == AppOrderStatus.confirmedByBuyer ||
       o.status == AppOrderStatus.cancelled).toList();
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Mening buyurtmalarim')),
-      body: orders.isEmpty
-        ? const Center(
+    Widget body;
+    if (provider.isLoading && orders.isEmpty) {
+      // Phase 13.3.4 — Wolt-style skeleton while the first fetch is in flight.
+      body = const LoadingShimmer(itemCount: 5, itemHeight: 110);
+    } else if (orders.isEmpty) {
+      // Wrap empty state in a scrollable so pull-to-refresh still works.
+      body = ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(height: 120),
+          Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -36,21 +63,33 @@ class BuyerOrdersScreen extends StatelessWidget {
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
               ],
             ),
-          )
-        : ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (active.isNotEmpty) ...[
-                const _SectionHeader('Faol buyurtmalar'),
-                ...active.map((o) => _OrderCard(order: o)),
-                const SizedBox(height: 8),
-              ],
-              if (history.isNotEmpty) ...[
-                const _SectionHeader('Tarix'),
-                ...history.map((o) => _OrderCard(order: o)),
-              ],
-            ],
           ),
+        ],
+      );
+    } else {
+      body = ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (active.isNotEmpty) ...[
+            const _SectionHeader('Faol buyurtmalar'),
+            ...active.map((o) => _OrderCard(order: o)),
+            const SizedBox(height: 8),
+          ],
+          if (history.isNotEmpty) ...[
+            const _SectionHeader('Tarix'),
+            ...history.map((o) => _OrderCard(order: o)),
+          ],
+        ],
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Mening buyurtmalarim')),
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: body,
+      ),
     );
   }
 }

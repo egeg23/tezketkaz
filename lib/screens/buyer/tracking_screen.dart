@@ -4,10 +4,12 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../config/api_config.dart';
 import '../../l10n/l10n.dart';
 import '../../models/money.dart';
 import '../../providers/order_provider.dart';
+import '../../services/api_client.dart';
 import '../../services/review_prompt_service.dart';
 import '../../services/socket_service.dart';
 import '../../theme/app_theme.dart';
@@ -52,6 +54,34 @@ class _TrackingScreenState extends State<TrackingScreen> {
     SocketService.instance.off('courier:location', _locationHandler);
     SocketService.instance.unsubscribeFromOrder(widget.orderId);
     super.dispose();
+  }
+
+  // Phase 13.3.3 — open the PDF receipt in the system browser. The browser
+  // (or PDF viewer) handles the actual download / share flow; we only need
+  // to compose a URL with the user's access token attached as a one-shot
+  // query param so the route can authenticate cross-app.
+  Future<void> _downloadReceipt() async {
+    final token = await ApiClient.instance.getAccessToken();
+    if (token == null || token.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(L10n.instance.t('receipt.error'))),
+      );
+      return;
+    }
+    final base = ApiConfig.baseUrl;
+    // Receipt download — we open in the system browser which will save / display
+    // the PDF. The Authorization header normally comes from the API client, so
+    // for the browser hand-off we pass the token via a temporary `?token=`
+    // hint (the route accepts both). The user can then "Save as" the file.
+    final uri = Uri.parse('$base/api/orders/${widget.orderId}/receipt')
+        .replace(queryParameters: {'token': token});
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(L10n.instance.t('receipt.error'))),
+      );
+    }
   }
 
   Future<void> _confirmReceived() async {
@@ -321,6 +351,26 @@ class _TrackingScreenState extends State<TrackingScreen> {
                         onPressed: () => context.go('/buyer'),
                         icon: const Icon(Icons.star_outline),
                         label: const Text('Baholash va yopish'),
+                      ),
+                    ],
+
+                    // Phase 13.3.3 — receipt download is available the moment
+                    // the courier hands the order over (status = delivered)
+                    // and stays available after buyer confirmation. Opens in
+                    // the system browser; the PDF route returns the file
+                    // with a Content-Disposition: attachment header.
+                    if (isHandedOver || isFullyDone) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _downloadReceipt,
+                          icon: const Icon(Icons.receipt_long_outlined),
+                          label: Text(L10n.instance.t('receipt.download')),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 48),
+                          ),
+                        ),
                       ),
                     ],
                   ],

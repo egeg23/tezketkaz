@@ -13,6 +13,7 @@ import '../../providers/courier_state_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../services/heatmap_api.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/loading_shimmer.dart';
 
 /// Phase 2 courier home — shift toggle, live map and incoming dispatch
 /// offer banner. Wraps the legacy "available orders" list so the existing
@@ -112,8 +113,19 @@ class _CourierHomeScreenState extends State<CourierHomeScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: CustomScrollView(
-        slivers: [
+      // Phase 13.3.4 — pull-to-refresh re-syncs courier state (online flag,
+      // shift stats) AND re-fetches available orders. Shows the platform
+      // RefreshIndicator at the top of the CustomScrollView.
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await Future.wait([
+            context.read<CourierStateProvider>().bootstrap(),
+            context.read<OrderProvider>().loadCourierData(),
+          ]);
+        },
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
           // AppBar
           SliverAppBar(
             floating: true,
@@ -344,7 +356,15 @@ class _CourierHomeScreenState extends State<CourierHomeScreen> {
                     ),
                   ),
                   if (available.isEmpty && pendingOffer == null)
-                    _WaitingForOrders(hasActive: active != null)
+                    // Phase 13.3.4 — show shimmer skeleton while the first
+                    // fetch is in flight; once it lands and we still have no
+                    // orders, fall through to the "waiting" empty state.
+                    orders.isLoading
+                        ? const SizedBox(
+                            height: 320,
+                            child: LoadingShimmer(itemCount: 3, itemHeight: 96),
+                          )
+                        : _WaitingForOrders(hasActive: active != null)
                   else
                     ...available.map((o) => Padding(
                           padding:
@@ -378,6 +398,7 @@ class _CourierHomeScreenState extends State<CourierHomeScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

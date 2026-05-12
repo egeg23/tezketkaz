@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/product_api.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/loading_shimmer.dart';
 import 'shop_shell.dart' show kShopColor;
 import 'shop_product_editor.dart';
 import 'shop_products_import.dart';
@@ -136,45 +137,63 @@ class _ShopProductsScreenState extends State<ShopProductsScreen> {
             ),
           ),
 
-          if (_loading)
-            const Expanded(child: Center(child: CircularProgressIndicator()))
-          else if (_error != null)
-            Expanded(child: Center(child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text('Xatolik: $_error', textAlign: TextAlign.center),
-            )))
-          else if (filtered.isEmpty)
-            Expanded(child: Center(child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('📦', style: TextStyle(fontSize: 64)),
-                const SizedBox(height: 12),
-                Text(
-                  _filter.isEmpty ? 'Mahsulotlar yo\'q' : 'Topilmadi',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                if (_filter.isEmpty) ...[
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Yangi qo\'shing yoki Excel orqali yuklang',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                ],
-              ],
-            )))
-          else
-            Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
-                itemCount: filtered.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (_, i) => _Row(
-                  product: filtered[i],
-                  onTap: () => _openEditor(product: filtered[i]),
-                  onDelete: () => _delete(filtered[i]),
-                ),
-              ),
+          // Phase 13.3.4 — shimmer skeleton during the initial load + pull-to-
+          // refresh wraps the list/empty/error states so the operator can
+          // re-fetch from any one of them.
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: _loading
+                  ? const LoadingShimmer(itemCount: 6, itemHeight: 88)
+                  : _error != null
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            const SizedBox(height: 80),
+                            Center(child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Text('Xatolik: $_error', textAlign: TextAlign.center),
+                            )),
+                          ],
+                        )
+                      : filtered.isEmpty
+                          ? ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              children: [
+                                const SizedBox(height: 80),
+                                Center(child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text('📦', style: TextStyle(fontSize: 64)),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      _filter.isEmpty ? 'Mahsulotlar yo\'q' : 'Topilmadi',
+                                      style: Theme.of(context).textTheme.headlineMedium,
+                                    ),
+                                    if (_filter.isEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      const Text(
+                                        'Yangi qo\'shing yoki Excel orqali yuklang',
+                                        style: TextStyle(color: AppColors.textSecondary),
+                                      ),
+                                    ],
+                                  ],
+                                )),
+                              ],
+                            )
+                          : ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 8),
+                              itemBuilder: (_, i) => _Row(
+                                product: filtered[i],
+                                onTap: () => _openEditor(product: filtered[i]),
+                                onDelete: () => _delete(filtered[i]),
+                              ),
+                            ),
             ),
+          ),
         ],
       ),
     );
