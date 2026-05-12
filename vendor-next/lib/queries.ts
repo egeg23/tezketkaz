@@ -156,9 +156,8 @@ export function useShop(id: string | null | undefined) {
 export function useUpdateShop() {
   const qc = useQueryClient();
   return useMutation({
-    // NOTE: PATCH /api/shops/:id isn't exposed in backend/src/routes/shops.js
-    // today (admin uses /api/admin/shops/:id). When the shop-owner-callable
-    // endpoint lands, this will work. Settings page tolerates failure.
+    // Phase 13.2.7 — backend now exposes an owner-callable PATCH /api/shops/:id
+    // (ShopMember owner/manager required) alongside the admin route.
     mutationFn: (vars: { id: string; body: Partial<Shop> }) =>
       api(`/api/shops/${vars.id}`, { method: "PATCH", body: vars.body }),
     onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["shop", v.id] }),
@@ -429,13 +428,12 @@ export function useShopReviews(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function useShopCoupons(shopId: string | null | undefined) {
-  // NOTE: backend `/api/coupons` is admin-gated (requireAdmin). For a shop
-  // owner this will 403 today, in which case the promotions page renders a
-  // "Coming soon" / contact-admin stub. If/when the backend exposes a shop-
-  // scoped list endpoint, swap the URL here.
+  // Phase 13.2.7 — switched to the owner-callable `/api/shops/:id/coupons`
+  // endpoint added in Phase 13.2.6. The admin-only `/api/coupons` route is
+  // no longer reachable from the vendor portal.
   return useQuery<{ coupons: Coupon[] }>({
     queryKey: ["shop-coupons", shopId],
-    queryFn: () => api<{ coupons: Coupon[] }>(`/api/coupons?shopId=${shopId}`),
+    queryFn: () => api<{ coupons: Coupon[] }>(`/api/shops/${shopId}/coupons`),
     enabled: !!shopId,
     retry: false,
   });

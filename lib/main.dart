@@ -51,11 +51,15 @@ import 'screens/courier/active_order_screen.dart';
 import 'screens/courier/earnings_screen.dart';
 import 'screens/courier/performance_screen.dart';
 import 'screens/courier/courier_profile_screen.dart';
+import 'screens/courier/heatmap_screen.dart';
 import 'screens/shop/shop_shell.dart';
 import 'screens/shop/shop_orders_screen.dart';
 import 'screens/shop/shop_other_screens.dart';
 import 'screens/shop/shop_products_screen.dart';
 import 'screens/shop/shop_settings_screen.dart';
+import 'screens/shop/shop_refunds_screen.dart';
+import 'screens/shop/shop_promo_screen.dart';
+import 'screens/shop/shop_analytics_screen.dart';
 import 'screens/shared/role_switcher_screen.dart';
 import 'screens/shared/courier_verification_screen.dart';
 import 'screens/shared/chat_screen.dart';
@@ -381,6 +385,8 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
           GoRoute(path: '/courier/earnings', builder: (_, __) => const EarningsScreen()),
           GoRoute(path: '/courier/performance', builder: (_, __) => const PerformanceScreen()),
           GoRoute(path: '/courier/profile', builder: (_, __) => const CourierProfileScreen()),
+          // Phase 13.2.8 — full-screen demand heatmap with bottom sheet + directions.
+          GoRoute(path: '/courier/heatmap', builder: (_, __) => const HeatmapScreen()),
         ],
       ),
 
@@ -392,6 +398,10 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
           GoRoute(path: '/shop/history', builder: (_, __) => const ShopHistoryScreen()),
           GoRoute(path: '/shop/profile', builder: (_, __) => const ShopProfileScreen()),
           GoRoute(path: '/shop/settings', builder: (_, __) => const ShopSettingsScreen()),
+          // Phase 13.2.6 — shop owner refunds, promo coupons, analytics.
+          GoRoute(path: '/shop/refunds', builder: (_, __) => const ShopRefundsScreen()),
+          GoRoute(path: '/shop/promo', builder: (_, __) => const ShopPromoScreen()),
+          GoRoute(path: '/shop/analytics', builder: (_, __) => const ShopAnalyticsScreen()),
         ],
       ),
     ],

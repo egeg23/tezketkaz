@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/l10n.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../theme/app_theme.dart';
@@ -209,6 +210,52 @@ class ShopProfileScreen extends StatelessWidget {
                     _Stat('$delivered', 'Buyurtmalar'),
                     _Stat('98%', 'Vaqtida'),
                   ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Phase 13.2.6 — quick access to refunds / promo / analytics.
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Text('📊', style: TextStyle(fontSize: 22)),
+                  title: Text(t(context, 'shop.analytics.title'),
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: Text(t(context, 'shop.analytics.subtitle'),
+                      style: const TextStyle(fontSize: 12)),
+                  trailing: const Icon(Icons.chevron_right, color: AppColors.textHint),
+                  onTap: () => context.push('/shop/analytics'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                ),
+                const Divider(height: 1, indent: 56, endIndent: 16),
+                ListTile(
+                  leading: const Text('🏷️', style: TextStyle(fontSize: 22)),
+                  title: Text(t(context, 'shop.promo.title'),
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: Text(t(context, 'shop.promo.subtitle'),
+                      style: const TextStyle(fontSize: 12)),
+                  trailing: const Icon(Icons.chevron_right, color: AppColors.textHint),
+                  onTap: () => context.push('/shop/promo'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                ),
+                const Divider(height: 1, indent: 56, endIndent: 16),
+                ListTile(
+                  leading: const Text('↩️', style: TextStyle(fontSize: 22)),
+                  title: Text(t(context, 'shop.refunds.title'),
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: Text(t(context, 'shop.refunds.subtitle'),
+                      style: const TextStyle(fontSize: 12)),
+                  trailing: const Icon(Icons.chevron_right, color: AppColors.textHint),
+                  onTap: () => context.push('/shop/refunds'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                 ),
               ],
             ),

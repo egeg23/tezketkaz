@@ -230,6 +230,40 @@ class _CourierHomeScreenState extends State<CourierHomeScreen> {
                                 onTap: _toggleHeatmap,
                               ),
                             ),
+                          // Phase 13.2.8 — quick link to the full-screen
+                          // heatmap with bottom-sheet directions handoff.
+                          Positioned(
+                            left: 8,
+                            bottom: 8,
+                            child: Material(
+                              color: AppColors.surface,
+                              borderRadius: BorderRadius.circular(20),
+                              elevation: 4,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(20),
+                                onTap: () => context.push('/courier/heatmap'),
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.map_outlined,
+                                          size: 14,
+                                          color: AppColors.textPrimary),
+                                      SizedBox(width: 4),
+                                      Text('Talab xaritasi',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.textPrimary,
+                                          )),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
