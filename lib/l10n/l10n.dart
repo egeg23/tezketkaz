@@ -3237,6 +3237,34 @@ class L10n extends ChangeNotifier {
       'en': 'sold (30 d)',
       'kk': 'дана (30 күн)',
     },
+
+    // Phase 13.3.3 — PDF receipt download.
+    'receipt.download': {
+      'uz': 'Chekni yuklab olish',
+      'ru': 'Скачать чек',
+      'en': 'Download receipt',
+      'kk': 'Түбіртекті жүктеу',
+    },
+    'receipt.error': {
+      'uz': "Chekni ochib bo'lmadi",
+      'ru': 'Не удалось открыть чек',
+      'en': 'Could not open the receipt',
+      'kk': 'Түбіртекті ашу мүмкін болмады',
+    },
+
+    // Phase 13.3.4 — pull-to-refresh + empty / loading list states.
+    'list.pull_to_refresh': {
+      'uz': "Yangilash uchun pastga torting",
+      'ru': 'Потяните вниз, чтобы обновить',
+      'en': 'Pull down to refresh',
+      'kk': 'Жаңарту үшін төмен тартыңыз',
+    },
+    'list.refreshing': {
+      'uz': 'Yangilanmoqda…',
+      'ru': 'Обновляется…',
+      'en': 'Refreshing…',
+      'kk': 'Жаңартылуда…',
+    },
   };
 }
 

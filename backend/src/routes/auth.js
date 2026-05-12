@@ -87,8 +87,14 @@ router.post('/send-otp', async (req, res, next) => {
       return errResp(res, 429, `Too many requests, wait ${Math.round(debounceMs / 1000)}s`);
     }
 
-    // In dev / mock SMS: always 123456 for testing
-    const code = env.isProd && !env.useMockSms ? genCode() : '123456';
+    // In dev / mock SMS: always 123456 for testing.
+    // Phase 13.3.1 — smoke-test allowlist: TEST_PHONES_ACCEPT_123456 phones
+    // also receive the fixed '123456' code in production so post-deploy
+    // smoke tests can exercise auth without burning a real SMS. The list is
+    // operator-controlled; keep it tightly scoped (see config/env.js).
+    const isTestPhone = env.testPhonesAccept123456.has(phone);
+    const useFixedCode = !env.isProd || env.useMockSms || isTestPhone;
+    const code = useFixedCode ? '123456' : genCode();
 
     await prisma.otpCode.create({
       data: {
@@ -98,9 +104,17 @@ router.post('/send-otp', async (req, res, next) => {
       },
     });
 
-    await sendOtp(phone, code);
+    // Don't actually dispatch SMS for test phones — the code is well-known.
+    if (!isTestPhone) {
+      await sendOtp(phone, code);
+    } else {
+      logger.info({ phone }, 'smoke-test phone: skipped SMS dispatch');
+    }
     res.json({
       success: true,
+      // Expose devCode only in non-prod or when SMS is mocked. Test-phone
+      // requests in production deliberately do NOT echo the code back —
+      // the caller already knows it is '123456'.
       devCode: !env.isProd || env.useMockSms ? code : undefined,
     });
   } catch (err) { next(err); }
