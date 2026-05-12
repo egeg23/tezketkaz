@@ -239,12 +239,6 @@ export default function SettingsPage() {
             {update.isPending ? "Saving..." : "Save settings"}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Note: The shop-owner-callable PATCH endpoint is assumed at
-          <code className="mx-1">PATCH /api/shops/:id</code>. If the backend
-          only exposes the admin-scoped route, this save will 403 and the
-          backend team needs to wire up an owner-callable endpoint.
-        </p>
       </form>
     </div>
   );
