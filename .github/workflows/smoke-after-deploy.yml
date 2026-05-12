@@ -1,0 +1,78 @@
+# ─── Phase 13.3.1 — Post-deploy smoke test ────────────────────────────────
+#
+# OPTIONAL workflow. Triggers when a hosting provider (Render / Railway /
+# Fly / Vercel) reports a successful deploy back to GitHub via the
+# `deployment_status` event. Runs `backend/scripts/smoke-test.js` against
+# the live URL and fails the workflow if any of the 9 critical paths break.
+#
+# This workflow is checked in but inert until you:
+#   1. Connect your host to GitHub Deployments (each host has a "GitHub
+#      integration" toggle that posts deployment_status events).
+#   2. Set the repository secrets:
+#        SMOKE_BASE_URL    — e.g. https://api.tezketkaz.uz
+#        SMOKE_TEST_PHONE  — E.164 phone from TEST_PHONES_ACCEPT_123456
+#   3. On the backend host, set the env var:
+#        TEST_PHONES_ACCEPT_123456=+998900000001
+#      (or whichever number you put in SMOKE_TEST_PHONE).
+#
+# See docs/runbooks/smoke-tests.md for full instructions and failure triage.
+
+name: smoke-after-deploy
+
+on:
+  deployment_status:
+  # Also allow manual runs from the Actions tab for ad-hoc verification.
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Override SMOKE_BASE_URL (optional)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  deployments: read
+
+jobs:
+  smoke:
+    # Only run if the deployment succeeded; skip pending/failure/in_progress.
+    # (workflow_dispatch has no deployment_status so we accept it unconditionally.)
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Resolve target URL
+        id: target
+        run: |
+          if [ -n "${{ inputs.base_url }}" ]; then
+            echo "url=${{ inputs.base_url }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ github.event.deployment_status.target_url }}" ]; then
+            echo "url=${{ github.event.deployment_status.target_url }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=${{ secrets.SMOKE_BASE_URL }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run smoke test
+        env:
+          SMOKE_BASE_URL: ${{ steps.target.outputs.url }}
+          SMOKE_TEST_PHONE: ${{ secrets.SMOKE_TEST_PHONE }}
+        run: |
+          if [ -z "$SMOKE_BASE_URL" ]; then
+            echo "::error::SMOKE_BASE_URL is empty. Set repo secret SMOKE_BASE_URL or pass workflow_dispatch input."
+            exit 1
+          fi
+          if [ -z "$SMOKE_TEST_PHONE" ]; then
+            echo "::error::SMOKE_TEST_PHONE is empty. Set repo secret SMOKE_TEST_PHONE."
+            exit 1
+          fi
+          node backend/scripts/smoke-test.js

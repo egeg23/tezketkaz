@@ -23,6 +23,16 @@ const schema = z.object({
   ESKIZ_PASSWORD: z.string().optional(),
   ESKIZ_FROM: z.string().default('4546'),
 
+  // ─── Phase 13.3.1 — Smoke test phone allowlist ──────────────────────────
+  // Comma-separated list of E.164 phone numbers that always receive the OTP
+  // code "123456" regardless of NODE_ENV. Used by backend/scripts/smoke-test.js
+  // and the post-deploy smoke workflow to exercise the live auth path against
+  // a deployed backend without burning a real SMS. SECURITY: keep this list
+  // tightly scoped (one or two reserved numbers under operator control), and
+  // never include numbers a real user might register with. Empty in dev/test
+  // is fine — non-prod already serves "123456" via the env.isProd check below.
+  TEST_PHONES_ACCEPT_123456: z.string().optional(),
+
   USE_MOCK_PAYMENTS: z.enum(['true', 'false']).default('true'),
   // Phase 13.1.7 — per-provider mock override. When `USE_MOCK_PAYMENTS=false`
   // (production mode) you can still force-mock a single provider that
@@ -162,6 +172,13 @@ const env = {
   isDev: parsed.NODE_ENV === 'development',
   isTest: parsed.NODE_ENV === 'test',
   useMockSms: parsed.USE_MOCK_SMS === 'true',
+  // Phase 13.3.1 — derived Set of test phones that always accept '123456'.
+  testPhonesAccept123456: new Set(
+    (parsed.TEST_PHONES_ACCEPT_123456 || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  ),
   useMockPayments: parsed.USE_MOCK_PAYMENTS === 'true',
   // Per-provider mock toggles: provider-level flag wins when set, otherwise
   // honour the global USE_MOCK_PAYMENTS. Used by services/click.js et al via

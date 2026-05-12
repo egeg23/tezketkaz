@@ -26,6 +26,9 @@ const country = require('../services/country');
 // product images / KYC docs (Phase 9): bytes land on disk under
 // backend/uploads/ or in S3/R2 depending on env config.
 const { putFromMulterFile } = require('../lib/storage');
+// Phase 13.3.3 — PDF receipts. Lazy-require so the rest of the route module
+// loads cleanly even if pdfkit is somehow unavailable in a stripped install.
+const receipts = require('../services/receipts');
 
 // ─── Multer setup for delivery-photo upload (Phase 13.2.5) ──────────────────
 // Mirror the verification.js / products.js conventions: 8 MB cap, JPEG/PNG
@@ -815,6 +818,46 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
     res.json({ order: attachMoneyEnvelope(order) });
+  } catch (err) { next(err); }
+});
+
+// Phase 13.3.3 — receipt download authentication.
+// The PDF route is normally hit via fetch with an Authorization header. But
+// when the Flutter app hands off to the system browser (so the user can
+// save / share the PDF) there's no way to attach a header — so we also
+// accept ?token=<accessToken> as a fallback. We translate it into the same
+// `Bearer …` header shape `authMiddleware` expects, then delegate. The
+// token is short-lived (15 min) and the URL is one-shot, so this is safe.
+function receiptAuth(req, res, next) {
+  if (!req.headers.authorization && typeof req.query.token === 'string' && req.query.token) {
+    req.headers.authorization = `Bearer ${req.query.token}`;
+  }
+  return authMiddleware(req, res, next);
+}
+
+// ─── GET /api/orders/:id/receipt ─────────────────────────────────────────────
+// Phase 13.3.3 — downloadable PDF receipt for a completed order.
+// Authorisation: buyer, assigned courier, any shop member of the order's
+// shop, or admin. Same matrix as canViewOrder().
+router.get('/:id/receipt', receiptAuth, async (req, res, next) => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, buyerId: true, courierId: true, shopId: true, orderNumber: true },
+    });
+    if (!order) return res.status(404).json({ error: 'order_not_found' });
+    if (!(await canViewOrder(req.user, order))) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
+    const pdf = await receipts.generateReceipt(order.id);
+    const filename = `tezketkaz-order-${order.orderNumber || order.id}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', String(pdf.length));
+    // Cache hint: receipts are immutable once the order is closed.
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    return res.end(pdf);
   } catch (err) { next(err); }
 });
 
