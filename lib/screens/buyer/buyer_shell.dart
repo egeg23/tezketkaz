@@ -6,6 +6,8 @@ import '../../providers/cart_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../theme/app_theme.dart';
 
+/// Frosted-glass tabbar in the Master Design v1 spirit (master.html L927-965).
+/// Active tab gets a lime label + a small lime dot indicator above its icon.
 class BuyerShell extends StatelessWidget {
   final Widget child;
   const BuyerShell({super.key, required this.child});
@@ -42,37 +44,36 @@ class BuyerShell extends StatelessWidget {
             o.status != AppOrderStatus.cancelled)
         .length;
 
-    final items = [
-      const _NavItem(icon: Icons.home_rounded, label: 'Bosh sahifa'),
-      const _NavItem(icon: Icons.storefront_rounded, label: "Do'konlar"),
-      _NavItem(icon: Icons.shopping_basket_rounded, label: 'Savat', badge: cart.itemCount),
-      _NavItem(icon: Icons.receipt_long_rounded, label: 'Buyurtmalar', badge: activeCount, badgeColor: AppColors.courier),
-      const _NavItem(icon: Icons.person_rounded, label: 'Profil'),
+    final items = <_NavItem>[
+      const _NavItem(icon: Icons.home_outlined, label: 'Bosh'),
+      const _NavItem(icon: Icons.search_rounded, label: 'Qidiruv'),
+      _NavItem(icon: Icons.shopping_bag_outlined, label: 'Savat', badge: cart.itemCount),
+      _NavItem(icon: Icons.receipt_long_outlined, label: 'Buyurtma', badge: activeCount),
+      const _NavItem(icon: Icons.person_outline_rounded, label: 'Profil'),
     ];
 
     return Scaffold(
       body: child,
       extendBody: true,
       bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         child: Container(
-          height: 68,
           decoration: BoxDecoration(
-            // UberEats signature — solid near-black dock with lime active pill.
-            color: AppColors.neutralInk,
-            borderRadius: BorderRadius.circular(AppRadii.xl),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0A0A0A).withValues(alpha: 0.22),
-                blurRadius: 30, offset: const Offset(0, 12),
-              ),
-            ],
+            // Frosted glass: dark translucent base, soft border, deep shadow.
+            color: const Color(0xB30F0F16),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: AppColors.border),
+            boxShadow: const [BoxShadow(
+              color: Color(0x66000000),
+              blurRadius: 60, offset: Offset(0, 20),
+            )],
           ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
           child: Row(
             children: [
               for (var i = 0; i < items.length; i++)
                 Expanded(
-                  child: _NavBtn(
+                  child: _Tab(
                     item: items[i],
                     selected: i == idx,
                     onTap: () => _go(context, i),
@@ -90,88 +91,87 @@ class _NavItem {
   final IconData icon;
   final String label;
   final int? badge;
-  final Color? badgeColor;
-  const _NavItem({
-    required this.icon, required this.label, this.badge, this.badgeColor,
-  });
+  const _NavItem({required this.icon, required this.label, this.badge});
 }
 
-class _NavBtn extends StatelessWidget {
+class _Tab extends StatelessWidget {
   final _NavItem item;
   final bool selected;
   final VoidCallback onTap;
-  const _NavBtn({required this.item, required this.selected, required this.onTap});
+  const _Tab({required this.item, required this.selected, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: Colors.transparent,
-    borderRadius: BorderRadius.circular(AppRadii.lg),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadii.lg),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  width: selected ? 56 : 36,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: selected ? AppColors.primary : Colors.transparent,
-                    borderRadius: BorderRadius.circular(AppRadii.pill),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    item.icon,
-                    size: 22,
-                    color: selected ? AppColors.neutralInk : Colors.white.withValues(alpha: 0.6),
-                  ),
-                ),
-                if ((item.badge ?? 0) > 0)
-                  Positioned(
-                    top: -4,
-                    right: selected ? 4 : -4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                      decoration: BoxDecoration(
-                        color: item.badgeColor ?? AppColors.primary,
-                        borderRadius: BorderRadius.circular(AppRadii.pill),
-                        border: Border.all(color: AppColors.neutralInk, width: 2),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '${item.badge}',
-                        style: TextStyle(
-                          color: (item.badgeColor ?? AppColors.primary) == AppColors.primary
-                              ? AppColors.neutralInk : Colors.white,
-                          fontSize: 10, fontWeight: FontWeight.w800,
+  Widget build(BuildContext context) {
+    final color = selected ? AppColors.primary : AppColors.textHint;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Lime dot indicator above the icon (master.html: .tab.active::before)
+              SizedBox(
+                height: 6,
+                child: selected
+                    ? Center(
+                        child: Container(
+                          width: 4, height: 4,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                            boxShadow: [BoxShadow(
+                              color: AppColors.primary.withValues(alpha: 0.7),
+                              blurRadius: 8, spreadRadius: 1,
+                            )],
+                          ),
                         ),
+                      )
+                    : null,
+              ),
+              const SizedBox(height: 2),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(item.icon, size: 22, color: color),
+                  if ((item.badge ?? 0) > 0)
+                    Positioned(
+                      top: -4, right: -6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(color: AppColors.bg, width: 1.5),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text('${item.badge}',
+                            style: const TextStyle(
+                              color: Color(0xFF003A1F),
+                              fontSize: 9, fontWeight: FontWeight.w800,
+                            )),
                       ),
                     ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              item.label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected ? Colors.white : Colors.white.withValues(alpha: 0.55),
+                ],
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                item.label,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: color,
+                ),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
