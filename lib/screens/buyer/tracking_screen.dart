@@ -113,7 +113,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
                     TileLayer(
                       // 2GIS-style raster tiles via OpenStreetMap fallback.
                       // Replace with 2GIS tile server + apiKey for production.
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      // CartoDB Dark Matter — no API key, matches our dark
+                      // design tokens (#08080c base, muted greys for roads).
+                      // Labels-on variant; switch to `_nolabels/` if you draw
+                      // your own.
+                      urlTemplate: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
                       userAgentPackageName: 'uz.tezketkaz.app',
                       maxZoom: 19,
                     ),
