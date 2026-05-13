@@ -1,0 +1,465 @@
+{
+  "version": 8,
+  "name": "TezKetKaz Dark",
+  "metadata": {
+    "mapbox:autocomposite": true,
+    "mapbox:type": "default",
+    "description": "Premium dark glassmorphism map style for TezKetKaz. Designed to pair with the app's dark UI and lime accent. Recommended: upload to Mapbox Studio, get a style URL like mapbox://styles/{username}/{styleId}, use with the official Mapbox Maps SDK for Flutter. For flutter_map with raster tiles, see tile-provider alternatives at the bottom of this file (passed in 'metadata.fallback_tile_providers')."
+  },
+  "center": [69.2401, 41.2995],
+  "zoom": 12,
+  "bearing": 0,
+  "pitch": 0,
+  "sources": {
+    "composite": {
+      "url": "mapbox://mapbox.mapbox-streets-v8",
+      "type": "vector"
+    }
+  },
+  "sprite": "mapbox://sprites/mapbox/dark-v11",
+  "glyphs": "mapbox://fonts/mapbox/{fontstack}/{range}.pbf",
+
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#08080c"
+      }
+    },
+
+    {
+      "id": "landuse-residential",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "landuse",
+      "filter": ["==", ["get", "class"], "residential"],
+      "paint": {
+        "fill-color": "#0a0a10",
+        "fill-opacity": 0.6
+      }
+    },
+
+    {
+      "id": "landuse-park",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "landuse",
+      "filter": ["in", ["get", "class"], ["literal", ["park", "grass", "wood", "cemetery", "pitch"]]],
+      "paint": {
+        "fill-color": "#06C167",
+        "fill-opacity": 0.06
+      }
+    },
+
+    {
+      "id": "landuse-airport-hospital",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "landuse",
+      "filter": ["in", ["get", "class"], ["literal", ["airport", "hospital"]]],
+      "paint": {
+        "fill-color": "#101018",
+        "fill-opacity": 0.7
+      }
+    },
+
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "water",
+      "paint": {
+        "fill-color": "#050810",
+        "fill-opacity": 1
+      }
+    },
+
+    {
+      "id": "waterway",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "waterway",
+      "paint": {
+        "line-color": "#050810",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.5, 16, 4]
+      }
+    },
+
+    {
+      "id": "building-shadow",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "building",
+      "minzoom": 14,
+      "paint": {
+        "fill-color": "#1a1a22",
+        "fill-opacity": ["interpolate", ["linear"], ["zoom"], 14, 0, 16, 0.4],
+        "fill-translate": [1, 1]
+      }
+    },
+
+    {
+      "id": "building",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "building",
+      "minzoom": 14,
+      "paint": {
+        "fill-color": "#101018",
+        "fill-opacity": ["interpolate", ["linear"], ["zoom"], 14, 0, 16, 0.7],
+        "fill-outline-color": "#1a1a24"
+      }
+    },
+
+    {
+      "id": "road-path-minor",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "minzoom": 14,
+      "filter": ["in", ["get", "class"], ["literal", ["path", "track", "service"]]],
+      "paint": {
+        "line-color": "#1a1a24",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 14, 0.5, 18, 1.5]
+      }
+    },
+
+    {
+      "id": "road-street",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["in", ["get", "class"], ["literal", ["street", "street_limited", "residential"]]],
+      "paint": {
+        "line-color": "#222230",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.5, 16, 4, 20, 14]
+      }
+    },
+
+    {
+      "id": "road-secondary-tertiary",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["in", ["get", "class"], ["literal", ["secondary", "tertiary"]]],
+      "paint": {
+        "line-color": "#2a2a38",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 9, 0.5, 16, 5, 20, 18]
+      }
+    },
+
+    {
+      "id": "road-primary",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["==", ["get", "class"], "primary"],
+      "paint": {
+        "line-color": "#34344a",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 7, 0.5, 16, 8, 20, 22]
+      }
+    },
+
+    {
+      "id": "road-motorway-trunk",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["in", ["get", "class"], ["literal", ["motorway", "trunk", "motorway_link", "trunk_link"]]],
+      "paint": {
+        "line-color": "#3e3e58",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.5, 16, 10, 20, 26]
+      }
+    },
+
+    {
+      "id": "road-rail",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["in", ["get", "class"], ["literal", ["major_rail", "minor_rail"]]],
+      "paint": {
+        "line-color": "#1a1a24",
+        "line-width": 0.8,
+        "line-dasharray": [3, 3]
+      }
+    },
+
+    {
+      "id": "admin-boundary",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "admin",
+      "filter": ["all", ["==", ["get", "admin_level"], 2], ["==", ["get", "maritime"], "false"]],
+      "paint": {
+        "line-color": "rgba(255,255,255,0.12)",
+        "line-width": 0.8,
+        "line-dasharray": [2, 4]
+      }
+    },
+
+    {
+      "id": "place-label-suburb",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "place_label",
+      "minzoom": 12,
+      "filter": ["==", ["get", "type"], "suburb"],
+      "layout": {
+        "text-field": ["get", "name_en"],
+        "text-font": ["Inter Bold", "Arial Unicode MS Bold"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 12, 9, 16, 12],
+        "text-letter-spacing": 0.15,
+        "text-transform": "uppercase",
+        "text-max-width": 8
+      },
+      "paint": {
+        "text-color": "rgba(255,255,255,0.55)",
+        "text-halo-color": "#08080c",
+        "text-halo-width": 1.2
+      }
+    },
+
+    {
+      "id": "place-label-neighbourhood",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "place_label",
+      "minzoom": 14,
+      "filter": ["==", ["get", "type"], "neighbourhood"],
+      "layout": {
+        "text-field": ["get", "name_en"],
+        "text-font": ["Inter Medium", "Arial Unicode MS Regular"],
+        "text-size": 10.5,
+        "text-letter-spacing": 0.1
+      },
+      "paint": {
+        "text-color": "rgba(255,255,255,0.4)",
+        "text-halo-color": "#08080c",
+        "text-halo-width": 1
+      }
+    },
+
+    {
+      "id": "road-label-major",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "road_label",
+      "minzoom": 12,
+      "filter": ["in", ["get", "class"], ["literal", ["motorway", "trunk", "primary", "secondary"]]],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name_en"], ["get", "name"]],
+        "text-font": ["Inter Medium", "Arial Unicode MS Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 12, 9, 18, 13],
+        "symbol-placement": "line",
+        "text-letter-spacing": 0.05
+      },
+      "paint": {
+        "text-color": "rgba(255,255,255,0.55)",
+        "text-halo-color": "#08080c",
+        "text-halo-width": 1.5
+      }
+    },
+
+    {
+      "id": "road-label-minor",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "road_label",
+      "minzoom": 15,
+      "filter": ["in", ["get", "class"], ["literal", ["tertiary", "street", "residential"]]],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name_en"], ["get", "name"]],
+        "text-font": ["Inter Regular", "Arial Unicode MS Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 15, 9, 18, 11],
+        "symbol-placement": "line"
+      },
+      "paint": {
+        "text-color": "rgba(255,255,255,0.35)",
+        "text-halo-color": "#08080c",
+        "text-halo-width": 1
+      }
+    },
+
+    {
+      "id": "place-label-town-village",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "place_label",
+      "filter": ["in", ["get", "type"], ["literal", ["town", "village", "hamlet"]]],
+      "minzoom": 8,
+      "layout": {
+        "text-field": ["get", "name_en"],
+        "text-font": ["Inter Medium", "Arial Unicode MS Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 8, 10, 14, 14]
+      },
+      "paint": {
+        "text-color": "rgba(255,255,255,0.7)",
+        "text-halo-color": "#08080c",
+        "text-halo-width": 1.5
+      }
+    },
+
+    {
+      "id": "place-label-city",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "place_label",
+      "filter": ["==", ["get", "type"], "city"],
+      "layout": {
+        "text-field": ["get", "name_en"],
+        "text-font": ["Inter Bold", "Arial Unicode MS Bold"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 4, 10, 12, 18],
+        "text-letter-spacing": 0.1,
+        "text-transform": "uppercase"
+      },
+      "paint": {
+        "text-color": "rgba(255,255,255,0.85)",
+        "text-halo-color": "#08080c",
+        "text-halo-width": 2
+      }
+    },
+
+    {
+      "id": "place-label-country",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "place_label",
+      "filter": ["==", ["get", "type"], "country"],
+      "maxzoom": 6,
+      "layout": {
+        "text-field": ["get", "name_en"],
+        "text-font": ["Inter Bold", "Arial Unicode MS Bold"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 2, 10, 6, 16],
+        "text-letter-spacing": 0.3,
+        "text-transform": "uppercase"
+      },
+      "paint": {
+        "text-color": "rgba(255,255,255,0.9)",
+        "text-halo-color": "#08080c",
+        "text-halo-width": 2
+      }
+    }
+  ],
+
+  "//": "─── INTEGRATION NOTES ───",
+
+  "//runtime_layers_hint": "Add these layers PROGRAMMATICALLY on top of the style at runtime — they are not part of the style file itself:",
+
+  "//layer_route_active": {
+    "//purpose": "The animated lime route line from courier to destination",
+    "id": "route-active",
+    "type": "line",
+    "source_runtime": "Add a GeoJSON source with the route LineString",
+    "layout": {
+      "line-cap": "round",
+      "line-join": "round"
+    },
+    "paint": {
+      "line-color": "#06C167",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3, 16, 6],
+      "line-dasharray": [0.2, 1.8],
+      "//animation": "Animate line-dasharray offset via Mapbox setPaintProperty in a render loop, ~1.2s cycle"
+    }
+  },
+
+  "//layer_route_traveled": {
+    "//purpose": "Solid lime line behind the dashed one — the part already traveled",
+    "id": "route-traveled",
+    "type": "line",
+    "paint": {
+      "line-color": "#06C167",
+      "line-opacity": 0.6,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3, 16, 6],
+      "line-cap": "round"
+    }
+  },
+
+  "//symbol_courier_pin": {
+    "//purpose": "Courier location pin with pulse — implement as two layers: a circle with animated radius/opacity for the pulse, then a smaller solid circle for the pin",
+    "type": "circle-stack",
+    "outer_circle_paint": {
+      "circle-color": "#06C167",
+      "circle-opacity": 0.3,
+      "circle-radius": "ANIMATE 14→22 via mapbox setPaintProperty"
+    },
+    "inner_circle_paint": {
+      "circle-color": "#06C167",
+      "circle-radius": 10,
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 2.5
+    }
+  },
+
+  "//symbol_destination_pin": {
+    "type": "symbol",
+    "layout": {
+      "icon-image": "destination-pin",
+      "icon-size": 1,
+      "icon-anchor": "bottom"
+    },
+    "//note": "Add the icon to the sprite, or render an HTML overlay with absolute positioning if using flutter_map"
+  },
+
+  "//flutter_implementation": {
+    "preferred_sdk": "mapbox_maps_flutter (official Mapbox Maps SDK for Flutter)",
+    "setup_steps": [
+      "1. Upload this JSON to Mapbox Studio (studio.mapbox.com → New style → Upload style JSON)",
+      "2. Publish → copy the style URL: mapbox://styles/{your-username}/{styleId}",
+      "3. In pubspec.yaml: mapbox_maps_flutter: ^2.0.0",
+      "4. Set MAPBOX_ACCESS_TOKEN in your env",
+      "5. Use MapWidget(styleUri: '<style-url-from-step-2>')",
+      "6. Add route + pins via runtime layers (see hints above)"
+    ]
+  },
+
+  "//flutter_map_alternative": {
+    "//note": "If you stay with flutter_map (raster tiles, no vector styling), use one of these tile providers that already match this dark + lime aesthetic. Cheaper to start, but no runtime style edits.",
+    "providers": [
+      {
+        "name": "Stadia Maps · Alidade Smooth Dark",
+        "url_template": "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png",
+        "attribution": "© Stadia Maps © Stamen Design © OpenMapTiles © OpenStreetMap",
+        "free_tier": "200,000 tiles/month free for non-commercial",
+        "auth": "API key required (free at stadiamaps.com)",
+        "match_quality": "Excellent — closest to our design out of the box"
+      },
+      {
+        "name": "CartoDB · Dark Matter (No Labels)",
+        "url_template": "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
+        "attribution": "© CARTO © OpenStreetMap contributors",
+        "free_tier": "Unlimited for OSS / low-traffic",
+        "auth": "None for basic use",
+        "match_quality": "Good — slightly more gray than ours, no built-in labels (add via overlay)"
+      },
+      {
+        "name": "Mapbox Dark v11 (default)",
+        "url_template": "https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=YOUR_TOKEN",
+        "attribution": "© Mapbox © OpenStreetMap",
+        "free_tier": "50,000 map loads/month",
+        "auth": "Mapbox access token required",
+        "match_quality": "Fair — needs further tinting to match our deeper blacks"
+      }
+    ],
+    "overlay_strategy": "On top of any raster basemap, draw your route + courier/destination pins as flutter_map's PolylineLayer and MarkerLayer with lime #06C167 styling — this stays consistent regardless of which tile provider you choose."
+  },
+
+  "//color_tokens": {
+    "background_base": "#08080c",
+    "landuse_residential": "#0a0a10",
+    "park_overlay": "rgba(6, 193, 103, 0.06)",
+    "water": "#050810",
+    "building_fill": "#101018",
+    "road_minor": "#222230",
+    "road_secondary": "#2a2a38",
+    "road_primary": "#34344a",
+    "road_motorway": "#3e3e58",
+    "label_primary": "rgba(255, 255, 255, 0.85)",
+    "label_secondary": "rgba(255, 255, 255, 0.55)",
+    "label_tertiary": "rgba(255, 255, 255, 0.35)",
+    "accent_route": "#06C167",
+    "accent_pin_stroke": "#ffffff",
+    "accent_pin_fill": "#06C167"
+  }
+}

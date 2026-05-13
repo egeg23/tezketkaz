@@ -1,7 +1,8 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../l10n/l10n.dart';
 import '../../models/models.dart';
@@ -11,12 +12,21 @@ import '../../services/catalog_api.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
 
-/// Shows a product's image / description and lets the buyer pick modifier
-/// options before adding to cart.
+/// PRODUCT DETAIL — master.html .pd (lines 6320-6418).
+///
+/// 360-px hero image with 32-px bottom radius + chips, optional floating
+/// discount badge, then a `pd-body` overlapping the hero by 32 px. Shop row
+/// (lime shop name), Playfair title, rating + count, description, big price
+/// row, size options (.pd-options), modifiers (.pd-mod-row), qty stepper,
+/// sticky lime CTA pinned at the bottom.
 class ProductDetailScreen extends StatefulWidget {
   final Product product;
   final String? description;
-  const ProductDetailScreen({super.key, required this.product, this.description});
+  const ProductDetailScreen({
+    super.key,
+    required this.product,
+    this.description,
+  });
 
   @override
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
@@ -26,7 +36,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   bool _loading = true;
   String? _error;
   List<ModifierGroup> _groups = const [];
-  /// groupId → set of selected option ids
   final Map<String, Set<String>> _selected = {};
   int _qty = 1;
 
@@ -37,7 +46,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final groups =
           await CatalogApi.instance.productModifiers(widget.product.id);
@@ -51,19 +63,31 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _error = e.toString(); _loading = false; });
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
   }
 
-  String _fmtPrice(double v) =>
-      "${v.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ')} so'm";
+  String _fmt(double v) => v
+      .toInt()
+      .toString()
+      .replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ');
+
+  String _fmtDelta(double v) {
+    if (v == 0) return 'Бесплатно';
+    final abs = _fmt(v.abs());
+    return v > 0 ? '+$abs' : '−$abs';
+  }
 
   double get _modifierDelta {
     double sum = 0;
     for (final g in _groups) {
-      final selectedIds = _selected[g.id] ?? const <String>{};
+      final ids = _selected[g.id] ?? const <String>{};
       for (final o in g.options) {
-        if (selectedIds.contains(o.id)) sum += o.priceDelta;
+        if (ids.contains(o.id)) sum += o.priceDelta;
       }
     }
     return sum;
@@ -120,19 +144,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         options: g.options.where((o) => ids.contains(o.id)).toList(),
       ));
     }
-
-    final cart = context.read<CartProvider>();
-    // Phase 11 — multi-shop drafts: addWithModifiers always succeeds now.
-    // Different-shop additions land in a separate draft instead of replacing
-    // the active one. Confirmation snackbar uses the shop's name when we know
-    // it (cached when the buyer entered via the shop card).
-    cart.addWithModifiers(
-      widget.product,
-      _qty,
-      selections,
-      _unitPrice,
-      snapshot: snapshot,
-    );
+    context.read<CartProvider>().addWithModifiers(
+          widget.product,
+          _qty,
+          selections,
+          _unitPrice,
+          snapshot: snapshot,
+        );
     if (!mounted) return;
     context.showSuccess(t(context, 'product.added_to_cart'));
     if (mounted) Navigator.of(context).maybePop();
@@ -143,433 +161,715 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final p = widget.product;
     final disabled = _validationError(context) != null;
 
-    final mq = MediaQuery.of(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
-      extendBodyBehindAppBar: true,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(0, 0, 0, 140),
+          : Stack(
               children: [
-                // UberEats/abuanwar-style hero: full-bleed image, soft rounded
-                // bottom corners, floating back/favourite chips overlaid.
-                Stack(
+                ListView(
+                  padding: const EdgeInsets.only(bottom: 110),
                   children: [
-                    SizedBox(
-                      height: mq.size.height * 0.42,
-                      width: double.infinity,
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                          bottom: Radius.circular(AppRadii.xl),
-                        ),
-                        child: Hero(
-                          tag: 'product-${p.id}',
-                          child: p.imageUrl.isNotEmpty
-                              ? CachedNetworkImage(
-                                  imageUrl: p.imageUrl,
-                                  fit: BoxFit.cover,
-                                  errorWidget: (_, __, ___) => Container(
-                                    color: AppColors.surfaceMuted,
-                                    alignment: Alignment.center,
-                                    child: const Icon(Icons.image_outlined,
-                                        size: 48, color: AppColors.textHint),
-                                  ),
-                                )
-                              : Container(
-                                  color: AppColors.surfaceMuted,
-                                  alignment: Alignment.center,
-                                  child: const Icon(Icons.image_outlined,
-                                      size: 48, color: AppColors.textHint),
-                                ),
-                        ),
-                      ),
+                    _Hero(
+                      imageUrl: p.imageUrl,
+                      hasDiscount: p.hasDiscount,
+                      onBack: () => Navigator.of(context).maybePop(),
+                      onFav: () {},
+                      onShare: () {},
                     ),
-                    Positioned(
-                      top: mq.padding.top + 12, left: 16,
-                      child: _HeroChip(
-                        icon: Icons.arrow_back_rounded,
-                        onTap: () => Navigator.of(context).maybePop(),
-                      ),
-                    ),
-                    if (p.hasDiscount)
-                      Positioned(
-                        top: mq.padding.top + 12, right: 16,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(AppRadii.pill),
-                            boxShadow: AppShadows.card,
-                          ),
-                          child: Text(
-                            '−${p.discountPercent.toInt()}%',
-                            style: const TextStyle(
-                              color: AppColors.neutralInk,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12, letterSpacing: 0.3,
+                    Transform.translate(
+                      offset: const Offset(0, -32),
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _ShopRow(p: p),
+                            const SizedBox(height: 8),
+                            _Title(name: p.name),
+                            const SizedBox(height: 12),
+                            _Rating(p: p),
+                            const SizedBox(height: 12),
+                            _Desc(text: widget.description),
+                            const SizedBox(height: 12),
+                            _PriceRow(p: p, fmt: _fmt),
+                            const SizedBox(height: 24),
+                            // Reviews entry
+                            _ReviewsTile(
+                              onTap: () => context.push(
+                                  '/reviews/product/${p.id}',
+                                  extra: p.name),
                             ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(p.name,
-                          style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textPrimary,
-                            letterSpacing: -0.5,
-                            height: 1.15,
-                          )),
-                      const SizedBox(height: 8),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(_fmtPrice(p.effectivePrice),
-                              style: const TextStyle(
-                                fontSize: 22,
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: -0.3,
-                              )),
-                          if (p.hasDiscount) ...[
-                            const SizedBox(width: 8),
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 3),
-                              child: Text(_fmtPrice(p.price),
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: AppColors.textHint,
-                                    fontWeight: FontWeight.w500,
-                                    decoration: TextDecoration.lineThrough,
-                                  )),
+                            if (_error != null) ...[
+                              const SizedBox(height: 16),
+                              ErrorView(message: _error!, onRetry: _load),
+                            ],
+                            if (_groups.isNotEmpty) ...[
+                              const SizedBox(height: 20),
+                              for (final g in _groups) ...[
+                                _ModifierGroup(
+                                  group: g,
+                                  selected: _selected[g.id] ?? const <String>{},
+                                  onToggle: (o) => _toggle(g, o),
+                                  fmtDelta: _fmtDelta,
+                                ),
+                                const SizedBox(height: 16),
+                              ],
+                            ],
+                            const SizedBox(height: 8),
+                            _QtyBar(
+                              qty: _qty,
+                              onMinus: () {
+                                if (_qty > 1) {
+                                  HapticFeedback.lightImpact();
+                                  setState(() => _qty -= 1);
+                                }
+                              },
+                              onPlus: () {
+                                HapticFeedback.lightImpact();
+                                setState(() => _qty += 1);
+                              },
                             ),
                           ],
-                        ],
+                        ),
                       ),
-                      if (widget.description != null &&
-                          widget.description!.trim().isNotEmpty) ...[
-                        const SizedBox(height: 14),
-                        Text(widget.description!,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: AppColors.textSecondary,
-                              height: 1.5,
-                            )),
-                      ],
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                // Reviews tile — opens the public reviews screen for this
-                // product. Phase 3 wiring; the screen handles its own load.
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                  child: InkWell(
-                    onTap: () => context
-                        .push('/reviews/product/${p.id}', extra: p.name),
-                    borderRadius: BorderRadius.circular(AppRadii.md),
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(AppRadii.md),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.star_rounded,
-                              color: AppColors.warning, size: 20),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text('Sharhlar',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14)),
-                          ),
-                          Icon(Icons.chevron_right_rounded,
-                              color: AppColors.textHint),
-                        ],
-                      ),
+                // ─ Sticky lime CTA ───────────────────────────────────────
+                Positioned(
+                  left: 20,
+                  right: 20,
+                  bottom: 16,
+                  child: SafeArea(
+                    top: false,
+                    child: _LimeCta(
+                      label: 'Добавить в корзину',
+                      total: _fmt(_total),
+                      onTap: disabled ? null : _addToCart,
                     ),
                   ),
                 ),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: ErrorView(message: _error!, onRetry: _load),
-                  )
-                else if (_groups.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Text(
-                      t(context, 'select_modifiers'),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textSecondary,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  for (final g in _groups)
-                    _ModifierGroupCard(
-                      group: g,
-                      selected: _selected[g.id] ?? const <String>{},
-                      onToggle: (o) => _toggle(g, o),
-                    ),
-                ],
               ],
             ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppRadii.lg),
-            boxShadow: AppShadows.elevated,
-          ),
-          child: Row(
-            children: [
-              _Stepper(
-                qty: _qty,
-                onMinus: () {
-                  if (_qty > 1) setState(() => _qty -= 1);
-                },
-                onPlus: () => setState(() => _qty += 1),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: disabled ? null : _addToCart,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    child: Text(
-                      '${t(context, 'product.add_to_cart')} · ${_fmtPrice(_total)}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
 
-class _ModifierGroupCard extends StatelessWidget {
+// ─── Hero ───────────────────────────────────────────────────────────────────
+class _Hero extends StatelessWidget {
+  final String imageUrl;
+  final bool hasDiscount;
+  final VoidCallback onBack;
+  final VoidCallback onFav;
+  final VoidCallback onShare;
+  const _Hero({
+    required this.imageUrl,
+    required this.hasDiscount,
+    required this.onBack,
+    required this.onFav,
+    required this.onShare,
+  });
+
+  @override
+  Widget build(BuildContext context) => Stack(
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(32),
+            ),
+            child: SizedBox(
+              height: 360,
+              width: double.infinity,
+              child: imageUrl.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => _Placeholder(),
+                    )
+                  : _Placeholder(),
+            ),
+          ),
+          // Gradient overlay
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(32),
+              ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.4),
+                      Colors.transparent,
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.7),
+                    ],
+                    stops: const [0.0, 0.3, 0.6, 1.0],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Top chips
+          Positioned(
+            top: 60,
+            left: 16,
+            right: 16,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _PdChip(icon: Icons.chevron_left_rounded, onTap: onBack),
+                Row(
+                  children: [
+                    _PdChip(icon: Icons.favorite_border_rounded, onTap: onFav),
+                    const SizedBox(width: 8),
+                    _PdChip(icon: Icons.share_outlined, onTap: onShare),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Floating discount
+          if (hasDiscount)
+            Positioned(
+              bottom: 24 + 32,
+              left: 20,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Text(
+                  '−20% НОЧЬЮ',
+                  style: TextStyle(
+                    color: AppColors.bg,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+}
+
+class _Placeholder extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Container(
+        color: const Color(0xFF3A1F10),
+        alignment: Alignment.center,
+        child: const Icon(Icons.image_outlined,
+            size: 64, color: Colors.white24),
+      );
+}
+
+class _PdChip extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _PdChip({required this.icon, required this.onTap});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.5),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+          ),
+          child: Icon(icon, size: 16, color: Colors.white),
+        ),
+      );
+}
+
+// ─── Body widgets ───────────────────────────────────────────────────────────
+class _ShopRow extends StatelessWidget {
+  final Product p;
+  const _ShopRow({required this.p});
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Text(
+            'Ресторан:',
+            style: TextStyle(
+                fontSize: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            p.shopId,
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text('·',
+              style: TextStyle(
+                  color: AppColors.textHint, fontSize: 12)),
+          const SizedBox(width: 8),
+          Text('20 мин',
+              style: TextStyle(
+                  fontSize: 12, color: AppColors.textSecondary)),
+        ],
+      );
+}
+
+class _Title extends StatelessWidget {
+  final String name;
+  const _Title({required this.name});
+  @override
+  Widget build(BuildContext context) => Text(
+        name,
+        style: const TextStyle(
+          fontSize: 26,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+          letterSpacing: -0.7,
+          height: 1.1,
+        ),
+      );
+}
+
+class _Rating extends StatelessWidget {
+  final Product p;
+  const _Rating({required this.p});
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Text(
+            '★ 4.9',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            '(124 отзыва)',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      );
+}
+
+class _Desc extends StatelessWidget {
+  final String? text;
+  const _Desc({this.text});
+  @override
+  Widget build(BuildContext context) => Text(
+        (text != null && text!.trim().isNotEmpty)
+            ? text!
+            : 'Свежие ингредиенты, готовится по заказу. Подробное описание скоро появится.',
+        style: TextStyle(
+          fontSize: 13.5,
+          color: AppColors.textSecondary,
+          height: 1.55,
+        ),
+      );
+}
+
+class _PriceRow extends StatelessWidget {
+  final Product p;
+  final String Function(double) fmt;
+  const _PriceRow({required this.p, required this.fmt});
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Text(
+            fmt(p.effectivePrice),
+            style: const TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: -1,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            "сум",
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          if (p.hasDiscount) ...[
+            const SizedBox(width: 12),
+            Text(
+              fmt(p.price),
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.textHint,
+                decoration: TextDecoration.lineThrough,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ],
+      );
+}
+
+class _ReviewsTile extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ReviewsTile({required this.onTap});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceMuted,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.star_rounded, color: AppColors.warning, size: 20),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Отзывы',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: AppColors.textHint),
+            ],
+          ),
+        ),
+      );
+}
+
+// ─── Modifier group ─────────────────────────────────────────────────────────
+class _ModifierGroup extends StatelessWidget {
   final ModifierGroup group;
   final Set<String> selected;
   final ValueChanged<ModifierOption> onToggle;
-  const _ModifierGroupCard({
+  final String Function(double) fmtDelta;
+  const _ModifierGroup({
     required this.group,
     required this.selected,
     required this.onToggle,
+    required this.fmtDelta,
   });
 
-  String _fmtDelta(double v) {
-    if (v == 0) return '';
-    final abs = v.abs().toInt().toString().replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ');
-    final sign = v > 0 ? '+' : '−';
-    return "  $sign$abs so'm";
-  }
-
   @override
-  Widget build(BuildContext context) {
-    final atMax = !group.isSingleSelect && selected.length >= group.maxSelect;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-            child: Row(
+          Text(
+            group.name.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              letterSpacing: 1.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (group.isSingleSelect)
+            Row(
               children: [
-                Expanded(
+                for (var i = 0; i < group.options.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  Expanded(
+                    child: _PdOption(
+                      name: group.options[i].name,
+                      extra: group.options[i].priceDelta == 0
+                          ? 'Стандарт'
+                          : fmtDelta(group.options[i].priceDelta),
+                      active: selected.contains(group.options[i].id),
+                      onTap: () => onToggle(group.options[i]),
+                    ),
+                  ),
+                ],
+              ],
+            )
+          else
+            Column(
+              children: [
+                for (var i = 0; i < group.options.length; i++)
+                  Container(
+                    decoration: BoxDecoration(
+                      border: i == 0
+                          ? null
+                          : Border(
+                              top: BorderSide(color: AppColors.border)),
+                    ),
+                    child: _PdModRow(
+                      name: group.options[i].name,
+                      delta: fmtDelta(group.options[i].priceDelta),
+                      isLime: group.options[i].priceDelta == 0,
+                      checked: selected.contains(group.options[i].id),
+                      onTap: () => onToggle(group.options[i]),
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      );
+}
+
+class _PdOption extends StatelessWidget {
+  final String name;
+  final String extra;
+  final bool active;
+  final VoidCallback onTap;
+  const _PdOption({
+    required this.name,
+    required this.extra,
+    required this.active,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+          decoration: BoxDecoration(
+            color: active
+                ? AppColors.primary.withValues(alpha: 0.10)
+                : AppColors.surfaceMuted,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: active ? AppColors.primary : AppColors.border,
+            ),
+          ),
+          child: Column(
+            children: [
+              Text(
+                name,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                extra,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: active
+                      ? AppColors.primary
+                      : AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+class _PdModRow extends StatelessWidget {
+  final String name;
+  final String delta;
+  final bool isLime;
+  final bool checked;
+  final VoidCallback onTap;
+  const _PdModRow({
+    required this.name,
+    required this.delta,
+    required this.isLime,
+    required this.checked,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: checked ? AppColors.primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(
+                    color: checked ? AppColors.primary : AppColors.border,
+                    width: 1.5,
+                  ),
+                ),
+                child: checked
+                    ? Icon(Icons.check_rounded,
+                        size: 14, color: AppColors.bg)
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              Text(
+                delta,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: isLime ? AppColors.primary : AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+// ─── Qty bar ────────────────────────────────────────────────────────────────
+class _QtyBar extends StatelessWidget {
+  final int qty;
+  final VoidCallback onMinus;
+  final VoidCallback onPlus;
+  const _QtyBar({
+    required this.qty,
+    required this.onMinus,
+    required this.onPlus,
+  });
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Text(
+            'КОЛИЧЕСТВО',
+            style: TextStyle(
+              fontSize: 12,
+              letterSpacing: 1.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceMuted,
+              borderRadius: BorderRadius.circular(100),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _QtyBtn(icon: Icons.remove_rounded, lime: false, onTap: onMinus),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Text(
-                    group.name,
+                    '$qty',
                     style: const TextStyle(
-                      fontWeight: FontWeight.w700, fontSize: 15,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
                     ),
                   ),
                 ),
+                _QtyBtn(icon: Icons.add_rounded, lime: true, onTap: onPlus),
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
+class _QtyBtn extends StatelessWidget {
+  final IconData icon;
+  final bool lime;
+  final VoidCallback onTap;
+  const _QtyBtn({
+    required this.icon,
+    required this.lime,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: lime ? AppColors.primary : Colors.transparent,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            icon,
+            size: 16,
+            color: lime ? AppColors.bg : Colors.white,
+          ),
+        ),
+      );
+}
+
+// ─── Sticky lime CTA ────────────────────────────────────────────────────────
+class _LimeCta extends StatelessWidget {
+  final String label;
+  final String total;
+  final VoidCallback? onTap;
+  const _LimeCta({
+    required this.label,
+    required this.total,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Opacity(
+          opacity: onTap == null ? 0.5 : 1,
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(100),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.30),
+                  blurRadius: 24,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
                 Text(
-                  '(min: ${group.minSelect}, max: ${group.maxSelect})',
-                  style: const TextStyle(
-                    fontSize: 12, color: AppColors.textHint,
+                  label,
+                  style: TextStyle(
+                    color: AppColors.bg,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  "$total сум",
+                  style: GoogleFonts.jetBrainsMono(
+                    color: AppColors.bg,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
             ),
           ),
-          for (var i = 0; i < group.options.length; i++) ...[
-            _OptionTile(
-              option: group.options[i],
-              isChecked: selected.contains(group.options[i].id),
-              isSingle: group.isSingleSelect,
-              disabled: !group.isSingleSelect &&
-                  atMax &&
-                  !selected.contains(group.options[i].id),
-              priceLabel: _fmtDelta(group.options[i].priceDelta),
-              onTap: () => onToggle(group.options[i]),
-            ),
-            if (i < group.options.length - 1)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Divider(height: 1),
-              ),
-          ],
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-}
-
-class _OptionTile extends StatelessWidget {
-  final ModifierOption option;
-  final bool isChecked;
-  final bool isSingle;
-  final bool disabled;
-  final String priceLabel;
-  final VoidCallback onTap;
-  const _OptionTile({
-    required this.option,
-    required this.isChecked,
-    required this.isSingle,
-    required this.disabled,
-    required this.priceLabel,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: disabled || !option.isAvailable ? null : onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(
-            children: [
-              if (isSingle)
-                Radio<bool>(
-                  value: true,
-                  groupValue: isChecked ? true : null,
-                  onChanged: disabled ? null : (_) => onTap(),
-                  activeColor: AppColors.primary,
-                )
-              else
-                Checkbox(
-                  value: isChecked,
-                  onChanged: disabled ? null : (_) => onTap(),
-                  activeColor: AppColors.primary,
-                ),
-              Expanded(
-                child: Text(
-                  option.name,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: disabled || !option.isAvailable
-                        ? AppColors.textHint
-                        : AppColors.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              if (priceLabel.isNotEmpty)
-                Text(priceLabel,
-                    style: const TextStyle(
-                      fontSize: 13, color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w600,
-                    )),
-              const SizedBox(width: 8),
-            ],
-          ),
         ),
-      ),
-    );
-  }
-}
-
-class _Stepper extends StatelessWidget {
-  final int qty;
-  final VoidCallback onMinus;
-  final VoidCallback onPlus;
-  const _Stepper({required this.qty, required this.onMinus, required this.onPlus});
-  @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      color: AppColors.surfaceMuted,
-      borderRadius: BorderRadius.circular(AppRadii.pill),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.remove_rounded, size: 18),
-          onPressed: onMinus,
-          splashRadius: 18,
-        ),
-        SizedBox(
-          width: 22,
-          child: Text(
-            '$qty',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ),
-        IconButton(
-          icon: const Icon(Icons.add_rounded, size: 18),
-          onPressed: onPlus,
-          splashRadius: 18,
-        ),
-      ],
-    ),
-  );
-}
-
-class _HeroChip extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _HeroChip({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: Colors.white,
-    shape: const CircleBorder(),
-    elevation: 0,
-    child: InkWell(
-      onTap: onTap,
-      customBorder: const CircleBorder(),
-      child: Container(
-        width: 44, height: 44,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: AppShadows.card,
-        ),
-        child: Icon(icon, color: AppColors.neutralInk, size: 22),
-      ),
-    ),
-  );
+      );
 }
