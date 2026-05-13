@@ -30,11 +30,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   static const _chips = [
-    'Hammasi', 'Mashhur', 'Sushi', 'Pizza', 'Burger', "O'zbek", 'Vegan',
+    'Все', 'Популярное', 'Суши', 'Пицца', 'Бургер', 'Узбекская', 'Веган',
   ];
 
   List<Shop> _shops = const [];
-  String _activeChip = 'Hammasi';
+  String _activeChip = 'Все';
   bool _loading = true;
 
   @override
@@ -108,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const _HeroPlaceholder(),
               const SizedBox(height: 28),
               _SectionRow(
-                title: 'Yaqin atrofdagi',
+                title: 'Рядом с вами',
                 onMore: () => context.go('/buyer/shops'),
               ),
               const SizedBox(height: 14),
@@ -134,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 32),
                   child: Center(child: Text(
-                    "Hozircha do'konlar yo'q",
+                    "Пока нет ресторанов",
                     style: TextStyle(color: AppColors.textHint),
                   )),
                 ),
@@ -171,7 +171,7 @@ class _Header extends StatelessWidget {
               const SizedBox(width: 10),
               Flexible(
                 child: Text(
-                  'Yunusobod, 13-mavze',
+                  'Ташкент, Чиланзар',
                   style: const TextStyle(
                     fontSize: 13, fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,
@@ -282,24 +282,21 @@ class _Greeting extends StatelessWidget {
             letterSpacing: -0.7, height: 1.1, color: Colors.white,
           ),
           children: [
-            const TextSpan(text: 'Xush kelibsiz'),
-            if (name != null) ...[
-              const TextSpan(text: ', '),
-              TextSpan(
-                text: name,
-                style: GoogleFonts.playfairDisplay(
-                  fontStyle: FontStyle.italic,
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w500,
-                ),
+            const TextSpan(text: 'Добро пожаловать,\n'),
+            TextSpan(
+              text: name ?? 'Асаль',
+              style: GoogleFonts.playfairDisplay(
+                fontStyle: FontStyle.italic,
+                color: AppColors.primary,
+                fontWeight: FontWeight.w500,
               ),
-            ],
+            ),
           ],
         ),
       ),
       const SizedBox(height: 4),
       Text(
-        "Bugun nima buyurtma qilamiz?",
+        "Что закажем сегодня?",
         style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
       ),
     ],
@@ -327,7 +324,7 @@ class _SearchPill extends StatelessWidget {
               color: AppColors.textSecondary.withValues(alpha: 0.85)),
           const SizedBox(width: 12),
           Expanded(child: Text(
-            'Restoran yoki taom qidiring',
+            'Ресторан или блюдо',
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           )),
           Container(
@@ -455,7 +452,7 @@ class _HeroCard extends StatelessWidget {
                 border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
               ),
               child: Text(
-                '★ Tahririyat tanlovi',
+                '★ ВЫБОР РЕДАКЦИИ',
                 style: TextStyle(
                   fontSize: 10.5, fontWeight: FontWeight.w600,
                   letterSpacing: 0.8, color: AppColors.primary,

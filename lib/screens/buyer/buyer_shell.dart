@@ -6,8 +6,9 @@ import '../../providers/cart_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../theme/app_theme.dart';
 
-/// Frosted-glass tabbar in the Master Design v1 spirit (master.html L927-965).
-/// Active tab gets a lime label + a small lime dot indicator above its icon.
+/// Frosted glass dock (master.html .tabbar) with a floating role/route pill
+/// suspended above the dock. The pill doubles as the role switcher — tapping
+/// it pushes /switch-role.
 class BuyerShell extends StatelessWidget {
   final Widget child;
   const BuyerShell({super.key, required this.child});
@@ -37,6 +38,7 @@ class BuyerShell extends StatelessWidget {
     final cart = context.watch<CartProvider>();
     final orders = context.watch<OrderProvider>();
     final idx = _currentIndex(context);
+    final route = GoRouterState.of(context).uri.path;
 
     final activeCount = orders.all
         .where((o) =>
@@ -45,11 +47,11 @@ class BuyerShell extends StatelessWidget {
         .length;
 
     final items = <_NavItem>[
-      const _NavItem(icon: Icons.home_outlined, label: 'Bosh'),
-      const _NavItem(icon: Icons.search_rounded, label: 'Qidiruv'),
-      _NavItem(icon: Icons.shopping_bag_outlined, label: 'Savat', badge: cart.itemCount),
-      _NavItem(icon: Icons.receipt_long_outlined, label: 'Buyurtma', badge: activeCount),
-      const _NavItem(icon: Icons.person_outline_rounded, label: 'Profil'),
+      const _NavItem(icon: Icons.home_outlined, label: 'Главная'),
+      const _NavItem(icon: Icons.search_rounded, label: 'Поиск'),
+      _NavItem(icon: Icons.shopping_bag_outlined, label: 'Корзина', badge: cart.itemCount),
+      _NavItem(icon: Icons.receipt_long_outlined, label: 'Заказы', badge: activeCount),
+      const _NavItem(icon: Icons.person_outline_rounded, label: 'Профиль'),
     ];
 
     return Scaffold(
@@ -57,30 +59,42 @@ class BuyerShell extends StatelessWidget {
       extendBody: true,
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-        child: Container(
-          decoration: BoxDecoration(
-            // Frosted glass: dark translucent base, soft border, deep shadow.
-            color: const Color(0xB30F0F16),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: AppColors.border),
-            boxShadow: const [BoxShadow(
-              color: Color(0x66000000),
-              blurRadius: 60, offset: Offset(0, 20),
-            )],
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          child: Row(
-            children: [
-              for (var i = 0; i < items.length; i++)
-                Expanded(
-                  child: _Tab(
-                    item: items[i],
-                    selected: i == idx,
-                    onTap: () => _go(context, i),
-                  ),
-                ),
-            ],
-          ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.topCenter,
+          children: [
+            // Frosted glass dock
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xB30F0F16),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: AppColors.border),
+                boxShadow: const [BoxShadow(
+                  color: Color(0x66000000),
+                  blurRadius: 60, offset: Offset(0, 20),
+                )],
+              ),
+              padding: const EdgeInsets.fromLTRB(8, 18, 8, 12),
+              child: Row(
+                children: [
+                  for (var i = 0; i < items.length; i++)
+                    Expanded(
+                      child: _Tab(
+                        item: items[i],
+                        selected: i == idx,
+                        onTap: () => _go(context, i),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Floating role / route pill — taps open the role switcher.
+            Positioned(
+              top: -14,
+              child: _RoleRoutePill(route: route),
+            ),
+          ],
         ),
       ),
     );
@@ -109,11 +123,11 @@ class _Tab extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Lime dot indicator above the icon (master.html: .tab.active::before)
+              // Lime dot indicator above the icon (master.html .tab.active::before)
               SizedBox(
                 height: 6,
                 child: selected
@@ -174,4 +188,66 @@ class _Tab extends StatelessWidget {
       ),
     );
   }
+}
+
+class _RoleRoutePill extends StatelessWidget {
+  final String route;
+  const _RoleRoutePill({required this.route});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: () {
+      HapticFeedback.selectionClick();
+      context.push('/switch-role');
+    },
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xE6000000),
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [BoxShadow(
+          color: Color(0x80000000), blurRadius: 16, offset: Offset(0, 6),
+        )],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6, height: 6,
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.7),
+                blurRadius: 6, spreadRadius: 1,
+              )],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'ПОКУПАТЕЛЬ',
+            style: TextStyle(
+              fontSize: 9.5, fontWeight: FontWeight.w800,
+              letterSpacing: 1.4,
+              color: Colors.white.withValues(alpha: 0.78),
+            ),
+          ),
+          Text(' · ',
+              style: TextStyle(
+                fontSize: 9.5, fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.35),
+              )),
+          Text(
+            route.isEmpty ? '/home' : route,
+            style: TextStyle(
+              fontSize: 9.5, fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+              color: AppColors.primary,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
