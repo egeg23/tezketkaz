@@ -20,8 +20,8 @@ class TrackingScreen extends StatefulWidget {
 
 class _TrackingScreenState extends State<TrackingScreen> {
   // Static demo positions — Yunusobod, Tashkent.
-  static final _shopPoint = LatLng(41.3617, 69.2877);
-  static final _customerPoint = LatLng(41.3700, 69.2890);
+  static const _shopPoint = LatLng(41.3617, 69.2877);
+  static const _customerPoint = LatLng(41.3700, 69.2890);
 
   LatLng? _courierPoint;
   bool _confirming = false;
@@ -119,15 +119,15 @@ class _TrackingScreenState extends State<TrackingScreen> {
                     ),
                     MarkerLayer(
                       markers: [
-                        Marker(
+                        const Marker(
                           point: _shopPoint,
-                          width: 36, height: 36,
+                          width: 40, height: 40,
                           child: _Pin(color: AppColors.primary, icon: '🏪'),
                         ),
-                        Marker(
+                        const Marker(
                           point: _customerPoint,
-                          width: 36, height: 36,
-                          child: _Pin(color: Colors.deepPurple, icon: '🏠'),
+                          width: 40, height: 40,
+                          child: _Pin(color: AppColors.neutralInk, icon: '🏠'),
                         ),
                         if (_courierPoint != null)
                           Marker(
@@ -266,7 +266,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                       ),
                     ],
 
-                    // ── Buyer confirm button ──
+                    // ── Buyer confirm button — UberEats lime pill ──
                     if (isHandedOver) ...[
                       const SizedBox(height: 16),
                       SizedBox(
@@ -274,13 +274,29 @@ class _TrackingScreenState extends State<TrackingScreen> {
                         child: ElevatedButton.icon(
                           onPressed: _confirming ? null : _confirmReceived,
                           icon: _confirming
-                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                              : const Icon(Icons.check_circle_outline),
-                          label: const Text("Qabul qildim", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                              ? const SizedBox(
+                                  width: 18, height: 18,
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.neutralInk, strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.check_circle_outline,
+                                  color: AppColors.neutralInk),
+                          label: const Text(
+                            "Qabul qildim",
+                            style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w800,
+                              color: AppColors.neutralInk, letterSpacing: 0.1,
+                            ),
+                          ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.success,
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(double.infinity, 50),
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: AppColors.neutralInk,
+                            minimumSize: const Size(double.infinity, 54),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppRadii.pill),
+                            ),
                           ),
                         ),
                       ),

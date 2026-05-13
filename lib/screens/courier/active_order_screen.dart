@@ -852,10 +852,10 @@ class _ConfirmPickup extends StatelessWidget {
           onChanged: (_) => onChanged(),
         ),
         const SizedBox(height: 10),
-        Center(
+        const Center(
           child: Text(
             'Do\'kon panelida buyurtma raqami ko\'rsatilgan',
-            style: const TextStyle(color: AppColors.textHint, fontSize: 12),
+            style: TextStyle(color: AppColors.textHint, fontSize: 12),
           ),
         ),
       ],

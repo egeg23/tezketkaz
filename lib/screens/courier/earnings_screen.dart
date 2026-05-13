@@ -262,7 +262,7 @@ class _TodayTab extends StatelessWidget {
             }
             final list = snap.data ?? const <AppOrder>[];
             if (list.isEmpty) {
-              return _EmptyHint(text: 'Hozircha tarix yo\'q');
+              return const _EmptyHint(text: 'Hozircha tarix yo\'q');
             }
             return Column(
               children: [
@@ -314,7 +314,7 @@ class _PeriodTab extends StatelessWidget {
         ]),
         const SizedBox(height: 18),
         if (daily.isEmpty)
-          _EmptyHint(text: 'Diagramma uchun ma\'lumot yo\'q')
+          const _EmptyHint(text: 'Diagramma uchun ma\'lumot yo\'q')
         else
           _BarChartCard(daily: daily, currency: total.currency),
         const SizedBox(height: 60),
@@ -525,7 +525,7 @@ class _BarChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (daily.isEmpty) return;
     final n = daily.length;
-    final gap = 4.0;
+    const gap = 4.0;
     final totalGap = gap * (n - 1);
     final barW = ((size.width - totalGap) / n).clamp(2.0, 32.0);
     final paint = Paint()..color = AppColors.courier;

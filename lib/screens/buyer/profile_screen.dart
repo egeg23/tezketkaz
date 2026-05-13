@@ -24,67 +24,97 @@ class ProfileScreen extends StatelessWidget {
     final deliveredCount = orders.all.where((o) => o.status == AppOrderStatus.delivered).length;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profil')),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
         children: [
-          // ── Avatar + name ─────────────────────────────────────────────────
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              // Phase 11 — theme-aware for dark mode legibility.
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 32,
-                          backgroundColor: AppColors.primaryLight,
-                          child: Text(
-                            user.name?.isNotEmpty == true ? user.name![0].toUpperCase() : '?',
-                            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.primary),
+          // ── UberEats-style hero: near-black card with lime accent stats ──
+          SafeArea(
+            bottom: false,
+            child: Container(
+              margin: const EdgeInsets.only(top: 12),
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+              decoration: BoxDecoration(
+                color: AppColors.neutralInk,
+                borderRadius: BorderRadius.circular(AppRadii.xl),
+                boxShadow: AppShadows.elevated,
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 64, height: 64,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                          boxShadow: [BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.35),
+                            blurRadius: 20, offset: const Offset(0, 6),
+                          )],
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          user.name?.isNotEmpty == true ? user.name![0].toUpperCase() : '?',
+                          style: const TextStyle(
+                            fontSize: 26, fontWeight: FontWeight.w800,
+                            color: AppColors.neutralInk,
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(user.name ?? 'Foydalanuvchi',
-                              style: Theme.of(context).textTheme.titleLarge),
-                          const SizedBox(height: 2),
-                          Text(user.phone,
-                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                        ],
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined, color: AppColors.textSecondary),
-                      onPressed: () {},
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const Divider(height: 1),
-                const SizedBox(height: 16),
-                // Stats row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _Stat(value: '$totalOrders', label: 'Jami buyurtma'),
-                    _Stat(value: '$activeOrders', label: 'Faol', color: AppColors.primary),
-                    _Stat(value: '$deliveredCount', label: 'Yetkazildi', color: AppColors.success),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              user.name ?? 'Foydalanuvchi',
+                              style: const TextStyle(
+                                color: Colors.white, fontSize: 20,
+                                fontWeight: FontWeight.w800, letterSpacing: -0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              user.phone,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 13, fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.edit_outlined,
+                              color: Colors.white, size: 18),
+                          onPressed: () {},
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Container(height: 1, color: Colors.white.withValues(alpha: 0.1)),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _HeroStat(value: '$totalOrders', label: 'Jami'),
+                      _HeroDivider(),
+                      _HeroStat(value: '$activeOrders', label: 'Faol', accent: true),
+                      _HeroDivider(),
+                      _HeroStat(value: '$deliveredCount', label: 'Yetkazildi'),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
 
@@ -244,19 +274,31 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
-class _Stat extends StatelessWidget {
+class _HeroStat extends StatelessWidget {
   final String value, label;
-  final Color? color;
-  const _Stat({required this.value, required this.label, this.color});
+  final bool accent;
+  const _HeroStat({required this.value, required this.label, this.accent = false});
   @override
   Widget build(BuildContext context) => Column(
     children: [
       Text(value, style: TextStyle(
-        fontSize: 20, fontWeight: FontWeight.w800,
-        color: color ?? AppColors.textPrimary,
+        fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.4,
+        color: accent ? AppColors.primary : Colors.white,
       )),
-      Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+      const SizedBox(height: 2),
+      Text(label, style: TextStyle(
+        color: Colors.white.withValues(alpha: 0.6),
+        fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.3,
+      )),
     ],
+  );
+}
+
+class _HeroDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 1, height: 28,
+    color: Colors.white.withValues(alpha: 0.12),
   );
 }
 
@@ -264,22 +306,28 @@ class _Card extends StatelessWidget {
   final List<Widget> children;
   const _Card({required this.children});
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      // Phase 11 — theme-aware surface so dark mode renders the right tone.
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Theme.of(context).dividerColor),
-    ),
-    child: Column(
-      children: children.asMap().entries.map((e) => Column(
-        children: [
-          e.value,
-          if (e.key < children.length - 1) const Divider(height: 1, indent: 54, endIndent: 16),
-        ],
-      )).toList(),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+        boxShadow: isDark ? null : AppShadows.card,
+      ),
+      child: Column(
+        children: children.asMap().entries.map((e) => Column(
+          children: [
+            e.value,
+            if (e.key < children.length - 1)
+              Padding(
+                padding: const EdgeInsets.only(left: 54),
+                child: Divider(height: 1, color: Theme.of(context).dividerColor),
+              ),
+          ],
+        )).toList(),
+      ),
+    );
+  }
 }
 
 class _Tile extends StatelessWidget {
@@ -300,50 +348,114 @@ class _Tile extends StatelessWidget {
   );
 }
 
-/// Phase 10.3 — picker for `ThemeMode.system` / `light` / `dark`. The change
-/// is persisted by [ThemeProvider] and re-renders the whole `MaterialApp`
-/// tree thanks to the AnimatedBuilder in main.dart.
+/// Phase 10.3 — picker for `ThemeMode.system` / `light` / `dark`. Rendered as
+/// a 3-segment pill (UberEats-style segmented control) so the choice is
+/// always visible at a glance, not hidden behind a dropdown.
 class _ThemeTile extends StatelessWidget {
-  String _label(BuildContext context, ThemeMode mode) {
-    switch (mode) {
-      case ThemeMode.light:
-        return t(context, 'theme.light');
-      case ThemeMode.dark:
-        return t(context, 'theme.dark');
-      case ThemeMode.system:
-        return t(context, 'theme.system');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
-    return ListTile(
-      leading: const Text('🌙', style: TextStyle(fontSize: 22)),
-      title: Text(t(context, 'theme.title'),
-          style: const TextStyle(
-              fontWeight: FontWeight.w500, fontSize: 14)),
-      subtitle: Text(_label(context, theme.themeMode),
-          style: const TextStyle(fontSize: 12)),
-      trailing: DropdownButton<ThemeMode>(
-        value: theme.themeMode,
-        underline: const SizedBox.shrink(),
-        items: [
-          DropdownMenuItem(
-              value: ThemeMode.system,
-              child: Text(t(context, 'theme.system'))),
-          DropdownMenuItem(
-              value: ThemeMode.light,
-              child: Text(t(context, 'theme.light'))),
-          DropdownMenuItem(
-              value: ThemeMode.dark,
-              child: Text(t(context, 'theme.dark'))),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('🌙', style: TextStyle(fontSize: 22)),
+              const SizedBox(width: 12),
+              Text(
+                t(context, 'theme.title'),
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(AppRadii.pill),
+            ),
+            child: Row(
+              children: [
+                _ThemeSegment(
+                  selected: theme.themeMode == ThemeMode.system,
+                  icon: Icons.brightness_auto_rounded,
+                  label: t(context, 'theme.system'),
+                  onTap: () => theme.setThemeMode(ThemeMode.system),
+                ),
+                _ThemeSegment(
+                  selected: theme.themeMode == ThemeMode.light,
+                  icon: Icons.wb_sunny_rounded,
+                  label: t(context, 'theme.light'),
+                  onTap: () => theme.setThemeMode(ThemeMode.light),
+                ),
+                _ThemeSegment(
+                  selected: theme.themeMode == ThemeMode.dark,
+                  icon: Icons.nightlight_round,
+                  label: t(context, 'theme.dark'),
+                  onTap: () => theme.setThemeMode(ThemeMode.dark),
+                ),
+              ],
+            ),
+          ),
         ],
-        onChanged: (mode) {
-          if (mode != null) theme.setThemeMode(mode);
-        },
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+    );
+  }
+}
+
+class _ThemeSegment extends StatelessWidget {
+  final bool selected;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _ThemeSegment({
+    required this.selected,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.neutralInk : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadii.pill),
+            boxShadow: selected
+                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.18),
+                    blurRadius: 8, offset: const Offset(0, 2))]
+                : null,
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: selected ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

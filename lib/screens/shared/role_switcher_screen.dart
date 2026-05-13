@@ -131,7 +131,7 @@ class RoleSwitcherScreen extends StatelessWidget {
                         : 'Do\'kon egasi? Ulaning',
                       color: _kShopColor,
                       isActive: role == UserRole.shop,
-                      badge: user.isShopOwner ? _Badge('Ulangan', AppColors.success) : null,
+                      badge: user.isShopOwner ? const _Badge('Ulangan', AppColors.success) : null,
                       onTap: () async {
                         if (!user.isShopOwner) {
                           _shopConnectSheet(context, auth);
@@ -185,9 +185,9 @@ class RoleSwitcherScreen extends StatelessWidget {
 
   Widget? _courierBadge(User user) {
     switch (user.courierStatus) {
-      case CourierVerificationStatus.pending:  return _Badge('Tekshirilmoqda', AppColors.warning);
-      case CourierVerificationStatus.approved: return _Badge('Faol', AppColors.success);
-      case CourierVerificationStatus.rejected: return _Badge('Rad etildi', AppColors.error);
+      case CourierVerificationStatus.pending:  return const _Badge('Tekshirilmoqda', AppColors.warning);
+      case CourierVerificationStatus.approved: return const _Badge('Faol', AppColors.success);
+      case CourierVerificationStatus.rejected: return const _Badge('Rad etildi', AppColors.error);
       default: return null;
     }
   }
@@ -243,13 +243,13 @@ class RoleSwitcherScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: _kShopColor.withValues(alpha: 0.3)),
               ),
-              child: Column(
+              child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Prototip: demo do\'kon',
+                  Text('Prototip: demo do\'kon',
                       style: TextStyle(fontWeight: FontWeight.w700, color: _kShopColor)),
-                  const SizedBox(height: 4),
-                  const Text('«Korzinka — Yunusobod» do\'koni sifatida ulaning',
+                  SizedBox(height: 4),
+                  Text('«Korzinka — Yunusobod» do\'koni sifatida ulaning',
                       style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
                 ],
               ),

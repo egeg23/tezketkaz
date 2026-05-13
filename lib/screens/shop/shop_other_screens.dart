@@ -205,9 +205,9 @@ class ShopProfileScreen extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _Stat('4.8 ⭐', 'Reyting'),
+                    const _Stat('4.8 ⭐', 'Reyting'),
                     _Stat('$delivered', 'Buyurtmalar'),
-                    _Stat('98%', 'Vaqtida'),
+                    const _Stat('98%', 'Vaqtida'),
                   ],
                 ),
               ],
@@ -215,20 +215,20 @@ class ShopProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          _Card(title: 'Ish vaqti', tiles: [
+          const _Card(title: 'Ish vaqti', tiles: [
             ('🕐', 'Ish soatlari', '09:00 – 22:00'),
             ('📅', 'Dam olish', 'Har kuni ishlaydi'),
             ('⏸️', 'Vaqtinchalik yopish', 'Barcha buyurtmalarni to\'xtatish'),
           ]),
           const SizedBox(height: 12),
-          _Card(title: 'To\'lov usullari', tiles: [
+          const _Card(title: 'To\'lov usullari', tiles: [
             ('💳', 'Click', 'Ulangan ✓'),
             ('💳', 'Payme', 'Ulangan ✓'),
             ('💜', 'Uzum Pay', 'Ulangan ✓'),
             ('💵', 'Naqd pul', 'Faol'),
           ]),
           const SizedBox(height: 12),
-          _Card(title: 'Bildirishnomalar', tiles: [
+          const _Card(title: 'Bildirishnomalar', tiles: [
             ('🔔', 'Yangi buyurtmalar', 'Push + Ovoz'),
             ('📱', 'SMS', 'Faol'),
           ]),

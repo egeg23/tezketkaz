@@ -367,11 +367,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                             fontSize: 22,
                             fontWeight: FontWeight.w800)),
                     Text(
-                      _money(cur.periodMoney) +
-                          ' / ' +
-                          (cur.billingPeriod == 'yearly'
+                      '${_money(cur.periodMoney)} / ${cur.billingPeriod == 'yearly'
                               ? t(context, 'subscription.period_yearly')
-                              : t(context, 'subscription.period_monthly')),
+                              : t(context, 'subscription.period_monthly')}',
                       style: const TextStyle(
                           color: Colors.white70, fontSize: 13),
                     ),

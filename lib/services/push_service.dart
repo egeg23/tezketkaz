@@ -157,7 +157,7 @@ class PushService {
       priority: Priority.high,
       icon: notif.android?.smallIcon,
     );
-    final ios = const DarwinNotificationDetails();
+    const ios = DarwinNotificationDetails();
     await _localNotifs.show(
       notif.hashCode,
       notif.title,

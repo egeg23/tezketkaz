@@ -84,11 +84,11 @@ class _TimeSlotPickerState extends State<TimeSlotPicker> {
   @override
   Widget build(BuildContext context) {
     if (_slots.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(12),
+      return const Padding(
+        padding: EdgeInsets.all(12),
         child: Text(
           "Bo'sh slot yo'q",
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
         ),
       );
     }

@@ -177,44 +177,43 @@ class _OrderCard extends StatelessWidget {
     final isComplete = order.status == AppOrderStatus.delivered ||
                        order.status == AppOrderStatus.confirmedByBuyer;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: isActive ? () => context.go('/buyer/tracking/${order.id}') : null,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
+        margin: const EdgeInsets.only(bottom: 14),
         decoration: BoxDecoration(
-          // Phase 11 — theme-aware so dark mode renders correctly.
           color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isActive
-                ? AppColors.primary.withValues(alpha: 0.4)
-                : Theme.of(context).dividerColor,
-            width: isActive ? 1.5 : 1,
-          ),
+          borderRadius: BorderRadius.circular(AppRadii.lg),
+          boxShadow: isDark ? null : AppShadows.card,
         ),
         child: Column(
           children: [
-            // Header
+            // Header — lime tint for active orders, muted surface otherwise.
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: isActive ? AppColors.primaryLight : AppColors.bg,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                color: isActive
+                    ? AppColors.primaryLight
+                    : Theme.of(context).colorScheme.surfaceContainerHigh,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadii.lg)),
               ),
               child: Row(
                 children: [
-                  Text(order.statusEmoji, style: const TextStyle(fontSize: 16)),
-                  const SizedBox(width: 8),
+                  Text(order.statusEmoji, style: const TextStyle(fontSize: 18)),
+                  const SizedBox(width: 10),
                   Text(order.statusLabel,
                       style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: isActive ? AppColors.primary : AppColors.textSecondary,
-                        fontSize: 13,
+                        fontWeight: FontWeight.w800, fontSize: 13,
+                        color: isActive
+                            ? AppColors.primaryDark
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                       )),
                   const Spacer(),
                   Text(order.minutesAgo,
-                      style: const TextStyle(
-                        color: AppColors.textHint, fontSize: 12,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12, fontWeight: FontWeight.w500,
                       )),
                 ],
               ),

@@ -115,7 +115,7 @@ class _CourierVerificationScreenState
             const SizedBox(height: 12),
             Container(
               width: 80, height: 80,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppColors.primaryLight,
                 shape: BoxShape.circle,
               ),
@@ -644,17 +644,17 @@ class _StepSelfEmployed extends StatelessWidget {
           const SizedBox(height: 24),
 
           // How to get self-employed status
-          _InfoStep(
+          const _InfoStep(
             num: '1',
             title: 'my.soliq.uz saytiga kiring',
             subtitle: 'Soliq qo\'mitasining rasmiy portali',
           ),
-          _InfoStep(
+          const _InfoStep(
             num: '2',
             title: '"O\'z-o\'zini band qilish" bo\'limini toping',
             subtitle: 'Ro\'yxatdan o\'tish bepul va tezkor',
           ),
-          _InfoStep(
+          const _InfoStep(
             num: '3',
             title: 'Ariza toldiring',
             subtitle: 'Daromaddan 1% soliq — tovar aylanmasi 1 mlrd so\'mgacha',
@@ -735,7 +735,7 @@ class _InfoStep extends StatelessWidget {
         children: [
           Container(
             width: 32, height: 32,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.courierLight,
               shape: BoxShape.circle,
             ),

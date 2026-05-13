@@ -406,7 +406,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
               value: _isDefault,
               onChanged: (v) => setState(() => _isDefault = v),
               title: Text(t(context, 'make_default_address')),
-              activeColor: AppColors.primary,
+              activeThumbColor: AppColors.primary,
             ),
           ],
         ),

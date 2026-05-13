@@ -112,34 +112,43 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               const Spacer(flex: 2),
 
-              // Иллюстрация
-              Center(
-                child: Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Center(
-                    child: Text('🛒', style: TextStyle(fontSize: 56)),
-                  ),
+              // UberEats-style brandmark — lime square with TZ wordmark
+              Container(
+                width: 84, height: 84,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.35),
+                    blurRadius: 28, offset: const Offset(0, 10),
+                  )],
                 ),
+                alignment: Alignment.center,
+                child: const Text('tz',
+                    style: TextStyle(
+                      fontSize: 46, height: 1.0, fontWeight: FontWeight.w900,
+                      color: AppColors.neutralInk, letterSpacing: -2.5,
+                    )),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
               Text(
-                'Kirish',
-                style: Theme.of(context).textTheme.displayMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Telefon raqamingizni kiriting\nva SMS kod oling',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppColors.textSecondary,
+                "Xush kelibsiz",
+                style: TextStyle(
+                  fontSize: 28, fontWeight: FontWeight.w900,
+                  color: Theme.of(context).colorScheme.onSurface,
+                  letterSpacing: -0.6,
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 6),
+              Text(
+                'Telefon raqamingizni kiriting\nva SMS kod oling',
+                style: TextStyle(
+                  fontSize: 14, fontWeight: FontWeight.w500, height: 1.4,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 28),
 
               // Phone input
               Form(

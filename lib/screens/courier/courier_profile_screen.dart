@@ -127,9 +127,9 @@ class CourierProfileScreen extends StatelessWidget {
                 const SizedBox(height: 16),
 
                 // Rating + stats row
-                Row(
+                const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: const [
+                  children: [
                     _StatBadge(emoji: '⭐', value: '4.9', label: 'Reyting'),
                     _StatBadge(emoji: '📦', value: '127', label: 'Buyurtmalar'),
                     _StatBadge(emoji: '🏆', value: '98%', label: 'Vaqtida'),

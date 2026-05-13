@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:go_router/go_router.dart';
 import '../../l10n/l10n.dart';
 import '../../models/promo.dart';
 import '../../services/api_client.dart';
@@ -201,9 +200,9 @@ class _CouponCard extends StatelessWidget {
         children: [
           // Header: type icon + discount + dashed perforation
           Container(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.primaryLight,
-              borderRadius: const BorderRadius.vertical(
+              borderRadius: BorderRadius.vertical(
                   top: Radius.circular(AppRadii.lg)),
             ),
             padding: const EdgeInsets.all(16),

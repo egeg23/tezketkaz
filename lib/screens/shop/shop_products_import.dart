@@ -248,7 +248,7 @@ class _Card extends StatelessWidget {
             Container(
               width: 24, height: 24,
               alignment: Alignment.center,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: kShopColor,
                 shape: BoxShape.circle,
               ),

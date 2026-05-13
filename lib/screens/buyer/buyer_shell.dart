@@ -43,11 +43,11 @@ class BuyerShell extends StatelessWidget {
         .length;
 
     final items = [
-      _NavItem(icon: Icons.home_rounded, label: 'Bosh sahifa'),
-      _NavItem(icon: Icons.storefront_rounded, label: "Do'konlar"),
+      const _NavItem(icon: Icons.home_rounded, label: 'Bosh sahifa'),
+      const _NavItem(icon: Icons.storefront_rounded, label: "Do'konlar"),
       _NavItem(icon: Icons.shopping_basket_rounded, label: 'Savat', badge: cart.itemCount),
       _NavItem(icon: Icons.receipt_long_rounded, label: 'Buyurtmalar', badge: activeCount, badgeColor: AppColors.courier),
-      _NavItem(icon: Icons.person_rounded, label: 'Profil'),
+      const _NavItem(icon: Icons.person_rounded, label: 'Profil'),
     ];
 
     return Scaffold(
@@ -58,9 +58,15 @@ class BuyerShell extends StatelessWidget {
         child: Container(
           height: 68,
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            // UberEats signature — solid near-black dock with lime active pill.
+            color: AppColors.neutralInk,
             borderRadius: BorderRadius.circular(AppRadii.xl),
-            boxShadow: AppShadows.elevated,
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0A0A0A).withValues(alpha: 0.22),
+                blurRadius: 30, offset: const Offset(0, 12),
+              ),
+            ],
           ),
           child: Row(
             children: [
@@ -117,14 +123,14 @@ class _NavBtn extends StatelessWidget {
                   width: selected ? 56 : 36,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: selected ? AppColors.primaryLight : Colors.transparent,
+                    color: selected ? AppColors.primary : Colors.transparent,
                     borderRadius: BorderRadius.circular(AppRadii.pill),
                   ),
                   alignment: Alignment.center,
                   child: Icon(
                     item.icon,
                     size: 22,
-                    color: selected ? AppColors.primary : AppColors.textHint,
+                    color: selected ? AppColors.neutralInk : Colors.white.withValues(alpha: 0.6),
                   ),
                 ),
                 if ((item.badge ?? 0) > 0)
@@ -137,13 +143,15 @@ class _NavBtn extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: item.badgeColor ?? AppColors.primary,
                         borderRadius: BorderRadius.circular(AppRadii.pill),
-                        border: Border.all(color: AppColors.surface, width: 2),
+                        border: Border.all(color: AppColors.neutralInk, width: 2),
                       ),
                       alignment: Alignment.center,
                       child: Text(
                         '${item.badge}',
-                        style: const TextStyle(
-                          color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800,
+                        style: TextStyle(
+                          color: (item.badgeColor ?? AppColors.primary) == AppColors.primary
+                              ? AppColors.neutralInk : Colors.white,
+                          fontSize: 10, fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
@@ -156,7 +164,7 @@ class _NavBtn extends StatelessWidget {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected ? AppColors.primary : AppColors.textHint,
+                color: selected ? Colors.white : Colors.white.withValues(alpha: 0.55),
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

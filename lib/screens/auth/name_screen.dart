@@ -32,7 +32,7 @@ class _NameScreenState extends State<NameScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Spacer(),
-              Center(
+              const Center(
                 child: Text('👋', style: TextStyle(fontSize: 64)),
               ),
               const SizedBox(height: 32),

@@ -65,32 +65,28 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) => Scaffold(
+    backgroundColor: AppColors.neutralInk,
     body: Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppColors.primary, AppColors.primaryDark],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
-      ),
+      decoration: const BoxDecoration(color: AppColors.neutralInk),
       child: Stack(
         children: [
-          // Decorative bubbles
+          // Decorative lime glows on near-black canvas
           Positioned(
-            top: -100, right: -80,
+            top: -120, right: -80,
             child: Container(
-              width: 280, height: 280,
+              width: 320, height: 320,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
+                color: AppColors.primary.withValues(alpha: 0.10),
                 shape: BoxShape.circle,
               ),
             ),
           ),
           Positioned(
-            bottom: -120, left: -60,
+            bottom: -140, left: -60,
             child: Container(
-              width: 240, height: 240,
+              width: 260, height: 260,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
+                color: AppColors.primary.withValues(alpha: 0.06),
                 shape: BoxShape.circle,
               ),
             ),
@@ -108,18 +104,50 @@ class _SplashScreenState extends State<SplashScreen>
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Logo mark
+                        // Logo mark — lime rounded square with bold TZ wordmark
+                        // and a small lightning glyph baseline-aligned to the
+                        // right, all in near-black ink.
                         Container(
-                          width: 112, height: 112,
+                          width: 128, height: 128,
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(32),
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(36),
                             boxShadow: [BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.18),
-                              blurRadius: 40, offset: const Offset(0, 16),
+                              color: AppColors.primary.withValues(alpha: 0.45),
+                              blurRadius: 60, offset: const Offset(0, 20),
+                              spreadRadius: 2,
                             )],
                           ),
-                          child: const Center(child: Text('⚡', style: TextStyle(fontSize: 56))),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              const Text(
+                                'tz',
+                                style: TextStyle(
+                                  fontSize: 72, height: 1.0,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.neutralInk,
+                                  letterSpacing: -4,
+                                ),
+                              ),
+                              Positioned(
+                                top: 16, right: 16,
+                                child: Container(
+                                  width: 18, height: 18,
+                                  decoration: const BoxDecoration(
+                                    color: AppColors.neutralInk,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const Icon(
+                                    Icons.bolt_rounded,
+                                    color: AppColors.primary,
+                                    size: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 28),
                         const Text(

@@ -80,7 +80,7 @@ class _SupportNewTicketScreenState extends State<SupportNewTicketScreen> {
         children: [
           // ── Category ───────────────────────────────────────────────────────
           DropdownButtonFormField<String>(
-            value: _category,
+            initialValue: _category,
             isExpanded: true,
             decoration: const InputDecoration(),
             hint: Text(t(context, 'support.category_other')),
@@ -98,7 +98,7 @@ class _SupportNewTicketScreenState extends State<SupportNewTicketScreen> {
           // ── Order picker (optional) ───────────────────────────────────────
           if (orders.isNotEmpty) ...[
             DropdownButtonFormField<String?>(
-              value: _orderId,
+              initialValue: _orderId,
               isExpanded: true,
               hint: const Text('Order (optional)'),
               items: [

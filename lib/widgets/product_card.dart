@@ -101,12 +101,13 @@ class _ProductCardState extends State<ProductCard> {
   Widget build(BuildContext context) {
     final cart = context.watch<CartProvider>();
     final qty = cart.quantityOf(product.id);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(AppRadii.lg),
-        boxShadow: AppShadows.card,
+        boxShadow: isDark ? null : AppShadows.card,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadii.lg),
@@ -121,31 +122,34 @@ class _ProductCardState extends State<ProductCard> {
                 fit: StackFit.expand,
                 children: [
                   Container(color: AppColors.surfaceMuted),
-                  CachedNetworkImage(
-                    imageUrl: product.imageUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (_, __) => const _Shimmer(),
-                    errorWidget: (_, __, ___) => Container(
-                      color: AppColors.surfaceMuted,
-                      child: const Icon(Icons.image_outlined, color: AppColors.textHint, size: 32),
+                  Hero(
+                    tag: 'product-${product.id}',
+                    child: CachedNetworkImage(
+                      imageUrl: product.imageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => const _Shimmer(),
+                      errorWidget: (_, __, ___) => Container(
+                        color: AppColors.surfaceMuted,
+                        child: const Icon(Icons.image_outlined, color: AppColors.textHint, size: 32),
+                      ),
                     ),
                   ),
-                  // Discount badge
+                  // Discount badge — UberEats prints the % saved in lime, not red.
                   if (product.hasDiscount)
                     Positioned(
                       top: 10, left: 10,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          color: AppColors.error,
-                          borderRadius: BorderRadius.circular(AppRadii.xs),
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(AppRadii.pill),
                           boxShadow: AppShadows.card,
                         ),
                         child: Text(
                           '−${product.discountPercent.toInt()}%',
                           style: const TextStyle(
-                            color: Colors.white, fontSize: 11,
-                            fontWeight: FontWeight.w800, letterSpacing: 0.2,
+                            color: AppColors.neutralInk, fontSize: 11,
+                            fontWeight: FontWeight.w800, letterSpacing: 0.3,
                           ),
                         ),
                       ),
@@ -253,7 +257,7 @@ class _AddButton extends StatelessWidget {
       customBorder: const CircleBorder(),
       child: Container(
         width: 36, height: 36,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: AppColors.surface,
           shape: BoxShape.circle,
           boxShadow: AppShadows.cardHover,

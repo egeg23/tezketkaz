@@ -1,6 +1,7 @@
 /// Phase 1 catalog models — categories, shops (with distance), modifier groups,
 /// addresses. Kept separate from the legacy `models.dart` so the existing
 /// types stay untouched.
+library;
 
 class Category {
   final String id;

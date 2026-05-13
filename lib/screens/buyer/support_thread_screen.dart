@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../l10n/l10n.dart';
 import '../../services/api_client.dart';
@@ -296,7 +295,7 @@ class _ReplyBar extends StatelessWidget {
             const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: Theme.of(context).cardTheme.color ?? AppColors.surface,
-          border: Border(
+          border: const Border(
             top: BorderSide(color: AppColors.border, width: 1),
           ),
         ),

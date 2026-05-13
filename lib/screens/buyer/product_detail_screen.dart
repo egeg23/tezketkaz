@@ -143,56 +143,124 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final p = widget.product;
     final disabled = _validationError(context) != null;
 
+    final mq = MediaQuery.of(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(title: Text(p.name)),
+      extendBodyBehindAppBar: true,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.fromLTRB(0, 0, 0, 140),
               children: [
-                AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: p.imageUrl.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: p.imageUrl,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => Container(
-                            color: AppColors.surfaceMuted,
-                            alignment: Alignment.center,
-                            child: const Icon(Icons.image_outlined,
-                                size: 48, color: AppColors.textHint),
-                          ),
-                        )
-                      : Container(
-                          color: AppColors.surfaceMuted,
-                          alignment: Alignment.center,
-                          child: const Icon(Icons.image_outlined,
-                              size: 48, color: AppColors.textHint),
+                // UberEats/abuanwar-style hero: full-bleed image, soft rounded
+                // bottom corners, floating back/favourite chips overlaid.
+                Stack(
+                  children: [
+                    SizedBox(
+                      height: mq.size.height * 0.42,
+                      width: double.infinity,
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(AppRadii.xl),
                         ),
+                        child: Hero(
+                          tag: 'product-${p.id}',
+                          child: p.imageUrl.isNotEmpty
+                              ? CachedNetworkImage(
+                                  imageUrl: p.imageUrl,
+                                  fit: BoxFit.cover,
+                                  errorWidget: (_, __, ___) => Container(
+                                    color: AppColors.surfaceMuted,
+                                    alignment: Alignment.center,
+                                    child: const Icon(Icons.image_outlined,
+                                        size: 48, color: AppColors.textHint),
+                                  ),
+                                )
+                              : Container(
+                                  color: AppColors.surfaceMuted,
+                                  alignment: Alignment.center,
+                                  child: const Icon(Icons.image_outlined,
+                                      size: 48, color: AppColors.textHint),
+                                ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: mq.padding.top + 12, left: 16,
+                      child: _HeroChip(
+                        icon: Icons.arrow_back_rounded,
+                        onTap: () => Navigator.of(context).maybePop(),
+                      ),
+                    ),
+                    if (p.hasDiscount)
+                      Positioned(
+                        top: mq.padding.top + 12, right: 16,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(AppRadii.pill),
+                            boxShadow: AppShadows.card,
+                          ),
+                          child: Text(
+                            '−${p.discountPercent.toInt()}%',
+                            style: const TextStyle(
+                              color: AppColors.neutralInk,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12, letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(p.name,
-                          style: Theme.of(context).textTheme.headlineMedium),
-                      const SizedBox(height: 6),
-                      Text(_fmtPrice(p.effectivePrice),
                           style: const TextStyle(
-                            fontSize: 18,
-                            color: AppColors.primary,
+                            fontSize: 26,
                             fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                            letterSpacing: -0.5,
+                            height: 1.15,
                           )),
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(_fmtPrice(p.effectivePrice),
+                              style: const TextStyle(
+                                fontSize: 22,
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.3,
+                              )),
+                          if (p.hasDiscount) ...[
+                            const SizedBox(width: 8),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 3),
+                              child: Text(_fmtPrice(p.price),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: AppColors.textHint,
+                                    fontWeight: FontWeight.w500,
+                                    decoration: TextDecoration.lineThrough,
+                                  )),
+                            ),
+                          ],
+                        ],
+                      ),
                       if (widget.description != null &&
                           widget.description!.trim().isNotEmpty) ...[
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 14),
                         Text(widget.description!,
                             style: const TextStyle(
                               fontSize: 14,
                               color: AppColors.textSecondary,
-                              height: 1.4,
+                              height: 1.5,
                             )),
                       ],
                     ],
@@ -213,8 +281,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         borderRadius: BorderRadius.circular(AppRadii.md),
                         border: Border.all(color: AppColors.border),
                       ),
-                      child: Row(
-                        children: const [
+                      child: const Row(
+                        children: [
                           Icon(Icons.star_rounded,
                               color: AppColors.warning, size: 20),
                           SizedBox(width: 10),
@@ -476,6 +544,32 @@ class _Stepper extends StatelessWidget {
           splashRadius: 18,
         ),
       ],
+    ),
+  );
+}
+
+class _HeroChip extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _HeroChip({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.white,
+    shape: const CircleBorder(),
+    elevation: 0,
+    child: InkWell(
+      onTap: onTap,
+      customBorder: const CircleBorder(),
+      child: Container(
+        width: 44, height: 44,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: AppShadows.card,
+        ),
+        child: Icon(icon, color: AppColors.neutralInk, size: 22),
+      ),
     ),
   );
 }

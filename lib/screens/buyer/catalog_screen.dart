@@ -93,40 +93,53 @@ class _CatalogScreenState extends State<CatalogScreen> {
       appBar: AppBar(
         title: Text(widget.shopName ?? _categoryLabels[widget.category] ?? widget.category),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(70),
+          preferredSize: const Size.fromHeight(72),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
             child: Row(
               children: [
                 Expanded(
                   child: Container(
+                    height: 46,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceMuted,
-                      borderRadius: BorderRadius.circular(AppRadii.md),
+                      // Search pill is glass on the dark header — UberEats trick.
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppRadii.pill),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                     ),
                     child: TextField(
                       onChanged: (v) => setState(() => _search = v),
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      cursorColor: AppColors.primary,
                       decoration: InputDecoration(
                         hintText: 'Qidirish...',
-                        prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppColors.textHint),
+                        hintStyle: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.55),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        prefixIcon: Icon(Icons.search_rounded, size: 20,
+                            color: Colors.white.withValues(alpha: 0.7)),
                         filled: false,
                         border: InputBorder.none,
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                        isDense: true,
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Container(
+                  width: 46, height: 46,
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(AppRadii.md),
-                    boxShadow: AppShadows.card,
+                    color: Colors.white.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                   ),
                   child: PopupMenuButton<String>(
-                    icon: const Icon(Icons.tune_rounded),
+                    icon: const Icon(Icons.tune_rounded, color: Colors.white),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.md)),
                     onSelected: (v) => setState(() => _sort = v),
                     itemBuilder: (_) => const [

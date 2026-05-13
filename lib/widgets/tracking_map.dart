@@ -50,7 +50,7 @@ enum TrackingPhase { toShop, toCustomer }
 
 class _TrackingMapState extends State<TrackingMap> {
   YandexMapController? _controller;
-  bool _hasApiKey = true; // Установится false если init упадёт
+  final bool _hasApiKey = true; // Установится false если init упадёт
 
   // Phase 6 — cached raster pin bytes. Generating PNGs synchronously inside
   // build() is not allowed (requires async) and would re-rasterize on every

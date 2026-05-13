@@ -33,9 +33,9 @@ class ProductCardSkeleton extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       border: Border.all(color: AppColors.border),
     ),
-    child: Column(
+    child: const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
+      children: [
         Expanded(child: SkeletonBox(width: double.infinity, height: double.infinity, radius: 0)),
         Padding(
           padding: EdgeInsets.all(10),

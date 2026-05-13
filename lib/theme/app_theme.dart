@@ -7,33 +7,41 @@ import 'package:google_fonts/google_fonts.dart';
 /// changes. Phase 10.3 adds dark equivalents under [AppDarkColors] which the
 /// dark [ThemeData] builder consumes.
 class AppColors {
-  // Brand — vibrant green with depth
-  static const primary = Color(0xFF14A44D);       // Bolder, saturated green
-  static const primaryDark = Color(0xFF0E8B40);
-  static const primaryLight = Color(0xFFEAF8F0);
-  static const primarySoft = Color(0xFFD3F1DD);
+  // Brand — UberEats lime on near-black neutral. The lime is the spark
+  // (badges, active states, success); near-black does the heavy lifting for
+  // CTAs and headers. Everything else stays neutral so food photography pops.
+  static const primary = Color(0xFF06C167);        // UberEats signature lime
+  static const primaryDark = Color(0xFF05A055);
+  static const primaryLight = Color(0xFFE6F9EE);
+  static const primarySoft = Color(0xFFD2F4E0);
 
-  // Courier accent — energetic orange-red
-  static const courier = Color(0xFFFF5630);
-  static const courierLight = Color(0xFFFFF1EC);
+  // High-contrast neutral — used for CTAs, headers, active nav pills.
+  // Phase-12.5 — UberEats uses near-black, not pure black: slightly softened
+  // so it doesn't punch out in print/screen comparison.
+  static const neutralInk = Color(0xFF0A0A0A);
+  static const neutralInkSoft = Color(0xFF1F1F1F);
 
-  // Shop accent — premium indigo
+  // Courier accent — kept warm so role separation is obvious vs the lime
+  static const courier = Color(0xFFFF7E33);
+  static const courierLight = Color(0xFFFFF2E8);
+
+  // Shop accent — neutral premium indigo
   static const shop = Color(0xFF4338CA);
   static const shopLight = Color(0xFFEEF0FF);
 
-  // Backgrounds & surfaces
-  static const bg = Color(0xFFF7F8FA);             // Subtle warm grey
+  // Backgrounds & surfaces — pure UberEats white, neutral greys
+  static const bg = Color(0xFFFFFFFF);
   static const surface = Color(0xFFFFFFFF);
   static const surfaceElevated = Color(0xFFFFFFFF);
-  static const surfaceMuted = Color(0xFFF1F3F5);
-  static const border = Color(0xFFEAEEF2);
-  static const borderLight = Color(0xFFF1F3F6);
+  static const surfaceMuted = Color(0xFFF4F4F4);
+  static const border = Color(0xFFE2E2E2);
+  static const borderLight = Color(0xFFEEEEEE);
   static const overlay = Color(0x66000000);
 
-  // Text
-  static const textPrimary = Color(0xFF0E1318);
-  static const textSecondary = Color(0xFF5A6470);
-  static const textHint = Color(0xFF96A0AD);
+  // Text — true UberEats hierarchy (near-black → neutral grey)
+  static const textPrimary = Color(0xFF0A0A0A);
+  static const textSecondary = Color(0xFF545454);
+  static const textHint = Color(0xFF8E8E8E);
 
   // Status
   static const success = Color(0xFF14A44D);
@@ -99,23 +107,27 @@ class AppDarkColors {
 }
 
 class AppShadows {
-  // Layered shadows — soft, warm, never harsh black
+  // UberEats-style neutral shadows. They're tighter, cooler, more architectural
+  // than the Tarikul pink halo — emphasises clean type/layout over warmth.
   static const card = [
-    BoxShadow(color: Color(0x08000000), blurRadius: 1, offset: Offset(0, 1)),
-    BoxShadow(color: Color(0x0A0E1318), blurRadius: 16, offset: Offset(0, 6)),
+    BoxShadow(color: Color(0x0A000000), blurRadius: 12, offset: Offset(0, 4)),
+    BoxShadow(color: Color(0x05000000), blurRadius: 1, offset: Offset(0, 1)),
   ];
   static const cardHover = [
-    BoxShadow(color: Color(0x0A000000), blurRadius: 2, offset: Offset(0, 2)),
-    BoxShadow(color: Color(0x14000000), blurRadius: 28, offset: Offset(0, 12)),
+    BoxShadow(color: Color(0x14000000), blurRadius: 20, offset: Offset(0, 8)),
+    BoxShadow(color: Color(0x08000000), blurRadius: 2, offset: Offset(0, 2)),
   ];
   static const elevated = [
-    BoxShadow(color: Color(0x14000000), blurRadius: 32, offset: Offset(0, 8)),
+    BoxShadow(color: Color(0x14000000), blurRadius: 28, offset: Offset(0, 10)),
+    BoxShadow(color: Color(0x08000000), blurRadius: 6, offset: Offset(0, 2)),
   ];
+  // CTA buttons in UberEats are near-black with a subtle lift, not a coloured
+  // glow.
   static const button = [
-    BoxShadow(color: Color(0x2614A44D), blurRadius: 12, offset: Offset(0, 4)),
+    BoxShadow(color: Color(0x1F000000), blurRadius: 14, offset: Offset(0, 6)),
   ];
   static const courierButton = [
-    BoxShadow(color: Color(0x33FF5630), blurRadius: 14, offset: Offset(0, 4)),
+    BoxShadow(color: Color(0x33FF7E33), blurRadius: 14, offset: Offset(0, 4)),
   ];
 }
 
@@ -203,20 +215,25 @@ class AppTheme {
     return base.copyWith(
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
+        // UberEats — near-black header with white text and icons.
+        backgroundColor: AppColors.neutralInk,
+        foregroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
-        titleTextStyle: textTheme.headlineSmall,
+        titleTextStyle: textTheme.headlineSmall?.copyWith(color: Colors.white),
+        iconTheme: const IconThemeData(color: Colors.white),
+        actionsIconTheme: const IconThemeData(color: Colors.white),
         toolbarHeight: 60,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ButtonStyle(
+          // UberEats CTA pattern — near-black background, lime is reserved
+          // for badges/active states.
           backgroundColor: WidgetStateProperty.resolveWith((s) {
             if (s.contains(WidgetState.disabled)) return AppColors.surfaceMuted;
-            return AppColors.primary;
+            return AppColors.neutralInk;
           }),
           foregroundColor: WidgetStateProperty.resolveWith((s) {
             if (s.contains(WidgetState.disabled)) return AppColors.textHint;
@@ -224,7 +241,7 @@ class AppTheme {
           }),
           minimumSize: WidgetStateProperty.all(const Size(double.infinity, 56)),
           shape: WidgetStateProperty.all(
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.md)),
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.pill)),
           ),
           elevation: WidgetStateProperty.all(0),
           textStyle: WidgetStateProperty.all(

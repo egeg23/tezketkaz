@@ -432,7 +432,7 @@ class _CartScreenState extends State<CartScreen> {
       cart.clear();
       if (mounted) {
         setState(() => _isPlacing = false);
-        context.go('/buyer/tracking/${order.id}');
+        context.go('/buyer/order-success/${order.id}');
       }
     } catch (e) {
       if (mounted) {
@@ -512,7 +512,8 @@ class _CartScreenState extends State<CartScreen> {
               // light mode still maps to the same neutral white.
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(AppRadii.lg),
-              boxShadow: AppShadows.card,
+              boxShadow: Theme.of(context).brightness == Brightness.dark
+                  ? null : AppShadows.card,
             ),
             child: Column(
               children: [
@@ -705,7 +706,7 @@ class _CartScreenState extends State<CartScreen> {
           ),
 
           const SizedBox(height: 16),
-          _SectionLabel('Hisob'),
+          const _SectionLabel('Hisob'),
           const SizedBox(height: 8),
           _PricingBreakdown(
             cart: cart,
@@ -729,15 +730,16 @@ class _CartScreenState extends State<CartScreen> {
           return Container(
             margin: const EdgeInsets.fromLTRB(20, 8, 20, 16),
             decoration: BoxDecoration(
-              color: canCheckout ? AppColors.primary : AppColors.border,
-              borderRadius: BorderRadius.circular(AppRadii.md),
+              // UberEats — checkout CTA is near-black, full pill.
+              color: canCheckout ? AppColors.neutralInk : AppColors.border,
+              borderRadius: BorderRadius.circular(AppRadii.pill),
               boxShadow: canCheckout ? AppShadows.button : null,
             ),
             child: Material(
               color: Colors.transparent,
               child: InkWell(
                 onTap: canCheckout ? _placeOrder : null,
-                borderRadius: BorderRadius.circular(AppRadii.md),
+                borderRadius: BorderRadius.circular(AppRadii.pill),
                 child: Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
@@ -981,15 +983,18 @@ class _Card extends StatelessWidget {
   final Widget child;
   const _Card({required this.child});
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      // Phase 11 — theme-aware so dark mode renders the right tonal surface.
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(AppRadii.lg),
-      boxShadow: AppShadows.card,
-    ),
-    child: child,
-  );
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        // Theme-aware surface; shadows only on light so dark stays clean.
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+        boxShadow: isDark ? null : AppShadows.card,
+      ),
+      child: child,
+    );
+  }
 }
 
 class _AddressField extends StatelessWidget {
@@ -1066,7 +1071,7 @@ class _PricingBreakdown extends StatelessWidget {
     final children = <Widget>[];
 
     if (est?.outOfZone == true) {
-      children.add(_Banner(
+      children.add(const _Banner(
         emoji: '⚠️',
         bg: AppColors.errorLight,
         fg: AppColors.error,
@@ -1110,7 +1115,7 @@ class _PricingBreakdown extends StatelessWidget {
             // pre-membership delivery fee struck through and label the line
             // so the perk is visible in the breakdown.
             if (membership?.isActive == true && membership!.tier == 'pro')
-              Row(
+              const Row(
                 children: [
                   Expanded(
                     child: _SumRow(

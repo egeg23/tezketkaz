@@ -192,10 +192,10 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
+            const Text(
               "Rasmni o'zgartirish uchun bosing",
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: AppColors.textHint),
+              style: TextStyle(fontSize: 12, color: AppColors.textHint),
             ),
             const SizedBox(height: 16),
 
@@ -215,7 +215,7 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _unit,
+                    initialValue: _unit,
                     decoration: _decoration('Birlik'),
                     items: _units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
                     onChanged: (v) => setState(() => _unit = v ?? 'кг'),
@@ -227,7 +227,7 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _category,
+              initialValue: _category,
               decoration: _decoration('Kategoriya'),
               items: _categories
                   .map((c) => DropdownMenuItem(value: c['id'], child: Text(c['label']!)))
@@ -251,7 +251,7 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
                 style: const TextStyle(fontSize: 12),
               ),
               value: _isAvailable,
-              activeColor: kShopColor,
+              activeThumbColor: kShopColor,
               onChanged: (v) => setState(() => _isAvailable = v),
             ),
             const SizedBox(height: 32),

@@ -1,5 +1,4 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -38,9 +37,13 @@ import 'screens/buyer/support_inbox_screen.dart';
 import 'screens/buyer/support_new_ticket_screen.dart';
 import 'screens/buyer/support_thread_screen.dart';
 import 'screens/buyer/tracking_screen.dart';
+import 'screens/buyer/order_success_screen.dart';
+import 'screens/buyer/notifications_screen.dart';
 import 'screens/buyer/profile_screen.dart';
 import 'screens/buyer/shops_screen.dart';
+import 'screens/buyer/shop_detail_screen.dart';
 import 'screens/buyer/address_book_screen.dart';
+import 'screens/buyer/address_picker_screen.dart';
 import 'screens/buyer/payment_methods_screen.dart';
 import 'screens/buyer/promo_screen.dart';
 import 'screens/buyer/loyalty_screen.dart';
@@ -226,6 +229,10 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
       GoRoute(path: '/switch-role', builder: (_, __) => const RoleSwitcherScreen()),
       GoRoute(path: '/courier-verification', builder: (_, __) => const CourierVerificationScreen()),
+      GoRoute(
+        path: '/buyer/order-success/:orderId',
+        builder: (_, s) => OrderSuccessScreen(orderId: s.pathParameters['orderId'] ?? ''),
+      ),
 
       // Phase 3 — chat / reviews / loyalty / promo (modal screens, no shell).
       GoRoute(
@@ -300,6 +307,18 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
           GoRoute(path: '/buyer', builder: (_, __) => const HomeScreen()),
           GoRoute(path: '/buyer/shops', builder: (_, __) => const ShopsScreen()),
           GoRoute(
+            path: '/buyer/shop/:shopId',
+            builder: (_, s) {
+              final extra = s.extra is Map<String, dynamic>
+                  ? s.extra as Map<String, dynamic>
+                  : const <String, dynamic>{};
+              return ShopDetailScreen(
+                shopId: s.pathParameters['shopId'] ?? '',
+                shopName: extra['shopName'] as String?,
+              );
+            },
+          ),
+          GoRoute(
             path: '/buyer/catalog/:category',
             builder: (_, s) {
               final extra = s.extra is Map<String, dynamic>
@@ -317,6 +336,13 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
           GoRoute(path: '/buyer/tracking/:orderId', builder: (_, s) => TrackingScreen(orderId: s.pathParameters['orderId'] ?? '')),
           GoRoute(path: '/buyer/profile', builder: (_, __) => const ProfileScreen()),
           GoRoute(path: '/buyer/address-book', builder: (_, __) => const AddressBookScreen()),
+          GoRoute(path: '/buyer/notifications', builder: (_, __) => const NotificationsScreen()),
+          GoRoute(path: '/buyer/address-picker',
+              builder: (_, s) => AddressPickerScreen(
+                initial: s.extra is Map<String, dynamic> && (s.extra as Map)['lat'] != null
+                    ? null
+                    : null,
+              )),
           GoRoute(
             path: '/buyer/payment-methods',
             builder: (_, __) => const PaymentMethodsScreen(),

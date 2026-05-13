@@ -343,8 +343,8 @@ class _ByDayChartCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Row(
-            children: const [
+          const Row(
+            children: [
               _LegendDot(color: AppColors.courier, label: 'Daromad'),
               SizedBox(width: 16),
               _LegendDot(color: AppColors.info, label: 'Buyurtmalar'),
@@ -528,7 +528,7 @@ class _TipsBadgeCard extends StatelessWidget {
           Text(
             reached
                 ? '🎉 ${Money(tipsTotal, 'UZS').format(locale)}'
-                : '${Money(tipsTotal, 'UZS').format(locale)} / ${Money(_milestone, 'UZS').format(locale)}',
+                : '${Money(tipsTotal, 'UZS').format(locale)} / ${const Money(_milestone, 'UZS').format(locale)}',
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
         ],

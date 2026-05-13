@@ -1,9 +1,11 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../models/models.dart';
+import '../../models/catalog.dart' show Shop, shopVerticalToString;
 import '../../services/catalog_api.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/product_card.dart';
@@ -26,6 +28,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   List<Product> _featured = [];
+  List<Shop> _shops = const [];
   bool _loading = true;
 
   @override
@@ -36,9 +39,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _load() async {
     try {
-      final list = await CatalogApi.instance.featured();
+      final results = await Future.wait([
+        CatalogApi.instance.featured(),
+        CatalogApi.instance.nearbyShops(limit: 12),
+      ]);
       if (!mounted) return;
-      setState(() { _featured = list; _loading = false; });
+      setState(() {
+        _featured = results[0] as List<Product>;
+        _shops = results[1] as List<Shop>;
+        _loading = false;
+      });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -52,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final activeOrder = orders.activeOrderForBuyer(user?.id ?? '');
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: CustomScrollView(
         slivers: [
           _Header(user: user),
@@ -60,25 +70,43 @@ class _HomeScreenState extends State<HomeScreen> {
           if (activeOrder != null)
             SliverToBoxAdapter(child: _ActiveOrderBanner(order: activeOrder)),
 
-          // Search
+          // Search — UberEats-style pill with mic on the right
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
               child: GestureDetector(
                 onTap: () => context.go('/buyer/catalog/all'),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                  padding: const EdgeInsets.fromLTRB(18, 16, 8, 16),
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(AppRadii.md),
-                    boxShadow: AppShadows.card,
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(AppRadii.pill),
+                    boxShadow: Theme.of(context).brightness == Brightness.dark
+                        ? null : AppShadows.card,
                   ),
                   child: Row(
                     children: [
                       const Icon(Icons.search_rounded, color: AppColors.textHint, size: 22),
                       const SizedBox(width: 12),
-                      Text("Mahsulot, do'kon yoki kategoriya...",
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.textHint)),
+                      Expanded(
+                        child: Text("Mahsulot, do'kon yoki kategoriya...",
+                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.textHint)),
+                      ),
+                      Container(
+                        width: 1, height: 22, color: AppColors.borderLight,
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.mic_rounded, color: AppColors.neutralInk, size: 22),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Ovozli qidiruv tez orada'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -87,55 +115,81 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
           // Hero
-          SliverToBoxAdapter(
+          const SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: const _HeroBanner(),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: _HeroBanner(),
             ),
           ),
 
-          // Categories
-          const SliverToBoxAdapter(child: SizedBox(height: 28)),
+          // Categories — UberEats horizontal scrolling pills
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Kategoriyalar', style: Theme.of(context).textTheme.headlineMedium),
-                  TextButton(
-                    onPressed: () => context.go('/buyer/catalog/all'),
-                    child: const Text('Barchasi'),
-                  ),
-                ],
-              ),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Text("Kategoriya bo'yicha buyurtma",
+                  style: Theme.of(context).textTheme.headlineMedium),
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 8)),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, i) {
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 110,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemCount: _categories.length,
+                itemBuilder: (_, i) {
                   final c = _categories[i];
-                  return _CategoryTile(
+                  return _CategoryPill(
                     emoji: c['emoji'] as String,
                     name: c['name'] as String,
-                    bg: c['bg'] as Color,
-                    fg: c['fg'] as Color,
                     onTap: () => context.go('/buyer/catalog/${c['id']}'),
                   );
                 },
-                childCount: _categories.length,
               ),
             ),
           ),
+
+          // Shops carousel (UberEats — large image cards horizontal scroll)
+          if (_shops.isNotEmpty) ...[
+            const SliverToBoxAdapter(child: SizedBox(height: 28)),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("Yaqin atrofdagi do'konlar",
+                        style: Theme.of(context).textTheme.headlineMedium),
+                    TextButton(
+                      onPressed: () => context.go('/buyer/shops'),
+                      child: const Text('Barchasi'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 4)),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 230,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  separatorBuilder: (_, __) => const SizedBox(width: 14),
+                  itemCount: _shops.length,
+                  itemBuilder: (_, i) => _ShopCard(
+                    shop: _shops[i],
+                    onTap: () => context.push(
+                      '/buyer/shop/${_shops[i].id}',
+                      extra: <String, dynamic>{'shopName': _shops[i].name},
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
 
           // Featured
           const SliverToBoxAdapter(child: SizedBox(height: 28)),
@@ -205,7 +259,7 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return SliverAppBar(
       pinned: true,
-      backgroundColor: AppColors.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       surfaceTintColor: Colors.transparent,
       toolbarHeight: 72,
       automaticallyImplyLeading: false,
@@ -253,19 +307,16 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               _IconPill(
-                icon: Icons.swap_horiz_rounded,
-                onTap: () => context.push('/switch-role'),
+                icon: Icons.notifications_none_rounded,
+                onTap: () => context.push('/buyer/notifications'),
               ),
               const SizedBox(width: 8),
               GestureDetector(
-                onTap: () => context.go('/buyer/profile'),
+                onTap: () => context.push('/switch-role'),
                 child: Container(
                   width: 44, height: 44,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppColors.primary, AppColors.primaryDark],
-                      begin: Alignment.topLeft, end: Alignment.bottomRight,
-                    ),
+                    color: AppColors.neutralInk,
                     borderRadius: BorderRadius.circular(AppRadii.pill),
                     boxShadow: AppShadows.button,
                   ),
@@ -292,18 +343,21 @@ class _IconPill extends StatelessWidget {
   const _IconPill({required this.icon, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      width: 44, height: 44,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadii.pill),
-        boxShadow: AppShadows.card,
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44, height: 44,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(AppRadii.pill),
+          boxShadow: isDark ? null : AppShadows.card,
+        ),
+        child: Icon(icon, size: 22, color: Theme.of(context).colorScheme.onSurface),
       ),
-      child: Icon(icon, size: 22, color: AppColors.textPrimary),
-    ),
-  );
+    );
+  }
 }
 
 class _ActiveOrderBanner extends StatelessWidget {
@@ -369,31 +423,30 @@ class _HeroBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: 156,
+    height: 168,
     decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        colors: [Color(0xFF14A44D), Color(0xFF0E8B40)],
-        begin: Alignment.topLeft, end: Alignment.bottomRight,
-      ),
+      // UberEats Eats Pass-style — near-black card with a lime spark.
+      color: AppColors.neutralInk,
       borderRadius: BorderRadius.circular(AppRadii.xl),
-      boxShadow: AppShadows.button,
+      boxShadow: AppShadows.elevated,
     ),
     child: Stack(
       clipBehavior: Clip.hardEdge,
       children: [
+        // Lime glow corner
         Positioned(
-          right: -40, bottom: -40,
+          right: -60, bottom: -60,
           child: Container(
-            width: 180, height: 180,
+            width: 220, height: 220,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
+              color: AppColors.primary.withValues(alpha: 0.16),
               shape: BoxShape.circle,
             ),
           ),
         ),
-        Positioned(
-          right: 24, top: 18,
-          child: Text('🛍️', style: const TextStyle(fontSize: 80)),
+        const Positioned(
+          right: 28, top: 22,
+          child: Text('🛍️', style: TextStyle(fontSize: 84)),
         ),
         Padding(
           padding: const EdgeInsets.all(22),
@@ -404,36 +457,41 @@ class _HeroBanner extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.22),
+                  color: AppColors.primary,
                   borderRadius: BorderRadius.circular(AppRadii.pill),
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.bolt_rounded, color: Colors.white, size: 13),
-                    const SizedBox(width: 4),
+                    Icon(Icons.bolt_rounded, color: AppColors.neutralInk, size: 13),
+                    SizedBox(width: 4),
                     Text('15 daqiqa',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.white, fontWeight: FontWeight.w700,
+                        style: TextStyle(
+                          color: AppColors.neutralInk,
+                          fontWeight: FontWeight.w800, fontSize: 11,
+                          letterSpacing: 0.2,
                         )),
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
-              Text("Birinchi buyurtmaga\n20% chegirma",
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Colors.white, fontWeight: FontWeight.w800, height: 1.2,
+              const SizedBox(height: 12),
+              const Text("Birinchi buyurtmaga\n20% chegirma",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 19, fontWeight: FontWeight.w800, height: 1.2,
+                    letterSpacing: -0.2,
                   )),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.2),
+                  color: Colors.white.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(AppRadii.xs),
                 ),
-                child: Text('BIRINCHI20',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: Colors.white, letterSpacing: 1.2, fontWeight: FontWeight.w700,
+                child: const Text('BIRINCHI20',
+                    style: TextStyle(
+                      color: Colors.white, letterSpacing: 1.4,
+                      fontWeight: FontWeight.w800, fontSize: 12,
                     )),
               ),
             ],
@@ -444,41 +502,171 @@ class _HeroBanner extends StatelessWidget {
   );
 }
 
-class _CategoryTile extends StatelessWidget {
+/// UberEats-style horizontal category pill — soft-grey circle for the emoji,
+/// label centered below. Tap navigates into the catalog filter.
+class _CategoryPill extends StatelessWidget {
   final String emoji, name;
-  final Color bg, fg;
   final VoidCallback onTap;
-  const _CategoryTile({
-    required this.emoji,
-    required this.name,
-    required this.bg,
-    required this.fg,
-    required this.onTap,
-  });
+  const _CategoryPill({required this.emoji, required this.name, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: bg,
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
     borderRadius: BorderRadius.circular(AppRadii.lg),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadii.lg),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 32)),
-            const SizedBox(height: 6),
-            Text(name,
-                style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600, color: fg,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-          ],
-        ),
+    child: SizedBox(
+      width: 84,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 72, height: 72,
+            decoration: const BoxDecoration(
+              color: AppColors.surfaceMuted,
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Text(emoji, style: const TextStyle(fontSize: 34)),
+          ),
+          const SizedBox(height: 8),
+          Text(name,
+              style: const TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+        ],
       ),
     ),
   );
+}
+
+/// UberEats-style large shop card with cover image, name, badges row.
+class _ShopCard extends StatelessWidget {
+  final Shop shop;
+  final VoidCallback onTap;
+  const _ShopCard({required this.shop, required this.onTap});
+
+  String get _emoji {
+    switch (shopVerticalToString(shop.vertical)) {
+      case 'restaurant': return '🍽️';
+      case 'pharmacy':   return '💊';
+      case 'electronics': return '📱';
+      case 'grocery':    return '🛒';
+      default:           return '🏪';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 260,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Cover
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadii.lg),
+              child: SizedBox(
+                height: 140, width: 260,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(color: AppColors.surfaceMuted),
+                    if (shop.logoUrl != null && shop.logoUrl!.isNotEmpty)
+                      CachedNetworkImage(
+                        imageUrl: shop.logoUrl!, fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => Center(
+                          child: Text(_emoji, style: const TextStyle(fontSize: 56)),
+                        ),
+                      )
+                    else
+                      Center(child: Text(_emoji, style: const TextStyle(fontSize: 56))),
+                    if (!shop.isOpen)
+                      Container(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        alignment: Alignment.center,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.neutralInk,
+                            borderRadius: BorderRadius.circular(AppRadii.pill),
+                          ),
+                          child: const Text("Yopiq",
+                              style: TextStyle(
+                                color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700,
+                              )),
+                        ),
+                      ),
+                    // ETA chip
+                    Positioned(
+                      bottom: 10, left: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.neutralInk,
+                          borderRadius: BorderRadius.circular(AppRadii.pill),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.bolt_rounded, color: Colors.white, size: 12),
+                            const SizedBox(width: 4),
+                            Text(
+                              shop.distanceKm != null
+                                  ? '${shop.distanceKm!.toStringAsFixed(1)} km'
+                                  : '15-25 daqiqa',
+                              style: const TextStyle(
+                                color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    shop.name,
+                    style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary, letterSpacing: -0.2,
+                    ),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (shop.rating != null) ...[
+                  const Icon(Icons.star_rounded, size: 16, color: AppColors.textPrimary),
+                  const SizedBox(width: 2),
+                  Text(
+                    shop.rating!.toStringAsFixed(1),
+                    style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (shop.address != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                shop.address!,
+                style: const TextStyle(
+                  fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

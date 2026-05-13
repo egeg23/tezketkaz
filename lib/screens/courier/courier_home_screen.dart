@@ -848,7 +848,7 @@ class _OrderCard extends StatelessWidget {
                         '📍 ${order.deliveryFee == 0 ? '~1.5' : '~2'} km',
                         AppColors.info),
                     const SizedBox(width: 6),
-                    _Tag('⏱ ~18 min', AppColors.warning),
+                    const _Tag('⏱ ~18 min', AppColors.warning),
                     const Spacer(),
                     _Tag('💳 ${order.isPaid ? 'To\'langan' : 'Naqd'}',
                         AppColors.textSecondary),

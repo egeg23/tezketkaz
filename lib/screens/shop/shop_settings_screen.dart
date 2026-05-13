@@ -279,7 +279,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen>
                 onChanged: (v) => setState(() {
                   _rows[day] = row.copyWith(isClosed: !v);
                 }),
-                activeColor: kShopColor,
+                activeThumbColor: kShopColor,
               ),
             ],
           ),
