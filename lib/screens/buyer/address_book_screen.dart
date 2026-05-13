@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import '../../l10n/l10n.dart';
 import '../../models/catalog.dart';
@@ -93,161 +94,360 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(title: Text(t(context, 'address.book_title'))),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openEditor(),
-        icon: const Icon(Icons.add_location_alt_rounded),
-        label: Text(t(context, 'address.add')),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF0A0A10), Color(0xFF050507)],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              _Header(
+                title: 'Адреса',
+                onBack: () => Navigator.of(context).maybePop(),
+                onAdd: () => _openEditor(),
+              ),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _error != null
+                        ? ErrorView(message: _error!, onRetry: _load)
+                        : _addresses.isEmpty
+                            ? _Empty(onAdd: () => _openEditor())
+                            : RefreshIndicator(
+                                onRefresh: _load,
+                                child: ListView(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      20, 8, 20, 24),
+                                  children: [
+                                    for (final a in _addresses)
+                                      _AddrItem(
+                                        address: a,
+                                        onTap: widget.picker
+                                            ? () => Navigator.of(context)
+                                                .pop(a)
+                                            : () => _openEditor(existing: a),
+                                        onEdit: () =>
+                                            _openEditor(existing: a),
+                                        onDelete: () => _delete(a),
+                                        onSetDefault: () => _setDefault(a),
+                                      ),
+                                    const SizedBox(height: 4),
+                                    _AddDashedBtn(
+                                      label: 'Добавить новый адрес',
+                                      onTap: () => _openEditor(),
+                                    ),
+                                  ],
+                                ),
+                              ),
+              ),
+            ],
+          ),
+        ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? ErrorView(message: _error!, onRetry: _load)
-              : _addresses.isEmpty
-                  ? EmptyState(
-                      emoji: '📍',
-                      title: t(context, 'address.empty_title'),
-                      description: t(context, 'address.empty_desc'),
-                      ctaLabel: t(context, 'address.add'),
-                      onCta: () => _openEditor(),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-                        itemCount: _addresses.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
-                        itemBuilder: (context, i) => _AddressTile(
-                          address: _addresses[i],
-                          onEdit: () => _openEditor(existing: _addresses[i]),
-                          onDelete: () => _delete(_addresses[i]),
-                          onSetDefault: () => _setDefault(_addresses[i]),
-                          onPick: widget.picker
-                              ? () => Navigator.of(context).pop(_addresses[i])
-                              : null,
-                        ),
-                      ),
-                    ),
     );
   }
 }
 
-class _AddressTile extends StatelessWidget {
+// ─── Header ─────────────────────────────────────────────────────────────────
+class _Header extends StatelessWidget {
+  final String title;
+  final VoidCallback onBack;
+  final VoidCallback onAdd;
+  const _Header({
+    required this.title,
+    required this.onBack,
+    required this.onAdd,
+  });
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+        child: Row(
+          children: [
+            _GlassChip(icon: Icons.chevron_left_rounded, onTap: onBack),
+            const Spacer(),
+            Text(title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                )),
+            const Spacer(),
+            _GlassChip(icon: Icons.add_rounded, onTap: onAdd),
+          ],
+        ),
+      );
+}
+
+class _GlassChip extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _GlassChip({required this.icon, required this.onTap});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceMuted,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Icon(icon, size: 18, color: AppColors.textSecondary),
+        ),
+      );
+}
+
+// ─── Item ───────────────────────────────────────────────────────────────────
+class _AddrItem extends StatelessWidget {
   final UserAddress address;
+  final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onSetDefault;
-  /// Non-null when the screen is opened in picker mode — tapping the tile
-  /// triggers this callback instead of editing.
-  final VoidCallback? onPick;
-  const _AddressTile({
+  const _AddrItem({
     required this.address,
+    required this.onTap,
     required this.onEdit,
     required this.onDelete,
     required this.onSetDefault,
-    this.onPick,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    final tile = Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.location_on_rounded,
-                  color: AppColors.primary, size: 22),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(address.label,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    )),
-              ),
-              if (address.isDefault)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
-                    borderRadius: BorderRadius.circular(AppRadii.pill),
-                  ),
-                  child: Text(t(context, 'address.default_badge'),
-                      style: const TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11,
-                      )),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(address.fullAddress,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-              )),
-          if (address.apartment != null || address.entrance != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              [
-                if (address.entrance != null) '${t(context, 'address_entrance')}: ${address.entrance}',
-                if (address.floor != null) '${t(context, 'address_floor')}: ${address.floor}',
-                if (address.apartment != null) '${t(context, 'address_apartment')}: ${address.apartment}',
-              ].join(' · '),
-              style: const TextStyle(fontSize: 12, color: AppColors.textHint),
-            ),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              if (!address.isDefault)
-                TextButton.icon(
-                  onPressed: onSetDefault,
-                  icon: const Icon(Icons.star_outline_rounded, size: 18),
-                  label: Text(t(context, 'make_default_address')),
-                ),
-              const Spacer(),
-              IconButton(
-                tooltip: t(context, 'address.edit'),
-                onPressed: onEdit,
-                icon: const Icon(Icons.edit_outlined,
-                    color: AppColors.textSecondary),
-              ),
-              IconButton(
-                tooltip: t(context, 'address.delete'),
-                onPressed: onDelete,
-                icon: const Icon(Icons.delete_outline_rounded,
-                    color: AppColors.error),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-    if (onPick == null) return tile;
-    // Picker mode — tap anywhere on the tile to select. We still want the
-    // inline edit / delete / set-default icon buttons to keep working,
-    // which Material's InkWell handles via hit-testing children first.
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(AppRadii.lg),
-      child: InkWell(
-        onTap: onPick,
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-        child: tile,
-      ),
-    );
+  IconData _iconFor(String label) {
+    final l = label.toLowerCase();
+    if (l.contains('дом') || l.contains('home') || l.contains('uy')) {
+      return Icons.home_rounded;
+    }
+    if (l.contains('раб') || l.contains('work') || l.contains('ish')) {
+      return Icons.work_rounded;
+    }
+    return Icons.location_on_rounded;
   }
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: address.isDefault
+                ? AppColors.primary.withValues(alpha: 0.06)
+                : AppColors.surfaceMuted,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: address.isDefault
+                  ? AppColors.primary.withValues(alpha: 0.30)
+                  : AppColors.border,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(_iconFor(address.label),
+                    color: AppColors.primary, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          address.label,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                        if (address.isDefault) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary
+                                  .withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(100),
+                            ),
+                            child: Text(
+                              '★ ОСНОВНОЙ',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      address.fullAddress,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    if (address.entrance != null ||
+                        address.floor != null ||
+                        address.apartment != null ||
+                        address.intercom != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        [
+                          if (address.entrance != null)
+                            'Подъезд ${address.entrance}',
+                          if (address.floor != null) '${address.floor} этаж',
+                          if (address.apartment != null)
+                            'кв. ${address.apartment}',
+                          if (address.intercom != null)
+                            'домофон ${address.intercom}',
+                        ].join(' · '),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textHint,
+                        ),
+                      ),
+                    ],
+                    if (!address.isDefault) ...[
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: onSetDefault,
+                        child: Text(
+                          'Сделать основным',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                children: [
+                  GestureDetector(
+                    onTap: onEdit,
+                    child: Icon(Icons.edit_outlined,
+                        size: 18, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    onTap: onDelete,
+                    child: Icon(Icons.delete_outline_rounded,
+                        size: 18, color: AppColors.error),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+// ─── Dashed add btn ─────────────────────────────────────────────────────────
+class _AddDashedBtn extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _AddDashedBtn({required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: AppColors.border,
+              style: BorderStyle.solid,
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add_rounded, size: 18, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+class _Empty extends StatelessWidget {
+  final VoidCallback onAdd;
+  const _Empty({required this.onAdd});
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('📍', style: TextStyle(fontSize: 64)),
+              const SizedBox(height: 16),
+              RichText(
+                textAlign: TextAlign.center,
+                text: TextSpan(
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                  ),
+                  children: [
+                    const TextSpan(text: 'Адресов '),
+                    TextSpan(
+                      text: 'пока нет',
+                      style: GoogleFonts.playfairDisplay(
+                        fontStyle: FontStyle.italic,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Добавьте адрес доставки',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              _AddDashedBtn(label: 'Добавить адрес', onTap: onAdd),
+            ],
+          ),
+        ),
+      );
 }
 
 /// Inline edit form. Pops with `true` once the address is saved successfully.

@@ -106,166 +106,408 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final saved = _methods.where((m) => m.provider != 'cash').toList();
+    final cash = _methods.where((m) => m.provider == 'cash').toList();
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(title: Text(t(context, 'payment.cards_list'))),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openAddSheet,
-        icon: const Icon(Icons.add_card_rounded),
-        label: Text(t(context, 'payment.add_card')),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF0A0A10), Color(0xFF050507)],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              _PayHeader(
+                onBack: () => Navigator.of(context).maybePop(),
+                onAdd: _openAddSheet,
+              ),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _error != null
+                        ? ErrorView(message: _error!, onRetry: _load)
+                        : RefreshIndicator(
+                            onRefresh: _load,
+                            child: ListView(
+                              padding:
+                                  const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                              children: [
+                                if (saved.isNotEmpty)
+                                  _PayGroupTitle('Сохранённые карты'),
+                                for (final m in saved)
+                                  _PayCard(
+                                    method: m,
+                                    onDelete: () => _delete(m),
+                                    onSelect: () => _setDefault(m),
+                                  ),
+                                const SizedBox(height: 4),
+                                _PayGroupTitle('Другие способы'),
+                                if (cash.isEmpty)
+                                  _PayMethodInline(
+                                    label: 'Наличные',
+                                    sub: 'Курьеру при доставке',
+                                    icon: Icons.payments_outlined,
+                                  ),
+                                for (final m in cash)
+                                  _PayCard(
+                                    method: m,
+                                    onDelete: () => _delete(m),
+                                    onSelect: () => _setDefault(m),
+                                  ),
+                                const SizedBox(height: 16),
+                                _PayAddBtn(
+                                  label: 'Добавить новую карту',
+                                  onTap: _openAddSheet,
+                                ),
+                              ],
+                            ),
+                          ),
+              ),
+            ],
+          ),
+        ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? ErrorView(message: _error!, onRetry: _load)
-              : _methods.isEmpty
-                  ? EmptyState(
-                      emoji: '💳',
-                      title: t(context, 'payment.no_cards'),
-                      description: t(context, 'payment.add_card'),
-                      ctaLabel: t(context, 'payment.add_card'),
-                      onCta: _openAddSheet,
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView.separated(
-                        padding:
-                            const EdgeInsets.fromLTRB(16, 12, 16, 100),
-                        itemCount: _methods.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 10),
-                        itemBuilder: (_, i) {
-                          final m = _methods[i];
-                          return Dismissible(
-                            key: ValueKey('pm-${m.id}'),
-                            direction: DismissDirection.endToStart,
-                            background: Container(
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 20),
-                              decoration: BoxDecoration(
-                                color: AppColors.errorLight,
-                                borderRadius:
-                                    BorderRadius.circular(AppRadii.lg),
-                              ),
-                              child: const Icon(Icons.delete_outline_rounded,
-                                  color: AppColors.error),
-                            ),
-                            confirmDismiss: (_) async {
-                              await _delete(m);
-                              // Always return false so we can re-render the
-                              // tile if delete failed; `_load()` rebuilds.
-                              return false;
-                            },
-                            child: GestureDetector(
-                              onLongPress:
-                                  m.isDefault ? null : () => _setDefault(m),
-                              child: _MethodTile(
-                                method: m,
-                                onDelete: () => _delete(m),
-                                onSetDefault: m.isDefault
-                                    ? null
-                                    : () => _setDefault(m),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
     );
   }
 }
 
-class _MethodTile extends StatelessWidget {
+// ─── Header ─────────────────────────────────────────────────────────────────
+class _PayHeader extends StatelessWidget {
+  final VoidCallback onBack;
+  final VoidCallback onAdd;
+  const _PayHeader({required this.onBack, required this.onAdd});
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+        child: Row(
+          children: [
+            _GlassChip(icon: Icons.chevron_left_rounded, onTap: onBack),
+            const Spacer(),
+            const Text(
+              'Способы оплаты',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+            const Spacer(),
+            _GlassChip(icon: Icons.add_rounded, onTap: onAdd),
+          ],
+        ),
+      );
+}
+
+class _GlassChip extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _GlassChip({required this.icon, required this.onTap});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceMuted,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Icon(icon, size: 18, color: AppColors.textSecondary),
+        ),
+      );
+}
+
+class _PayGroupTitle extends StatelessWidget {
+  final String text;
+  const _PayGroupTitle(this.text);
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(0, 16, 0, 10),
+        child: Text(
+          text.toUpperCase(),
+          style: TextStyle(
+            fontSize: 11,
+            letterSpacing: 1.5,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      );
+}
+
+// ─── Pay card ───────────────────────────────────────────────────────────────
+class _PayCard extends StatelessWidget {
   final PaymentMethod method;
   final VoidCallback onDelete;
-  final VoidCallback? onSetDefault;
-  const _MethodTile({
+  final VoidCallback onSelect;
+  const _PayCard({
     required this.method,
     required this.onDelete,
-    required this.onSetDefault,
+    required this.onSelect,
   });
 
+  Color _logoColor() {
+    switch (method.provider) {
+      case 'click':
+        return const Color(0xFF2EB1E5);
+      case 'payme':
+        return const Color(0xFF8C5BFF);
+      case 'uzum':
+        return const Color(0xFF7841FF);
+      case 'apple':
+        return Colors.white;
+      case 'cash':
+        return AppColors.warning;
+      default:
+        return AppColors.primary;
+    }
+  }
+
+  String _logoLabel() {
+    switch (method.provider) {
+      case 'click':
+        return 'Click';
+      case 'payme':
+        return 'Payme';
+      case 'uzum':
+        return 'Uzum';
+      case 'apple':
+        return 'Pay';
+      case 'cash':
+        return '';
+      case 'visa':
+        return 'VISA';
+      case 'mastercard':
+        return 'MC';
+      default:
+        return method.provider.toUpperCase();
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-        border: Border.all(
-            color: method.isDefault ? AppColors.primary : AppColors.border,
-            width: method.isDefault ? 1.4 : 1),
-        boxShadow: AppShadows.card,
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.surfaceMuted,
-              borderRadius: BorderRadius.circular(AppRadii.sm),
-            ),
-            child: Text(method.brandEmoji, style: const TextStyle(fontSize: 22)),
+  Widget build(BuildContext context) => Dismissible(
+        key: ValueKey('pm-${method.id}'),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          decoration: BoxDecoration(
+            color: AppColors.error.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(18),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          child: Icon(Icons.delete_outline_rounded, color: AppColors.error),
+        ),
+        confirmDismiss: (_) async {
+          onDelete();
+          return false;
+        },
+        child: GestureDetector(
+          onTap: method.isDefault ? null : onSelect,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: method.isDefault
+                  ? AppColors.primary.withValues(alpha: 0.06)
+                  : AppColors.surfaceMuted,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: method.isDefault
+                    ? AppColors.primary.withValues(alpha: 0.30)
+                    : AppColors.border,
+              ),
+            ),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Text(method.displayLabel,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w800, fontSize: 15)),
-                    const SizedBox(width: 8),
-                    if (method.isDefault)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryLight,
-                          borderRadius:
-                              BorderRadius.circular(AppRadii.pill),
+                // Logo
+                Container(
+                  width: 56,
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _logoColor().withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border:
+                        Border.all(color: _logoColor().withValues(alpha: 0.30)),
+                  ),
+                  child: method.provider == 'cash'
+                      ? Icon(Icons.payments_outlined,
+                          size: 18, color: AppColors.warning)
+                      : Text(
+                          _logoLabel(),
+                          style: TextStyle(
+                            color: _logoColor(),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                            letterSpacing: 0.3,
+                          ),
                         ),
-                        child: Text(t(context, 'address.default_badge'),
-                            style: const TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 11,
-                            )),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        method.displayLabel,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
                       ),
-                  ],
+                      const SizedBox(height: 3),
+                      Text(
+                        method.expiryMonth != null && method.expiryYear != null
+                            ? '${method.providerName} · ${method.expiryMonth!.toString().padLeft(2, '0')}/${method.expiryYear}'
+                            : method.providerName,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  method.expiryMonth != null && method.expiryYear != null
-                      ? '${method.providerName} · ${method.expiryMonth!.toString().padLeft(2, '0')}/${method.expiryYear}'
-                      : method.providerName,
-                  style: const TextStyle(
-                      color: AppColors.textSecondary, fontSize: 12),
-                ),
+                if (method.isDefault)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                    child: Text(
+                      '★ ОСНОВНОЙ',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.border, width: 1.5),
+                    ),
+                  ),
               ],
             ),
           ),
-          if (onSetDefault != null)
-            IconButton(
-              tooltip: t(context, 'payment.set_default'),
-              onPressed: onSetDefault,
-              icon: const Icon(Icons.star_outline_rounded,
-                  color: AppColors.textSecondary),
+        ),
+      );
+}
+
+class _PayMethodInline extends StatelessWidget {
+  final String label;
+  final String sub;
+  final IconData icon;
+  const _PayMethodInline({
+    required this.label,
+    required this.sub,
+    required this.icon,
+  });
+  @override
+  Widget build(BuildContext context) => Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceMuted,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: AppColors.warning.withValues(alpha: 0.30)),
+              ),
+              child: Icon(icon, size: 18, color: AppColors.warning),
             ),
-          IconButton(
-            tooltip: t(context, 'payment.delete'),
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline_rounded,
-                color: AppColors.error),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    sub,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.border, width: 1.5),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _PayAddBtn extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _PayAddBtn({required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.border, width: 1.5),
           ),
-        ],
-      ),
-    );
-  }
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add_rounded, size: 18, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
 }
 
 /// Bottom sheet that walks the user through provider → tokenize → confirm.
