@@ -54,8 +54,14 @@ describe('services/routing', () => {
       ok: true,
       json: async () => ({
         route: {
-          distance: { value: 4500 }, // 4.5 km
-          duration: { value: 720 },  // 12 min
+          // Yandex /v2/route shape: per-step length/duration inside legs.
+          // Sum across steps = 4.5 km / 12 min.
+          legs: [{
+            steps: [
+              { length: 2500, duration: 400 },
+              { length: 2000, duration: 320 },
+            ],
+          }],
         },
       }),
     });
@@ -108,8 +114,7 @@ describe('services/routing', () => {
       ok: true,
       json: async () => ({
         route: {
-          distance: { value: 4500 },
-          duration: { value: 720 },
+          legs: [{ steps: [{ length: 4500, duration: 720 }] }],
         },
       }),
     });

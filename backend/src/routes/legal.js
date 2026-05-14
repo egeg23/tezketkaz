@@ -33,8 +33,15 @@ function loadAll() {
         const content = fs.readFileSync(filePath, 'utf8');
         const stat = fs.statSync(filePath);
         cache[doc][locale] = { content, updatedAt: stat.mtime.toISOString() };
-      } catch {
-        // missing file — leave undefined so resolve() can fall back.
+      } catch (err) {
+        // Only swallow "file does not exist" — that's an expected missing
+        // locale and resolve() will fall back. Permission denied (EACCES),
+        // IO error (EIO), too many open files (EMFILE) etc. should surface
+        // so an operator notices before the store reviewer hits a 404.
+        if (err && err.code === 'ENOENT') {
+          continue;
+        }
+        throw err;
       }
     }
   }

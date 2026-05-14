@@ -71,9 +71,23 @@ async function route(origin, destination, opts = {}) {
     const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
     if (!res.ok) throw new Error(`Yandex Routing HTTP ${res.status}`);
     const body = await res.json();
-    const distance = body?.route?.distance?.value; // meters
-    const duration = body?.route?.duration?.value; // seconds
-    if (!Number.isFinite(distance) || !Number.isFinite(duration)) {
+    // Yandex /v2/route returns per-step length/duration inside
+    // route.legs[].steps[] (length in metres, duration in seconds). Sum
+    // across all legs/steps. The earlier `route.distance.value` shape
+    // belongs to the separate Distance Matrix API and would silently fall
+    // back to haversine for every call.
+    const legs = Array.isArray(body?.route?.legs) ? body.route.legs : [];
+    const steps = legs.flatMap((leg) =>
+      Array.isArray(leg?.steps) ? leg.steps : []);
+    const distance = steps.reduce(
+      (sum, step) => sum + (Number.isFinite(step?.length) ? step.length : 0),
+      0,
+    ); // metres
+    const duration = steps.reduce(
+      (sum, step) => sum + (Number.isFinite(step?.duration) ? step.duration : 0),
+      0,
+    ); // seconds
+    if (steps.length === 0 || !Number.isFinite(distance) || !Number.isFinite(duration) || distance <= 0) {
       throw new Error('Yandex Routing response missing distance/duration');
     }
     const value = {

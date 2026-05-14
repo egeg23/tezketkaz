@@ -32,6 +32,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   LatLng? _courierPoint;
   bool _confirming = false;
+  // Phase 12 — fire the App Store / Play Store native review prompt at most
+  // once per TrackingScreen instance when the order transitions into
+  // `delivered`. `build()` can fire repeatedly, so we gate on this flag.
+  bool _promptTriggered = false;
   late final void Function(dynamic) _locHandler;
 
   @override
@@ -94,10 +98,15 @@ class _TrackingScreenState extends State<TrackingScreen> {
     final isHanded = order.status == AppOrderStatus.delivered;
 
     // Phase 12 — once an order lands in `delivered`, ask the system to maybe
-    // show the native App Store / Play Store review sheet (gated to Nth
-    // successful order). Best-effort; never blocks rendering.
-    if (isHanded) {
-      ReviewPromptService.instance.maybePromptAfterDelivery(order.id);
+    // show the native App Store / Play Store review sheet. Scheduled via
+    // addPostFrameCallback because triggering side effects during build is
+    // unsafe (build can fire repeatedly on rebuilds). `_promptTriggered`
+    // dedupes within the screen instance.
+    if (isHanded && !_promptTriggered) {
+      _promptTriggered = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ReviewPromptService.recordOrderCompleted();
+      });
     }
 
     return Scaffold(

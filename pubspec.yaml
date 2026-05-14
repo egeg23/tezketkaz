@@ -66,7 +66,10 @@ dependencies:
   google_sign_in: ^6.2.1
 
   # Phase 12 — launch prep
-  flutter_markdown: ^0.7.4   # legal screen renders Privacy/Terms markdown
+  # Note: flutter_markdown is officially discontinued. legal_screen.dart
+  # currently uses an in-house lightweight parser, so we don't need a
+  # markdown package. If a rich renderer becomes necessary, prefer the
+  # maintained fork flutter_markdown_plus (^0.7.x) over the original.
   in_app_review: ^2.0.9      # native review sheet after Nth successful order
 
 dev_dependencies:
