@@ -1,0 +1,299 @@
+{
+  "startedAt": "2026-05-14T04:19:09.808Z",
+  "finishedAt": "2026-05-14T04:19:10.703Z",
+  "scenarios": [
+    {
+      "name": "Scenario A — Покупатель: регистрация → заказ → оплата",
+      "steps": [
+        {
+          "label": "Регистрация по SMS (OTP 123456)",
+          "ok": true,
+          "detail": "userId=febd839f…",
+          "at": "2026-05-14T04:19:09.891Z"
+        },
+        {
+          "label": "PATCH /users/me (имя)",
+          "ok": true,
+          "detail": "name=Асаль Каримова",
+          "at": "2026-05-14T04:19:09.900Z"
+        },
+        {
+          "label": "POST /users/me/addresses",
+          "ok": true,
+          "detail": "addressId=4fadb52c…",
+          "at": "2026-05-14T04:19:09.906Z"
+        },
+        {
+          "label": "GET /shops (рядом)",
+          "ok": true,
+          "detail": "1 магазинов",
+          "at": "2026-05-14T04:19:09.910Z"
+        },
+        {
+          "label": "GET /products?shopId=…",
+          "ok": true,
+          "detail": "5 товаров",
+          "at": "2026-05-14T04:19:09.914Z"
+        },
+        {
+          "label": "POST /orders/estimate",
+          "ok": true,
+          "detail": "subtotal=40 000 fee=12 000 dist=0.459 км total=56 800",
+          "at": "2026-05-14T04:19:09.934Z"
+        },
+        {
+          "label": "POST /orders (cash)",
+          "ok": true,
+          "detail": "orderId=488023f0… status=pending",
+          "at": "2026-05-14T04:19:09.948Z"
+        },
+        {
+          "label": "GET /orders/mine видит новый заказ",
+          "ok": true,
+          "detail": "status=pending fee=12 000",
+          "at": "2026-05-14T04:19:09.953Z"
+        }
+      ],
+      "status": "passed",
+      "startedAt": "2026-05-14T04:19:09.811Z",
+      "finishedAt": "2026-05-14T04:19:09.953Z"
+    },
+    {
+      "name": "Scenario B — Ресторан: подтверждение → сборка → готов",
+      "steps": [
+        {
+          "label": "Регистрация менеджера магазина",
+          "ok": true,
+          "detail": "userId=101d2b63…",
+          "at": "2026-05-14T04:19:09.966Z"
+        },
+        {
+          "label": "POST /shops/connect (Korzinka)",
+          "ok": true,
+          "detail": "shop role granted",
+          "at": "2026-05-14T04:19:09.973Z"
+        },
+        {
+          "label": "isShop=true в /auth/me",
+          "ok": true,
+          "detail": "привязок к магазинам=1",
+          "at": "2026-05-14T04:19:09.975Z"
+        },
+        {
+          "label": "GET /orders/shop видит pending",
+          "ok": true,
+          "detail": "3 pending заказов",
+          "at": "2026-05-14T04:19:09.982Z"
+        },
+        {
+          "label": "Accept (pending → collecting)",
+          "ok": true,
+          "detail": "status=collecting, № K-257",
+          "at": "2026-05-14T04:19:09.990Z"
+        },
+        {
+          "label": "Ready (collecting → readyForPickup)",
+          "ok": true,
+          "detail": "status=readyForPickup",
+          "at": "2026-05-14T04:19:10.166Z"
+        },
+        {
+          "label": "Сегодняшний оборот растёт",
+          "ok": true,
+          "detail": "6 заказов · 269 120 сум",
+          "at": "2026-05-14T04:19:10.189Z"
+        }
+      ],
+      "status": "passed",
+      "startedAt": "2026-05-14T04:19:09.953Z",
+      "finishedAt": "2026-05-14T04:19:10.189Z"
+    },
+    {
+      "name": "Scenario C — Курьер: верификация → доставка → выплата",
+      "steps": [
+        {
+          "label": "Регистрация курьера",
+          "ok": true,
+          "detail": "userId=a1833a2b…",
+          "at": "2026-05-14T04:19:10.208Z"
+        },
+        {
+          "label": "POST /couriers/apply",
+          "ok": true,
+          "detail": "status=pending",
+          "at": "2026-05-14T04:19:10.215Z"
+        },
+        {
+          "label": "POST /couriers/me/approve (dev)",
+          "ok": true,
+          "detail": "status=approved",
+          "at": "2026-05-14T04:19:10.220Z"
+        },
+        {
+          "label": "isCourier=true в /auth/me",
+          "ok": true,
+          "detail": "courierStatus=approved",
+          "at": "2026-05-14T04:19:10.222Z"
+        },
+        {
+          "label": "GET /courier/available содержит наш заказ",
+          "ok": true,
+          "detail": "всего 3 офферов",
+          "at": "2026-05-14T04:19:10.225Z"
+        },
+        {
+          "label": "Accept (→ courierAssigned)",
+          "ok": true,
+          "detail": "status=courierAssigned",
+          "at": "2026-05-14T04:19:10.234Z"
+        },
+        {
+          "label": "Отправил 3 GPS-точки",
+          "ok": true,
+          "at": "2026-05-14T04:19:10.531Z"
+        },
+        {
+          "label": "Pickup (→ pickedUp)",
+          "ok": true,
+          "detail": "status=pickedUp",
+          "at": "2026-05-14T04:19:10.540Z"
+        },
+        {
+          "label": "Start (→ inDelivery)",
+          "ok": true,
+          "detail": "status=inDelivery",
+          "at": "2026-05-14T04:19:10.558Z"
+        },
+        {
+          "label": "Arrived (→ arrivedAtCustomer)",
+          "ok": true,
+          "detail": "status=arrivedAtCustomer",
+          "at": "2026-05-14T04:19:10.569Z"
+        },
+        {
+          "label": "Complete (→ delivered)",
+          "ok": true,
+          "detail": "status=delivered",
+          "at": "2026-05-14T04:19:10.592Z"
+        },
+        {
+          "label": "Отзыв SHOP",
+          "ok": true,
+          "detail": "rating=5",
+          "at": "2026-05-14T04:19:10.603Z"
+        },
+        {
+          "label": "Отзыв COURIER",
+          "ok": true,
+          "detail": "rating=5",
+          "at": "2026-05-14T04:19:10.613Z"
+        },
+        {
+          "label": "Buyer confirm (→ confirmedByBuyer)",
+          "ok": true,
+          "detail": "status=confirmedByBuyer",
+          "at": "2026-05-14T04:19:10.623Z"
+        },
+        {
+          "label": "GET /couriers/me/earnings",
+          "ok": true,
+          "detail": "сегодня 1 зак., доход 12 000, мес 12 000",
+          "at": "2026-05-14T04:19:10.628Z"
+        },
+        {
+          "label": "GET /couriers/me/balance",
+          "ok": true,
+          "detail": "доступно=12 000 мин=50 000",
+          "at": "2026-05-14T04:19:10.646Z"
+        },
+        {
+          "label": "Payout пропущен (< минимума)",
+          "ok": true,
+          "detail": "ожидаемо — 1 заказ обычно ниже минимума",
+          "at": "2026-05-14T04:19:10.646Z"
+        }
+      ],
+      "status": "passed",
+      "startedAt": "2026-05-14T04:19:10.189Z",
+      "finishedAt": "2026-05-14T04:19:10.646Z"
+    },
+    {
+      "name": "Edge 1 — Начисление лояльности после доставки",
+      "steps": [
+        {
+          "label": "GET /loyalty/me",
+          "ok": true,
+          "detail": "tier=bronze points=56 cashback=0",
+          "at": "2026-05-14T04:19:10.651Z"
+        },
+        {
+          "label": "GET /reviews?targetType=SHOP — отзывы видны публично",
+          "ok": true,
+          "detail": "2 отзывов в выдаче",
+          "at": "2026-05-14T04:19:10.653Z"
+        }
+      ],
+      "status": "passed",
+      "startedAt": "2026-05-14T04:19:10.646Z",
+      "finishedAt": "2026-05-14T04:19:10.653Z"
+    },
+    {
+      "name": "Edge 2 — Отмена заказа магазином после подтверждения",
+      "steps": [
+        {
+          "label": "Новый заказ для теста отмены",
+          "ok": true,
+          "detail": "orderId=eb1675d1…",
+          "at": "2026-05-14T04:19:10.671Z"
+        },
+        {
+          "label": "Shop accept",
+          "ok": true,
+          "detail": "status=collecting",
+          "at": "2026-05-14T04:19:10.680Z"
+        },
+        {
+          "label": "Shop cancel",
+          "ok": true,
+          "detail": "status=cancelled, reason=out_of_stock",
+          "at": "2026-05-14T04:19:10.690Z"
+        },
+        {
+          "label": "Покупатель видит cancelled",
+          "ok": true,
+          "detail": "out_of_stock",
+          "at": "2026-05-14T04:19:10.697Z"
+        }
+      ],
+      "status": "passed",
+      "startedAt": "2026-05-14T04:19:10.653Z",
+      "finishedAt": "2026-05-14T04:19:10.697Z"
+    },
+    {
+      "name": "Edge 3 — Динамика выручки магазина (dashboard)",
+      "steps": [
+        {
+          "label": "GET /orders/shop/:id (dashboard feed)",
+          "ok": true,
+          "detail": "всего сегодня 7",
+          "at": "2026-05-14T04:19:10.703Z"
+        },
+        {
+          "label": "Воронка статусов",
+          "ok": true,
+          "detail": "pending=0 collect=0 ready=1 assigned=0 delivering=0 delivered=0 confirmed=3 cancel=3",
+          "at": "2026-05-14T04:19:10.703Z"
+        },
+        {
+          "label": "Оборот за сегодня (без отменённых)",
+          "ok": true,
+          "detail": "227 200 сум",
+          "at": "2026-05-14T04:19:10.703Z"
+        }
+      ],
+      "status": "passed",
+      "startedAt": "2026-05-14T04:19:10.697Z",
+      "finishedAt": "2026-05-14T04:19:10.703Z"
+    }
+  ]
+}

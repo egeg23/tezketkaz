@@ -91,7 +91,6 @@ class _TrackingScreenState extends State<TrackingScreen> {
     }
 
     final isHanded = order.status == AppOrderStatus.delivered;
-    final isDone = order.status == AppOrderStatus.confirmedByBuyer;
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -161,7 +160,6 @@ class _TrackingScreenState extends State<TrackingScreen> {
             child: _Sheet(
               order: order,
               isHanded: isHanded,
-              isDone: isDone,
               confirming: _confirming,
               onConfirm: _confirmReceived,
               onChat: () => context.push('/order/${order.id}/chat'),
@@ -380,7 +378,6 @@ class _PulsingPinState extends State<_PulsingPin>
 class _Sheet extends StatelessWidget {
   final AppOrder order;
   final bool isHanded;
-  final bool isDone;
   final bool confirming;
   final VoidCallback onConfirm;
   final VoidCallback onChat;
@@ -388,7 +385,6 @@ class _Sheet extends StatelessWidget {
   const _Sheet({
     required this.order,
     required this.isHanded,
-    required this.isDone,
     required this.confirming,
     required this.onConfirm,
     required this.onChat,
@@ -433,13 +429,19 @@ class _Sheet extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                   ],
-                  if (isHanded)
+                  if (isHanded) ...[
                     _ConfirmCta(
                         confirming: confirming, onTap: onConfirm),
-                  if (isDone) ...[
-                    _TipCard(
-                        orderId: order.id, subtotal: order.subtotal),
-                    const SizedBox(height: 8),
+                    // Tip CTA — backend `/orders/:id/tip` accepts only:
+                    //   • status === 'delivered'  (between courier-complete and
+                    //                              buyer-confirm), and
+                    //   • a saved card method (cash orders can't tip).
+                    // Render it here so the buyer can leave a tip *before*
+                    // tapping "I received the order". Hide entirely on cash.
+                    if (order.paymentMethod != 'cash') ...[
+                      const SizedBox(height: 12),
+                      _TipCard(orderId: order.id, subtotal: order.subtotal),
+                    ],
                   ],
                 ],
               ),

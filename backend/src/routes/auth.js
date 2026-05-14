@@ -71,12 +71,15 @@ router.post('/send-otp', async (req, res, next) => {
       return errResp(res, 429, 'Too many OTP requests, try again later');
     }
 
-    // 60-second per-phone debounce via DB
+    // Per-phone debounce. 60 s on prod (anti-spam) but only 3 s on dev so
+    // automated test runs (e2e harness, demo data scripts) don't trip the
+    // limiter back-to-back.
+    const debounceMs = env.isProd ? 60_000 : 3_000;
     const recent = await prisma.otpCode.findFirst({
-      where: { phone, createdAt: { gt: new Date(Date.now() - 60_000) } },
+      where: { phone, createdAt: { gt: new Date(Date.now() - debounceMs) } },
     });
     if (recent) {
-      return errResp(res, 429, 'Too many requests, wait 60s');
+      return errResp(res, 429, `Too many requests, wait ${Math.round(debounceMs / 1000)}s`);
     }
 
     // In dev / mock SMS: always 123456 for testing

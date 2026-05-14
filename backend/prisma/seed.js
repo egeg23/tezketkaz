@@ -110,6 +110,30 @@ async function main() {
     data: { userId: shopOwner.id, shopId: shop.id, role: 'owner' },
   });
 
+  // ─── Delivery zone — big Tashkent rectangle (covers Чиланзар / Юнусобод /
+  //     Mirzo Ulug'bek / city centre). Without this the /estimate and /orders
+  //     endpoints return `out_of_zone` for every client-supplied coordinate.
+  await prisma.deliveryZone.create({
+    data: {
+      shopId: shop.id,
+      name: 'Tashkent — large',
+      // Lat between 41.20 and 41.42 (S→N), Lng between 69.10 and 69.45 (W→E).
+      polygon: JSON.stringify([
+        [41.20, 69.10],
+        [41.20, 69.45],
+        [41.42, 69.45],
+        [41.42, 69.10],
+        [41.20, 69.10],
+      ]),
+      baseFee: 12000,
+      perKmFee: 2000,
+      freeKm: 2,
+      minOrder: 30000,
+      sortOrder: 0,
+      isActive: true,
+    },
+  });
+
   // ─── Products ────────────────────────────────────────────────────────────
   const productsData = [
     // Sabzavotlar

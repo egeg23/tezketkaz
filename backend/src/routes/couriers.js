@@ -95,8 +95,15 @@ router.post('/me/approve', authMiddleware, async (req, res, next) => {
 // ─── GET /api/couriers/me/earnings ───────────────────────────────────────────
 router.get('/me/earnings', authMiddleware, requireRole('courier'), async (req, res, next) => {
   try {
+    // Count both `delivered` and `confirmedByBuyer` — once the buyer taps "I
+    // received the order" the status advances, but the delivery still earned
+    // the courier money. Filtering only `delivered` made the screen flip to
+    // "0 today" within seconds of the buyer's confirmation tap.
     const orders = await prisma.order.findMany({
-      where: { courierId: req.user.id, status: 'delivered' },
+      where: {
+        courierId: req.user.id,
+        status: { in: ['delivered', 'confirmedByBuyer'] },
+      },
       orderBy: { deliveredAt: 'desc' },
       take: 50,
     });
