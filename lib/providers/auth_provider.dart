@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../services/analytics_service.dart';
 import '../services/api_client.dart';
@@ -12,6 +13,12 @@ import '../services/social_auth_service.dart';
 import '../services/socket_service.dart';
 
 enum AuthState { unknown, unauthenticated, authenticated }
+
+/// Phase 13.2.3 — SharedPreferences key for the "first-run role selection
+/// completed" flag. Lives here (rather than on RoleSelectionScreen) so the
+/// auth provider can persist it without importing UI code.
+const String kRoleSelectedPrefsKey = 'role_select.completed_v1';
+const String kRoleSelectedValueKey = 'role_select.value';
 
 class AuthProvider extends ChangeNotifier {
   AuthState _state = AuthState.unknown;
@@ -31,6 +38,37 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _state == AuthState.authenticated;
   bool get isCourier => _user?.activeRole == UserRole.courier;
   bool get isShop => _user?.activeRole == UserRole.shop;
+
+  // Phase 13.2.3 — first-run role selection. Synchronously-readable flag
+  // cached on every session restore / OTP verify. Initially `true` until we
+  // read the persisted SharedPreferences entry; the router gates this
+  // through `_needsRoleSelection` so a stale `true` only triggers an extra
+  // /select-role bounce, never a missed selection.
+  bool _roleSelected = false;
+  bool get hasSelectedRole => _roleSelected;
+  bool get needsRoleSelection => isAuthenticated && !_roleSelected;
+
+  Future<void> _loadRoleSelectedFlag() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _roleSelected = prefs.getBool(kRoleSelectedPrefsKey) ?? false;
+    } catch (_) {
+      _roleSelected = false;
+    }
+  }
+
+  /// Called by the role selection screen after the user picks. Flips the
+  /// in-memory flag so the router redirect stops firing without needing a
+  /// SharedPreferences round-trip. Optionally also updates the active role
+  /// on the in-memory user — bypasses the [switchRole] prerequisite checks
+  /// because first-run role selection is the *origin* of those flags.
+  void markRoleSelected({UserRole? andSetRole}) {
+    _roleSelected = true;
+    if (andSetRole != null && _user != null) {
+      _user!.activeRole = andSetRole;
+    }
+    notifyListeners();
+  }
 
   /// Phase 7.2 — current buyer membership (`null` when not subscribed).
   Membership? get membership => _membership;
@@ -123,6 +161,9 @@ class AuthProvider extends ChangeNotifier {
       final res = await _api.get('/api/auth/me');
       _user = _parseUser(res.data['user']);
       _state = AuthState.authenticated;
+      // Phase 13.2.3 — restore the "first-run role selection completed"
+      // flag from SharedPreferences before we tell the router we're auth'd.
+      await _loadRoleSelectedFlag();
       SocketService.instance.connect();
       // Fire-and-forget — push will silently degrade if Firebase not configured.
       unawaited(PushService.instance.init());
@@ -249,6 +290,9 @@ class AuthProvider extends ChangeNotifier {
     }
     _user = _parseUser(body['user']);
     _state = AuthState.authenticated;
+    // Phase 13.2.3 — pull cached role-select flag so the router can decide
+    // between `/select-role` (first run) and the role-specific home shell.
+    await _loadRoleSelectedFlag();
     SocketService.instance.connect();
     unawaited(PushService.instance.init());
     _startMembershipTimer();
@@ -349,6 +393,15 @@ class AuthProvider extends ChangeNotifier {
     unawaited(AnalyticsService.instance.setUser(null));
     _user = null;
     _state = AuthState.unauthenticated;
+    // Phase 13.2.3 — drop the cached "role chosen" flag so the next user on
+    // this device starts fresh and sees the selection screen again. Persist
+    // the wipe to SharedPreferences best-effort.
+    _roleSelected = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(kRoleSelectedPrefsKey);
+      await prefs.remove(kRoleSelectedValueKey);
+    } catch (_) {/* ignore */}
     notifyListeners();
   }
 

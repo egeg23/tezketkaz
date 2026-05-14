@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/l10n.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_client.dart';
 import '../../services/verification_api.dart';
@@ -168,7 +169,22 @@ class _CourierVerificationScreenState
     });
 
     try {
-      // Replace previous upload (delete old + insert new).
+      VerificationDocument doc;
+      if (existing != null && existing.isRejected) {
+        // Phase 13.2.4 — re-upload over a rejected document. Backend resets
+        // status to 'pending' and clears the rejection reason atomically.
+        doc = await VerificationApi.instance.replace(existing.id, file);
+        if (!mounted) return;
+        setState(() => _docs[type] = doc);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(t(context, 'kyc.reupload_success')),
+          behavior: SnackBarBehavior.floating,
+        ));
+        return;
+      }
+      // Otherwise — fall back to delete+insert. This covers first-upload
+      // (existing == null) and "user changed their mind" (still-pending or
+      // approved) replacements.
       if (existing != null) {
         try {
           await VerificationApi.instance.delete(existing.id);
@@ -176,7 +192,7 @@ class _CourierVerificationScreenState
           // Silently ignore — server may have already cleaned it up.
         }
       }
-      final doc = await VerificationApi.instance.upload(type, file);
+      doc = await VerificationApi.instance.upload(type, file);
       if (!mounted) return;
       setState(() => _docs[type] = doc);
     } on ApiException catch (e) {
@@ -581,8 +597,7 @@ class _DocTile extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (doc?.isRejected == true &&
-                    doc!.rejectionReason != null) ...[
+                if (doc?.isRejected == true) ...[
                   const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -590,16 +605,53 @@ class _DocTile extends StatelessWidget {
                       color: AppColors.errorLight,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Row(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.info_outline,
-                            size: 16, color: AppColors.error),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(doc!.rejectionReason!,
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.info_outline,
+                                size: 16, color: AppColors.error),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                doc!.rejectionReason ??
+                                    t(context, 'kyc.rejection_generic'),
+                                style: const TextStyle(
+                                    color: AppColors.error, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        // Phase 13.2.4 — dedicated re-upload CTA. Tapping
+                        // the whole tile would also re-prompt but couriers
+                        // told us the explicit pill is clearer.
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: onTap,
+                            icon: const Icon(Icons.refresh_rounded, size: 16),
+                            label: Text(
+                              t(context, 'kyc.reupload_cta'),
                               style: const TextStyle(
-                                  color: AppColors.error, fontSize: 12)),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            style: TextButton.styleFrom(
+                              backgroundColor:
+                                  AppColors.primary.withValues(alpha: 0.12),
+                              foregroundColor: AppColors.primary,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 6),
+                              minimumSize: const Size(0, 32),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),

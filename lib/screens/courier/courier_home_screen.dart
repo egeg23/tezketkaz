@@ -283,6 +283,46 @@ class _CourierHomeScreenState extends State<CourierHomeScreen> {
                     ),
                   ),
 
+                // Phase 13.2.8 — open the full-screen demand heatmap.
+                if (courier.isOnline)
+                  Padding(
+                    padding:
+                        const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: GestureDetector(
+                      onTap: () => context.push('/courier/heatmap'),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.local_fire_department_rounded,
+                                color: AppColors.primary, size: 22),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                L10n.instance.t('heatmap.screen_title'),
+                                style: const TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right_rounded,
+                                color: AppColors.primary),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
                 // Available orders header.
                 if (courier.isOnline) ...[
                   Padding(

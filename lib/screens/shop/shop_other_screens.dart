@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/l10n.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../theme/app_theme.dart';
@@ -215,6 +216,27 @@ class ShopProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
+          // Phase 13.2.6 — operations shortcuts (refunds, promo, analytics).
+          _OpsCard(
+            tiles: [
+              _OpsTile(
+                emoji: '📈',
+                label: t(context, 'shop.analytics.title'),
+                route: '/shop/analytics',
+              ),
+              _OpsTile(
+                emoji: '🏷️',
+                label: t(context, 'shop.promo.title'),
+                route: '/shop/promo',
+              ),
+              _OpsTile(
+                emoji: '↩️',
+                label: t(context, 'shop.refunds.title'),
+                route: '/shop/refunds',
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           const _Card(title: 'Ish vaqti', tiles: [
             ('🕐', 'Ish soatlari', '09:00 – 22:00'),
             ('📅', 'Dam olish', 'Har kuni ishlaydi'),
@@ -254,6 +276,70 @@ class _Stat extends StatelessWidget {
       Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
     ],
   );
+}
+
+/// Phase 13.2.6 — fast access to refunds / promo / analytics from the
+/// shop profile screen. Lives outside the [_Card] system so the row layout
+/// can be a horizontal scroller of equal-weight tiles.
+class _OpsTile {
+  final String emoji;
+  final String label;
+  final String route;
+  const _OpsTile({
+    required this.emoji,
+    required this.label,
+    required this.route,
+  });
+}
+
+class _OpsCard extends StatelessWidget {
+  final List<_OpsTile> tiles;
+  const _OpsCard({required this.tiles});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
+        padding: const EdgeInsets.all(8),
+        child: Row(
+          children: [
+            for (final t in tiles)
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => context.push(t.route),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 14),
+                      child: Column(
+                        children: [
+                          Text(t.emoji, style: const TextStyle(fontSize: 26)),
+                          const SizedBox(height: 6),
+                          Text(
+                            t.label,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
 }
 
 class _Card extends StatelessWidget {
