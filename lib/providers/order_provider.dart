@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/order_api.dart';
@@ -35,6 +37,12 @@ class AppOrder {
   final String? batchId;
   final int? batchSequence;
   final int? batchTotal;
+  // Phase 13.2.5 — courier delivery-photo proof. Stamped on the order row
+  // when the courier completes the drop with a fresh camera photo. Both
+  // fields are null until the multipart `/courier/delivered` endpoint
+  // succeeds.
+  final String? deliveryPhotoUrl;
+  final DateTime? deliveryPhotoAt;
   final DateTime createdAt;
 
   AppOrder({
@@ -58,6 +66,8 @@ class AppOrder {
     this.batchId,
     this.batchSequence,
     this.batchTotal,
+    this.deliveryPhotoUrl,
+    this.deliveryPhotoAt,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -301,6 +311,15 @@ class OrderProvider extends ChangeNotifier {
 
   Future<void> courierComplete(String orderId) async {
     final updated = await OrderApi.instance.courierComplete(orderId);
+    _replace(updated);
+  }
+
+  /// Phase 13.2.5 — courier completes the drop by uploading a fresh camera
+  /// photo. Backend stamps `deliveryPhotoUrl` / `deliveryPhotoAt` on the
+  /// Order row before flipping status to `delivered`.
+  Future<void> courierCompleteWithPhoto(String orderId, File photo) async {
+    final updated =
+        await OrderApi.instance.courierMarkDelivered(orderId, photo);
     _replace(updated);
   }
 

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -438,6 +439,16 @@ class _Sheet extends StatelessWidget {
                   const SizedBox(height: 16),
                   _Timeline(current: order.status),
                   const SizedBox(height: 20),
+                  // Phase 13.2.5 — once the courier has uploaded a fresh
+                  // delivery photo we expose it here as a small "proof"
+                  // card. Tapping opens the fullscreen viewer.
+                  if (isHanded && order.deliveryPhotoUrl != null) ...[
+                    _DeliveryProofCard(
+                      photoUrl: order.deliveryPhotoUrl!,
+                      deliveredAt: order.deliveryPhotoAt,
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                   if (order.courierName != null) ...[
                     _CourierCard(
                       name: order.courierName!,
@@ -931,4 +942,139 @@ class _TipChip extends StatelessWidget {
           ),
         ),
       );
+}
+
+// ─── Phase 13.2.5 — Delivery photo proof (buyer side) ──────────────────────
+
+class _DeliveryProofCard extends StatelessWidget {
+  final String photoUrl;
+  final DateTime? deliveredAt;
+
+  const _DeliveryProofCard({
+    required this.photoUrl,
+    required this.deliveredAt,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => _DeliveryPhotoViewer(photoUrl: photoUrl),
+            fullscreenDialog: true,
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceMuted,
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: CachedNetworkImage(
+                imageUrl: photoUrl,
+                width: 64,
+                height: 64,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(
+                  width: 64,
+                  height: 64,
+                  color: AppColors.surface,
+                ),
+                errorWidget: (_, __, ___) => Container(
+                  width: 64,
+                  height: 64,
+                  color: AppColors.surface,
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.image_not_supported_rounded,
+                      size: 20, color: AppColors.textHint),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    t(context, 'delivery_photo.title'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    deliveredAt != null
+                        ? t(context, 'delivery_photo.delivered_at')
+                            .replaceAll('{time}', _fmtTime(deliveredAt!))
+                        : t(context, 'delivery_photo.tap_to_view'),
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.zoom_out_map_rounded,
+                color: AppColors.textHint, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _fmtTime(DateTime d) {
+    final h = d.hour.toString().padLeft(2, '0');
+    final m = d.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+}
+
+class _DeliveryPhotoViewer extends StatelessWidget {
+  final String photoUrl;
+  const _DeliveryPhotoViewer({required this.photoUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(t(context, 'delivery_photo.title')),
+        leading: IconButton(
+          icon: const Icon(Icons.close_rounded),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: InteractiveViewer(
+            maxScale: 5,
+            minScale: 0.6,
+            child: CachedNetworkImage(
+              imageUrl: photoUrl,
+              fit: BoxFit.contain,
+              placeholder: (_, __) => const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+              errorWidget: (_, __, ___) => const Center(
+                child: Icon(Icons.error_outline,
+                    color: Colors.white, size: 32),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

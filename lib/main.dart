@@ -22,6 +22,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/otp_screen.dart';
 import 'screens/auth/name_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
+import 'screens/onboarding/role_selection_screen.dart';
 import 'screens/buyer/buyer_shell.dart';
 import 'screens/buyer/home_screen.dart';
 import 'screens/buyer/catalog_screen.dart';
@@ -53,11 +54,15 @@ import 'screens/courier/active_order_screen.dart';
 import 'screens/courier/earnings_screen.dart';
 import 'screens/courier/performance_screen.dart';
 import 'screens/courier/courier_profile_screen.dart';
+import 'screens/courier/heatmap_screen.dart';
 import 'screens/shop/shop_shell.dart';
 import 'screens/shop/shop_orders_screen.dart';
 import 'screens/shop/shop_other_screens.dart';
 import 'screens/shop/shop_products_screen.dart';
 import 'screens/shop/shop_settings_screen.dart';
+import 'screens/shop/shop_refunds_screen.dart';
+import 'screens/shop/shop_promo_screen.dart';
+import 'screens/shop/shop_analytics_screen.dart';
 import 'screens/shared/role_switcher_screen.dart';
 import 'screens/shared/courier_verification_screen.dart';
 import 'screens/shared/chat_screen.dart';
@@ -203,12 +208,29 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       // able to read BEFORE creating an account. Allow it for everyone.
       final isPublic = loc == '/legal';
       final isOnboarding = loc == '/onboarding';
+      final isOnRoleSelect = loc == '/select-role';
       // Onboarding is a post-login screen; bounce unauth'd users to login
       // even when they deep-link straight to /onboarding.
       if (!isAuth && !isOnAuth && !isPublic) return '/auth/login';
       if (isAuth && loc == '/splash') {
         if (auth.user?.name == null) return '/auth/name';
+        // Phase 13.2.3 — first-run role selection happens between name entry
+        // and the onboarding tutorial / role-specific shell.
+        if (auth.needsRoleSelection) return '/select-role';
         if (_needsOnboarding(auth)) return '/onboarding';
+        return _homeForRole(auth);
+      }
+      // Phase 13.2.3 — once the user types their name, force the role
+      // selector before any of the role-specific shells take over.
+      if (isAuth &&
+          auth.needsRoleSelection &&
+          !isOnRoleSelect &&
+          !isOnAuth &&
+          !isPublic) {
+        return '/select-role';
+      }
+      // Already-selected users shouldn't get stuck on /select-role.
+      if (isAuth && isOnRoleSelect && !auth.needsRoleSelection) {
         return _homeForRole(auth);
       }
       // Phase 11 — buyers without `onboardedAt` get bounced into the
@@ -231,6 +253,8 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
       GoRoute(path: '/auth/otp', builder: (_, s) => OtpScreen(phone: s.extra as String? ?? '')),
       GoRoute(path: '/auth/name', builder: (_, __) => const NameScreen()),
       GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
+      // Phase 13.2.3 — first-run role selection (buyer / courier / shop).
+      GoRoute(path: '/select-role', builder: (_, __) => const RoleSelectionScreen()),
       GoRoute(path: '/switch-role', builder: (_, __) => const RoleSwitcherScreen()),
       GoRoute(path: '/courier-verification', builder: (_, __) => const CourierVerificationScreen()),
       // Phase 12 — read-only Privacy / Terms viewer (tabbed). Auth-agnostic so
@@ -381,6 +405,8 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
           GoRoute(path: '/courier/earnings', builder: (_, __) => const EarningsScreen()),
           GoRoute(path: '/courier/performance', builder: (_, __) => const PerformanceScreen()),
           GoRoute(path: '/courier/profile', builder: (_, __) => const CourierProfileScreen()),
+          // Phase 13.2.8 — full-screen demand heatmap.
+          GoRoute(path: '/courier/heatmap', builder: (_, __) => const HeatmapScreen()),
         ],
       ),
 
@@ -392,6 +418,10 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
           GoRoute(path: '/shop/history', builder: (_, __) => const ShopHistoryScreen()),
           GoRoute(path: '/shop/profile', builder: (_, __) => const ShopProfileScreen()),
           GoRoute(path: '/shop/settings', builder: (_, __) => const ShopSettingsScreen()),
+          // Phase 13.2.6 — new shop ops screens.
+          GoRoute(path: '/shop/refunds', builder: (_, __) => const ShopRefundsScreen()),
+          GoRoute(path: '/shop/promo', builder: (_, __) => const ShopPromoScreen()),
+          GoRoute(path: '/shop/analytics', builder: (_, __) => const ShopAnalyticsScreen()),
         ],
       ),
     ],

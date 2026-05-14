@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../l10n/l10n.dart';
@@ -116,9 +118,12 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
         break;
 
       case DeliveryStep.atCustomer:
-        // "Topshirildi" → handed over
-        await orders.courierComplete(widget.orderId);
-        if (!mounted) return;
+        // Phase 13.2.5 — "Topshirildi" requires a fresh delivery proof
+        // photo. We open the rear camera, show a confirm preview, then
+        // call the multipart `/courier/delivered` endpoint. On any failure
+        // we keep the user on the same step so they can retry.
+        final completed = await _captureAndSubmitDeliveryPhoto();
+        if (!mounted || !completed) return;
         setState(() => _step = DeliveryStep.done);
         break;
 
@@ -149,6 +154,68 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen>
     }
     if (!mounted) return;
     context.go('/courier');
+  }
+
+  /// Phase 13.2.5 — capture a rear-camera photo, show preview with
+  /// Retry / Submit, then POST it as multipart proof. Returns true when the
+  /// backend acks `delivered`, false on cancel / failure (so the caller
+  /// keeps the courier on the at-door step for retry).
+  Future<bool> _captureAndSubmitDeliveryPhoto() async {
+    final picker = ImagePicker();
+    XFile? picked;
+    try {
+      picked = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+        imageQuality: 78,
+        maxWidth: 1920,
+      );
+    } catch (_) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(t(context, 'delivery_photo.camera_unavailable')),
+      ));
+      return false;
+    }
+    if (picked == null) return false;
+
+    // Loop: show preview → Retry retakes, Submit uploads.
+    File current = File(picked.path);
+    while (mounted) {
+      final action = await Navigator.of(context).push<_PhotoPreviewAction>(
+        MaterialPageRoute(
+          builder: (_) => _DeliveryPhotoPreview(photo: current),
+          fullscreenDialog: true,
+        ),
+      );
+      if (action == null) return false;
+      if (action == _PhotoPreviewAction.retry) {
+        final retake = await picker.pickImage(
+          source: ImageSource.camera,
+          preferredCameraDevice: CameraDevice.rear,
+          imageQuality: 78,
+          maxWidth: 1920,
+        );
+        if (retake == null) return false;
+        current = File(retake.path);
+        continue;
+      }
+      // Submit
+      try {
+        await context
+            .read<OrderProvider>()
+            .courierCompleteWithPhoto(widget.orderId, current);
+        return true;
+      } catch (_) {
+        if (!mounted) return false;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(t(context, 'delivery_photo.upload_failed')),
+        ));
+        // Stay in the loop so the courier can retake / re-submit.
+        continue;
+      }
+    }
+    return false;
   }
 
   Future<void> _openMap(String address) async {
@@ -1074,4 +1141,73 @@ class _DoneScreenState extends State<_DoneScreen> with SingleTickerProviderState
       ),
     ),
   );
+}
+
+// ─── Phase 13.2.5 — Delivery photo preview ─────────────────────────────────
+
+enum _PhotoPreviewAction { retry, submit }
+
+class _DeliveryPhotoPreview extends StatelessWidget {
+  final File photo;
+  const _DeliveryPhotoPreview({required this.photo});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        backgroundColor: AppColors.bg,
+        title: Text(t(context, 'delivery_photo.preview_title')),
+        leading: IconButton(
+          icon: const Icon(Icons.close_rounded),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadii.lg),
+                  child: Image.file(
+                    photo,
+                    fit: BoxFit.contain,
+                    width: double.infinity,
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context)
+                          .pop(_PhotoPreviewAction.retry),
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: Text(t(context, 'delivery_photo.retry')),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.of(context)
+                          .pop(_PhotoPreviewAction.submit),
+                      icon: const Icon(Icons.check_circle_rounded,
+                          size: 18, color: AppColors.bg),
+                      label: Text(t(context, 'delivery_photo.submit')),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
