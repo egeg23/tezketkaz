@@ -19,7 +19,14 @@
 
 const router = require('express').Router();
 
-const KEY = process.env.YANDEX_MAPKIT_API_KEY || '';
+// Geocoder uses its own dedicated key on Yandex's developer console; the
+// MapKit + JS API keys won't work against geocode-maps.yandex.ru (returns
+// 403). Fall back to MAPKIT key for older deployments that haven't split
+// the credentials yet.
+const KEY =
+  process.env.YANDEX_GEOCODER_API_KEY ||
+  process.env.YANDEX_MAPKIT_API_KEY ||
+  '';
 const BASE = 'https://geocode-maps.yandex.ru/1.x/';
 
 // Tiny in-process LRU. For prod-multi-instance, swap to Redis.
@@ -66,6 +73,19 @@ async function yandex(params) {
   const r = await fetch(url.toString(), {
     signal: AbortSignal.timeout(8000),
   });
+  if (r.status === 403) {
+    // "Invalid api key" — Yandex did receive the call but rejected the
+    // credentials. Most common reason: the key in developer console is
+    // wired to a different product (MapKit / Static / Routes) and not
+    // to "JavaScript API and Geocoder HTTP". Surface that clearly.
+    throw Object.assign(
+      new Error('yandex_key_not_active_for_geocoder'),
+      {
+        status: 503,
+        hint: 'Enable "JavaScript API and Geocoder HTTP" for the YANDEX_GEOCODER_API_KEY key in https://developer.tech.yandex.ru (or wait 5-30 min after key creation).',
+      },
+    );
+  }
   if (!r.ok) {
     throw Object.assign(new Error(`yandex_${r.status}`), { status: 502 });
   }

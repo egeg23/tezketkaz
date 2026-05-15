@@ -32,7 +32,14 @@ jobs:
           cache: true
 
       - run: flutter pub get
-      - run: flutter build web --release --pwa-strategy=none
+      # Pass Yandex client-side keys via --dart-define so they live in the
+      # JS bundle and not in source. Empty fallback keeps OSS forks compiling.
+      # Configure these as repository secrets at
+      # https://github.com/<owner>/<repo>/settings/secrets/actions
+      - run: |
+          flutter build web --release --pwa-strategy=none \
+            --dart-define=YANDEX_JS_API_KEY=${{ secrets.YANDEX_JS_API_KEY }} \
+            --dart-define=YANDEX_MAPKIT_API_KEY=${{ secrets.YANDEX_MAPKIT_API_KEY }}
 
       - name: Commit rebuilt web bundle
         run: |
