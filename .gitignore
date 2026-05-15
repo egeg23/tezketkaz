@@ -75,6 +75,9 @@ node_modules/
 
 # ─── Backend ─────────────────────────────────────────────────────────────────
 backend/.env
+infra/.env
+infra/.env.local
+infra/.env.production
 backend/prisma/dev.db
 backend/prisma/dev.db-journal
 backend/prisma/test*.db

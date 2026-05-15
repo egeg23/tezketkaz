@@ -1,0 +1,56 @@
+# Multi-stage Node Dockerfile for TezKetKaz backend.
+#
+# Stage 1 (deps):   install ВСЕ npm deps + сгенерить Prisma client
+# Stage 2 (build):  лишний, нам нечего собирать (нет TS / webpack)
+# Stage 3 (runner): копируем только prod node_modules + источник,
+#                   запускаем под непривилегированным юзером
+
+# ────────────────────────────────────────────────────────────────────────
+FROM node:20-alpine AS deps
+WORKDIR /app
+
+# Установка нужна openssl (для Prisma на Alpine) + git (на случай если
+# какой-то пакет тянет с GitHub). curl нужен для healthcheck'a runner'а.
+RUN apk add --no-cache openssl libc6-compat
+
+COPY backend/package*.json ./backend/
+COPY backend/prisma ./backend/prisma
+
+# Локальная схема живёт как SQLite чтобы dev на ноутбуке работал без
+# Postgres. Для production-образа патчим провайдер на postgresql — никаких
+# отдельных schema-файлов не нужно.
+RUN sed -i 's|provider = "sqlite"|provider = "postgresql"|' \
+  /app/backend/prisma/schema.prisma
+
+WORKDIR /app/backend
+# `npm ci` — детерминированная установка по package-lock.json.
+RUN npm ci --no-audit --no-fund --prefer-offline
+# Генерим Prisma client под Postgres (после sed выше).
+RUN npx prisma generate
+
+# ────────────────────────────────────────────────────────────────────────
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+RUN apk add --no-cache openssl libc6-compat tini
+
+# Запускаем под non-root юзером. Базовый node user уже создан в base image.
+USER node
+
+COPY --chown=node:node --from=deps /app/backend/node_modules /app/backend/node_modules
+COPY --chown=node:node --from=deps /app/backend/prisma /app/backend/prisma
+COPY --chown=node:node backend /app/backend
+# Перетираем prisma директорию patched-копией из deps stage — там
+# provider уже postgresql.
+COPY --chown=node:node --from=deps /app/backend/prisma /app/backend/prisma
+COPY --chown=node:node build/web /app/build/web
+
+WORKDIR /app/backend
+
+EXPOSE 3000
+
+# `db push --accept-data-loss` для staging: synces schema → DB на каждом
+# старте. Idempotent если схема не менялась. Для production с реальными
+# юзерами заменим на полноценные migrations (`prisma migrate dev/deploy`).
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && node src/index.js"]

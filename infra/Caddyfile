@@ -1,0 +1,73 @@
+# Caddy конфиг — staging.tezketkaz.uz и подобные.
+#
+# {$DOMAIN} подставляется из переменной окружения. На первом запуске
+# Caddy сам пойдёт в Let's Encrypt и получит cert. Никакого ручного
+# certbot не нужно.
+#
+# Все запросы проксируются в backend (node на :3000). Backend сам решает,
+# что отдавать: /api/* — обработчики Express, всё остальное — статический
+# Flutter web bundle.
+#
+# Особые ручки:
+#   /api/auth/telegram/webhook   — POST от Telegram, никаких rate-limit'ов
+#   /socket.io/                  — WebSocket upgrade
+#   /api/*                       — обычный API
+#   /                            — Flutter web
+
+{
+	# Глобальные опции
+	servers {
+		protocols h1 h2 h3
+	}
+	# Email для Let's Encrypt уведомлений. Поставь свой если ловишь rate-limit.
+	email {$ADMIN_EMAIL:admin@tezketkaz.uz}
+}
+
+# ─────────────────────────────────────────────────────────────────────────
+{$DOMAIN} {
+	# Базовые security-заголовки.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Caddy сам добавляет server: Caddy — затираем
+		-Server
+	}
+
+	# Gzip + zstd для всего, кроме картинок (они и так сжаты)
+	encode gzip zstd
+
+	# WebSocket для Socket.IO. Без этого фронт не получает real-time.
+	@websockets {
+		header Connection *Upgrade*
+		header Upgrade websocket
+	}
+	reverse_proxy @websockets backend:3000
+
+	# Telegram webhook — не логируем тело, не лимитируем. Telegram сам
+	# присылает X-Telegram-Bot-Api-Secret-Token в заголовке, бэкенд проверяет.
+	@telegram path /api/auth/telegram/webhook
+	reverse_proxy @telegram backend:3000
+
+	# Всё остальное — обычный proxy в backend.
+	reverse_proxy backend:3000 {
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	# Логи в stdout (docker logs caddy)
+	log {
+		output stdout
+		format console
+	}
+}
+
+# ─────────────────────────────────────────────────────────────────────────
+# 80 → 443 redirect ставится автоматически когда Caddy видит {$DOMAIN}.
+# Если нужен `www.` — раскомментируй ниже:
+#
+# www.{$DOMAIN} {
+# 	redir https://{$DOMAIN}{uri} permanent
+# }
