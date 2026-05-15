@@ -267,12 +267,13 @@ model Shop {
   webhookEvents   String?  // CSV of subscribed events, "*" = all
   lastSyncAt      DateTime? // last successful product sync via API
 
-  members     ShopMember[]
-  products    Product[]
-  orders      Order[]
-  zones       DeliveryZone[]
+  members      ShopMember[]
+  products     Product[]
+  orders       Order[]
+  zones        DeliveryZone[]
   workingHours ShopWorkingHours[]
-  syncEvents  ShopSyncEvent[]
+  syncEvents   ShopSyncEvent[]
+  integrations ShopIntegration[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -291,7 +292,7 @@ model ShopSyncEvent {
   shopId    String
 
   // "products.upsert" | "products.delete" | "webhook.delivered" |
-  // "webhook.failed" | "credentials.rotated"
+  // "webhook.failed" | "credentials.rotated" | "iiko.menu.synced" | …
   kind      String
 
   // 2xx status counted as success; 4xx/5xx + transport errors as failure.
@@ -301,6 +302,51 @@ model ShopSyncEvent {
   createdAt DateTime @default(now())
 
   @@index([shopId, createdAt])
+}
+
+// Phase 14 wave 2 — installed POS connectors per shop. One row per
+// (shop, provider). A shop can connect multiple providers at once but only
+// one of each kind (no two iikos for the same restaurant).
+//
+// `credsCipher` stores AES-GCM-encrypted JSON with provider-specific fields
+// (e.g. {"login": "...", "password": "...", "orgId": "..."} for iiko).
+// We never log this column. Decryption only happens inside the adapter call.
+model ShopIntegration {
+  id            String   @id @default(uuid())
+  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId        String
+
+  // "iiko" | "poster" | "rkeeper" | "onec" | "custom_rest"
+  provider      String
+
+  // Encrypted JSON of all provider-specific credentials. Format:
+  //   ivBase64:authTagBase64:ciphertextBase64
+  // Encryption key comes from INTEGRATION_ENC_KEY env (32 random bytes b64).
+  credsCipher   String
+
+  // Display-only metadata so the UI can show e.g. "iiko · orgId=ab-cd-12"
+  // without decrypting. Filled at create-time from non-secret fields.
+  publicMeta    String?  // JSON
+
+  // Sync feature toggles. Independent so a shop can pull menu but not push
+  // orders, or vice versa.
+  syncMenu      Boolean  @default(true)
+  syncStock     Boolean  @default(true)
+  syncOrders    Boolean  @default(true)
+
+  // Last successful + last attempt of any sync (separated so the UI can
+  // show "synced 18m ago, last failure 3h ago").
+  lastSyncAt    DateTime?
+  lastSyncError String?
+  lastTestedAt  DateTime?
+  lastTestOk    Boolean?
+
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([shopId, provider])
+  @@index([shopId, isActive])
 }
 
 // Phase 6 — working hours per day-of-week. One row per (shop, dayOfWeek).

@@ -22,6 +22,8 @@ const router = require('express').Router();
 const crypto = require('crypto');
 const prisma = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const registry = require('../integrations/registry');
+const cryptoBox = require('../lib/integration-crypto');
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -375,6 +377,262 @@ router.post('/v1/products/delete', apiKeyMiddleware, async (req, res, next) => {
     }
     next(err);
   }
+});
+
+// ─── PROVIDER CONNECTORS (Phase 14 wave 2) ──────────────────────────────────
+//
+// CRUD over ShopIntegration rows + test/sync actions. Sits alongside the
+// existing "raw API key" surface so a shop can have both: a tz_live_… for
+// their own devs AND one or more connected POS adapters at the same time.
+
+// GET /api/shops/me/integrations/providers — registry of supported POS
+router.get('/me/integrations/providers', authMiddleware, async (req, res) => {
+  res.json({ providers: registry.listProviders() });
+});
+
+// GET /api/shops/me/integrations — list installed adapters
+router.get('/me/integrations', authMiddleware, async (req, res, next) => {
+  try {
+    const shopId = await findUserShopId(req);
+    if (!shopId) return res.status(404).json({ error: 'no_shop' });
+    if (!(await assertShopManager(req, shopId))) {
+      return res.status(403).json({ error: 'not_a_member' });
+    }
+    const rows = await prisma.shopIntegration.findMany({
+      where: { shopId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const integrations = rows.map((r) => ({
+      id: r.id,
+      provider: r.provider,
+      providerLabel: registry.getAdapter(r.provider)?.label || r.provider,
+      publicMeta: r.publicMeta ? JSON.parse(r.publicMeta) : {},
+      syncMenu: r.syncMenu,
+      syncStock: r.syncStock,
+      syncOrders: r.syncOrders,
+      lastSyncAt: r.lastSyncAt,
+      lastSyncError: r.lastSyncError,
+      lastTestedAt: r.lastTestedAt,
+      lastTestOk: r.lastTestOk,
+      isActive: r.isActive,
+      createdAt: r.createdAt,
+    }));
+    res.json({ integrations });
+  } catch (err) { next(err); }
+});
+
+// POST /api/shops/me/integrations — connect a new provider
+//   Body: { provider: "custom_rest" | "iiko" | "poster", creds: {...} }
+router.post('/me/integrations', authMiddleware, async (req, res, next) => {
+  try {
+    const shopId = await findUserShopId(req);
+    if (!shopId) return res.status(404).json({ error: 'no_shop' });
+    if (!(await assertShopManager(req, shopId))) {
+      return res.status(403).json({ error: 'not_a_member' });
+    }
+
+    const { provider, creds } = req.body || {};
+    const adapter = registry.getAdapter(provider);
+    if (!adapter) {
+      return res.status(400).json({ error: 'unknown_provider' });
+    }
+
+    let sanitized;
+    try {
+      sanitized = registry.validateCreds(provider, creds);
+    } catch (err) {
+      return res.status(400).json({
+        error: err.code || 'invalid_creds',
+        field: err.field,
+      });
+    }
+
+    // Run a connection test before persisting — fail-fast so the user knows
+    // they typed something wrong while their fingers are still on the keys.
+    const probe = await adapter.testConnection(sanitized);
+
+    const publicMeta = registry.publicMetaFrom(provider, sanitized);
+    const credsCipher = cryptoBox.encrypt(sanitized);
+
+    const row = await prisma.shopIntegration.upsert({
+      where: { shopId_provider: { shopId, provider } },
+      create: {
+        shopId, provider,
+        credsCipher,
+        publicMeta: JSON.stringify(publicMeta),
+        lastTestedAt: new Date(),
+        lastTestOk: probe.ok,
+        lastSyncError: probe.ok ? null : probe.message,
+      },
+      update: {
+        credsCipher,
+        publicMeta: JSON.stringify(publicMeta),
+        lastTestedAt: new Date(),
+        lastTestOk: probe.ok,
+        lastSyncError: probe.ok ? null : probe.message,
+        isActive: true,
+      },
+    });
+
+    await logEvent(shopId, 'integration.connected', {
+      ok: probe.ok,
+      message: `${provider}: ${probe.message}`,
+      meta: { provider, integrationId: row.id },
+    });
+
+    res.json({
+      integration: {
+        id: row.id,
+        provider: row.provider,
+        providerLabel: adapter.label,
+        publicMeta,
+        lastTestOk: row.lastTestOk,
+        lastTestedAt: row.lastTestedAt,
+      },
+      test: probe,
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/shops/me/integrations/:id/test — re-run connection test
+router.post('/me/integrations/:id/test', authMiddleware, async (req, res, next) => {
+  try {
+    const shopId = await findUserShopId(req);
+    if (!shopId) return res.status(404).json({ error: 'no_shop' });
+    if (!(await assertShopManager(req, shopId))) {
+      return res.status(403).json({ error: 'not_a_member' });
+    }
+    const row = await prisma.shopIntegration.findFirst({
+      where: { id: req.params.id, shopId },
+    });
+    if (!row) return res.status(404).json({ error: 'not_found' });
+
+    const adapter = registry.getAdapter(row.provider);
+    if (!adapter) return res.status(400).json({ error: 'unknown_provider' });
+
+    const creds = cryptoBox.decrypt(row.credsCipher);
+    const probe = await adapter.testConnection(creds);
+
+    await prisma.shopIntegration.update({
+      where: { id: row.id },
+      data: {
+        lastTestedAt: new Date(),
+        lastTestOk: probe.ok,
+        lastSyncError: probe.ok ? null : probe.message,
+      },
+    });
+    await logEvent(shopId, 'integration.test', {
+      ok: probe.ok,
+      message: `${row.provider}: ${probe.message}`,
+      meta: { provider: row.provider },
+    });
+
+    res.json({ test: probe });
+  } catch (err) { next(err); }
+});
+
+// POST /api/shops/me/integrations/:id/sync-now — trigger immediate menu pull
+router.post('/me/integrations/:id/sync-now', authMiddleware, async (req, res, next) => {
+  try {
+    const shopId = await findUserShopId(req);
+    if (!shopId) return res.status(404).json({ error: 'no_shop' });
+    if (!(await assertShopManager(req, shopId))) {
+      return res.status(403).json({ error: 'not_a_member' });
+    }
+    const row = await prisma.shopIntegration.findFirst({
+      where: { id: req.params.id, shopId },
+    });
+    if (!row) return res.status(404).json({ error: 'not_found' });
+    if (!row.syncMenu) {
+      return res.status(400).json({ error: 'menu_sync_disabled' });
+    }
+
+    const adapter = registry.getAdapter(row.provider);
+    const creds = cryptoBox.decrypt(row.credsCipher);
+
+    let result;
+    try {
+      result = await adapter.pullMenu(creds, shopId);
+      await prisma.shopIntegration.update({
+        where: { id: row.id },
+        data: { lastSyncAt: new Date(), lastSyncError: null },
+      });
+      await logEvent(shopId, `${row.provider}.menu.synced`, {
+        ok: true,
+        message: result.message,
+        meta: result,
+      });
+    } catch (err) {
+      await prisma.shopIntegration.update({
+        where: { id: row.id },
+        data: { lastSyncError: err.message },
+      });
+      await logEvent(shopId, `${row.provider}.menu.sync_failed`, {
+        ok: false, message: err.message,
+      });
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.json({ result });
+  } catch (err) { next(err); }
+});
+
+// PATCH /api/shops/me/integrations/:id — toggle syncMenu/syncStock/syncOrders
+router.patch('/me/integrations/:id', authMiddleware, async (req, res, next) => {
+  try {
+    const shopId = await findUserShopId(req);
+    if (!shopId) return res.status(404).json({ error: 'no_shop' });
+    if (!(await assertShopManager(req, shopId))) {
+      return res.status(403).json({ error: 'not_a_member' });
+    }
+    const row = await prisma.shopIntegration.findFirst({
+      where: { id: req.params.id, shopId },
+    });
+    if (!row) return res.status(404).json({ error: 'not_found' });
+
+    const { syncMenu, syncStock, syncOrders, isActive } = req.body || {};
+    const updated = await prisma.shopIntegration.update({
+      where: { id: row.id },
+      data: {
+        ...(typeof syncMenu === 'boolean' && { syncMenu }),
+        ...(typeof syncStock === 'boolean' && { syncStock }),
+        ...(typeof syncOrders === 'boolean' && { syncOrders }),
+        ...(typeof isActive === 'boolean' && { isActive }),
+      },
+    });
+    res.json({
+      integration: {
+        id: updated.id,
+        provider: updated.provider,
+        syncMenu: updated.syncMenu,
+        syncStock: updated.syncStock,
+        syncOrders: updated.syncOrders,
+        isActive: updated.isActive,
+      },
+    });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/shops/me/integrations/:id — disconnect
+router.delete('/me/integrations/:id', authMiddleware, async (req, res, next) => {
+  try {
+    const shopId = await findUserShopId(req);
+    if (!shopId) return res.status(404).json({ error: 'no_shop' });
+    if (!(await assertShopManager(req, shopId))) {
+      return res.status(403).json({ error: 'not_a_member' });
+    }
+    const row = await prisma.shopIntegration.findFirst({
+      where: { id: req.params.id, shopId },
+    });
+    if (!row) return res.status(404).json({ error: 'not_found' });
+
+    await prisma.shopIntegration.delete({ where: { id: row.id } });
+    await logEvent(shopId, 'integration.disconnected', {
+      ok: true, message: row.provider,
+    });
+
+    res.json({ ok: true });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;
