@@ -313,6 +313,8 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
     const backupJobs = require('./jobs/backup');
     // eslint-disable-next-line global-require
     const groupExpiryJobs = require('./jobs/groupExpiry');
+    // eslint-disable-next-line global-require
+    const integrationJobs = require('./jobs/integration');
     startWorkers({
       dispatch: dispatchJobs.dispatchHandler,
       autoCancel: dispatchJobs.autoCancelHandler,
@@ -322,7 +324,12 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
       accountDeletion: accountDeletionJobs.accountDeletionHandler,
       backup: backupJobs.backupHandler,
       groupExpiry: groupExpiryJobs.groupExpiryHandler,
+      integrationSync: integrationJobs.integrationSyncHandler,
+      integrationWebhook: integrationJobs.integrationWebhookHandler,
     });
+    // Phase 14 wave 3 — periodic POS auto-sync ticker. Enqueues one
+    // syncMenu job per active integration every 15 min (env-tunable).
+    integrationJobs.startIntegrationSyncCron(queues);
     // Schedule weekly payouts: Mondays at 03:00 UTC.
     try {
       queues().payouts.add('weekly', {}, {

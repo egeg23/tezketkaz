@@ -471,6 +471,13 @@ router.post('/me/integrations', authMiddleware, async (req, res, next) => {
         lastTestOk: probe.ok,
         lastSyncError: probe.ok ? null : probe.message,
         isActive: true,
+        // Re-connecting a provider re-enables the default sync flags. Without
+        // this, a user who toggled off syncMenu and then re-entered credentials
+        // would still be stuck "off" with no obvious way to flip it back on
+        // beyond clicking the toggle in the active-integrations card.
+        syncMenu: true,
+        syncStock: true,
+        syncOrders: true,
       },
     });
 

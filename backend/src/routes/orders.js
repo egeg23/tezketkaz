@@ -654,6 +654,36 @@ router.post('/', authMiddleware, async (req, res, next) => {
       logger.warn({ err: err.message, orderId: order.id }, 'cart draft cleanup failed');
     }
 
+    // Phase 14 wave 3 — fan out `order.created` to the shop's webhook + every
+    // connected POS adapter that has syncOrders=true. Fire-and-forget; the
+    // worker has its own retry policy and we don't block the buyer's checkout
+    // on a partner backend.
+    try {
+      // eslint-disable-next-line global-require
+      const { enqueueOrderEvent } = require('../jobs/integration');
+      // eslint-disable-next-line global-require
+      const { queues } = require('../lib/queues');
+      await enqueueOrderEvent(queues, {
+        shopId: order.shopId,
+        event: 'order.created',
+        payload: {
+          orderId: order.id,
+          shopId: order.shopId,
+          total: order.total,
+          items: order.items?.map((i) => ({
+            externalId: null, // resolved server-side when the integrator asks
+            productId: i.productId,
+            quantity: i.quantity,
+            price: i.price,
+          })),
+          deliveryAddress: order.deliveryAddress,
+          createdAt: order.createdAt,
+        },
+      });
+    } catch (err) {
+      logger.warn({ err: err.message, orderId: order.id }, 'enqueue order.created failed');
+    }
+
     res.status(201).json({ order: attachMoneyEnvelope(order) });
   } catch (err) { next(err); }
 });

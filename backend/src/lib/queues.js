@@ -68,6 +68,9 @@ function noopQueues() {
     backup: makeNoopQueue('backup'),
     // Phase 10.1 — daily sweep of expired open group orders.
     groupExpiry: makeNoopQueue('groupExpiry'),
+    // Phase 14 wave 3 — POS auto-sync + webhook delivery.
+    integrationSync: makeNoopQueue('integrationSync'),
+    integrationWebhook: makeNoopQueue('integrationWebhook'),
   };
 }
 
@@ -95,6 +98,9 @@ function queues() {
     backup: new Queue('backup', { connection }),
     // Phase 10.1 — daily sweep of expired open group orders.
     groupExpiry: new Queue('groupExpiry', { connection }),
+    // Phase 14 wave 3
+    integrationSync: new Queue('integrationSync', { connection }),
+    integrationWebhook: new Queue('integrationWebhook', { connection }),
   };
   return _queues;
 }
@@ -128,6 +134,12 @@ function startWorkers(handlers) {
   }
   if (handlers.groupExpiry) {
     _workers.push(new Worker('groupExpiry', handlers.groupExpiry, { connection, concurrency: 1 }));
+  }
+  if (handlers.integrationSync) {
+    _workers.push(new Worker('integrationSync', handlers.integrationSync, { connection, concurrency: 2 }));
+  }
+  if (handlers.integrationWebhook) {
+    _workers.push(new Worker('integrationWebhook', handlers.integrationWebhook, { connection, concurrency: 4 }));
   }
   for (const w of _workers) {
     w.on('failed', (job, err) => logger.error({ queue: w.name, jobId: job?.id, err }, 'worker job failed'));
