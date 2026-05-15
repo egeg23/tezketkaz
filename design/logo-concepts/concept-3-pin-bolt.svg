@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="g3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1A237E"/>
+      <stop offset="100%" stop-color="#3F51B5"/>
+    </linearGradient>
+    <linearGradient id="g3b" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFD600"/>
+      <stop offset="100%" stop-color="#FFA000"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="224" ry="224" fill="url(#g3)"/>
+  <!-- Map pin shape (teardrop) -->
+  <path d="M 512 192
+           C 350 192, 224 318, 224 480
+           C 224 624, 416 800, 512 880
+           C 608 800, 800 624, 800 480
+           C 800 318, 674 192, 512 192 Z"
+        fill="white"/>
+  <!-- Lightning bolt inside pin -->
+  <path d="M 560 320 L 432 528 L 528 528 L 464 720 L 592 480 L 496 480 Z"
+        fill="url(#g3b)"/>
+</svg>

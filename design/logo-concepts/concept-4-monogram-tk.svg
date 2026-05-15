@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="g4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F44336"/>
+      <stop offset="50%" stop-color="#FF5722"/>
+      <stop offset="100%" stop-color="#FF9800"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="224" ry="224" fill="url(#g4)"/>
+  <!-- Geometric monogram: T+K fused -->
+  <g fill="white">
+    <!-- T: horizontal bar -->
+    <rect x="200" y="304" width="384" height="96" rx="16"/>
+    <!-- T: vertical stem -->
+    <rect x="344" y="304" width="96" height="416" rx="16"/>
+    <!-- K: vertical stem -->
+    <rect x="560" y="304" width="96" height="416" rx="16"/>
+    <!-- K: upper diagonal (arrow-like) -->
+    <path d="M 656 512 L 824 304 L 824 432 L 720 512 Z"/>
+    <!-- K: lower diagonal -->
+    <path d="M 656 512 L 824 720 L 824 592 L 720 512 Z"/>
+  </g>
+  <!-- Speed dot (motion) -->
+  <circle cx="864" cy="800" r="40" fill="white" opacity="0.9"/>
+</svg>
