@@ -221,6 +221,59 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Telegram deep-link login (Phase 15).
+  //
+  // Calls /api/auth/telegram/begin, opens the returned t.me URL in a new
+  // tab/intent, then polls /poll until the bot reports the user clicked
+  // Start. On success ingests tokens like any other login flow.
+  //
+  // The caller passes a `launchUrl` callback because we don't want this
+  // provider to import url_launcher directly (keeps it test-friendly).
+  Future<bool> loginWithTelegram({
+    required Future<bool> Function(String url) launchUrl,
+  }) async {
+    _setLoading(true);
+    try {
+      final begin = await _api.post('/api/auth/telegram/begin');
+      final challengeId = begin.data['challengeId'] as String?;
+      final botUrl = begin.data['botUrl'] as String?;
+      if (challengeId == null || botUrl == null) {
+        _error = 'Telegram временно недоступен';
+        _setLoading(false);
+        return false;
+      }
+      await launchUrl(botUrl);
+
+      // Poll up to 5 minutes (150 × 2s).
+      for (var i = 0; i < 150; i++) {
+        await Future.delayed(const Duration(seconds: 2));
+        try {
+          final res = await _api.get('/api/auth/telegram/poll',
+              query: {'challengeId': challengeId});
+          if (res.data['ready'] == true) {
+            await _ingestAuthResponse(res.data, res.statusCode, method: 'telegram');
+            _setLoading(false);
+            return true;
+          }
+        } catch (_) {
+          // Network blip; keep polling.
+        }
+      }
+      _error = 'Тайм-аут авторизации. Попробуйте ещё раз.';
+      _setLoading(false);
+      return false;
+    } on ApiException catch (e) {
+      _error = e.message;
+      _setLoading(false);
+      return false;
+    } catch (e) {
+      _error = 'Telegram auth error';
+      _setLoading(false);
+      return false;
+    }
+  }
+
   /// Shared post-login bookkeeping for OTP and OAuth flows.
   ///
   /// Persists the token pair (or legacy single token), parses the user,

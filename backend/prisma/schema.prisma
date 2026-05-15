@@ -13,9 +13,17 @@ datasource db {
 
 model User {
   id              String   @id @default(uuid())
-  phone           String   @unique
+  // Phone becomes optional now that Telegram auth can sign someone up
+  // without a phone number. Still unique when set.
+  phone           String?  @unique
   name            String?
   avatarUrl       String?
+
+  // Telegram login linkage. `telegramId` is the numeric user id from the
+  // Telegram Login Widget / Bot API, stored as String for portability.
+  // `telegramUsername` is cached for display, may be null.
+  telegramId      String?  @unique
+  telegramUsername String?
 
   // Roles
   isBuyer         Boolean  @default(true)

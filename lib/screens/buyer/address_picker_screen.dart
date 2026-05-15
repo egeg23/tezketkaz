@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/map_tile_layer.dart';
 
 /// Tap-to-pick address screen — UberEats-style:
 ///   - flutter_map (OSM tiles) with a fixed center pin
@@ -108,11 +109,7 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
               ),
             ),
             children: [
-              TileLayer(
-                urlTemplate: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-                userAgentPackageName: 'uz.tezketkaz.app',
-                maxZoom: 19,
-              ),
+              tezketkazTiles(),
             ],
           ),
           // Center pin

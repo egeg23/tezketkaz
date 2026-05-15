@@ -172,6 +172,12 @@ global.__tkk_io = io;
 
 // ─── API Routes ─────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
+// Phase 15 — Telegram login (Widget + deep-link flows). Mounted after the OTP
+// routes so the rate-limit middleware above doesn't accidentally throttle
+// challenge polling.
+app.use('/api/auth/telegram', require('./routes/telegram-auth'));
+// Phase 15 — Yandex geocoder proxy
+app.use('/api/geocode', require('./routes/geocode'));
 app.use('/api/users', userRoutes);
 // Phase 14 — owner endpoints at /api/shops/me/integration/…, public B2B
 // API at /api/v1/…. Both share one router file.

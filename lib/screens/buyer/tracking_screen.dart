@@ -10,6 +10,7 @@ import '../../models/money.dart';
 import '../../providers/order_provider.dart';
 import '../../services/socket_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/map_tile_layer.dart';
 
 /// TRACKING — master.html .tracking (lines 6689-6843).
 ///
@@ -107,12 +108,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 ),
               ),
               children: [
-                TileLayer(
-                  urlTemplate:
-                      'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'uz.tezketkaz.app',
-                  maxZoom: 19,
-                ),
+                tezketkazTiles(),
                 MarkerLayer(
                   markers: [
                     const Marker(

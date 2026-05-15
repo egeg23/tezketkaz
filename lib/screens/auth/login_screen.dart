@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/models.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
@@ -27,6 +28,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
   bool _isSocialLoading = false;
+  // Hidden when the screen first opens — only "Войти через Telegram" shows.
+  // Tap "Войти по SMS" toggles the phone field below the divider. Helps
+  // partners and us during dev when Telegram bot isn't yet configured.
+  bool _showSmsFallback = false;
 
   String get _rawPhone =>
     '+998${_phoneMask.getUnmaskedText()}';
@@ -87,6 +92,37 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         _showError(auth.error ?? 'Ошибка');
       }
+    }
+  }
+
+  Future<void> _loginViaTelegram() async {
+    if (_isSocialLoading || _isLoading) return;
+    setState(() => _isSocialLoading = true);
+    final auth = context.read<AuthProvider>();
+    final ok = await auth.loginWithTelegram(
+      launchUrl: (url) async {
+        // Web: opens a new browser tab. Native: opens the Telegram app via
+        // its t.me URL scheme. `LaunchMode.externalApplication` honours both.
+        return await launchUrl(
+          Uri.parse(url),
+          mode: LaunchMode.externalApplication,
+        );
+      },
+    );
+    if (!mounted) return;
+    setState(() => _isSocialLoading = false);
+    if (ok) {
+      if (auth.user?.name == null) {
+        context.go('/auth/name');
+      } else {
+        switch (auth.user?.activeRole) {
+          case UserRole.courier: context.go('/courier'); break;
+          case UserRole.shop:    context.go('/shop'); break;
+          default:               context.go('/buyer');
+        }
+      }
+    } else if (auth.error != null) {
+      _showError(auth.error!);
     }
   }
 
@@ -162,7 +198,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   SizedBox(
                     width: 280,
                     child: Text(
-                      'Введите номер телефона и получите SMS-код. Одна минута — и можно заказывать.',
+                      'Вход через Telegram. Один тап — и можно заказывать. Никаких паролей.',
                       style: TextStyle(
                         fontSize: 15, color: AppColors.textSecondary, height: 1.5,
                       ),
@@ -170,7 +206,38 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  Text(
+                  // Primary CTA — Telegram
+                  _TelegramCta(
+                    loading: _isSocialLoading,
+                    onTap: _loginViaTelegram,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // "ещё" — collapse/expand SMS fallback. Keeps the UI clean
+                  // for the 99% who'll use Telegram; preserves the legacy
+                  // dev SMS for our own e2e testing and pre-launch demos.
+                  Center(
+                    child: TextButton(
+                      onPressed: () => setState(
+                          () => _showSmsFallback = !_showSmsFallback),
+                      child: Text(
+                        _showSmsFallback
+                            ? 'Скрыть вход по SMS'
+                            : 'Войти по SMS',
+                        style: TextStyle(
+                          color: AppColors.textHint,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (!_showSmsFallback) const SizedBox(height: 20),
+
+                  // ─── Hidden by default: legacy SMS fallback ─────────────
+                  if (_showSmsFallback) ...[
+                    const SizedBox(height: 4),
+                    Text(
                     'Номер телефона',
                     style: TextStyle(
                       fontSize: 12, fontWeight: FontWeight.w600,
@@ -272,7 +339,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           : Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Text('Продолжить'),
+                                const Text('Получить SMS-код'),
                                 const SizedBox(width: 8),
                                 Icon(Icons.arrow_forward_rounded,
                                     size: 18, color: AppColors.bg),
@@ -280,58 +347,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                     ),
                   ),
-
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      const Expanded(child: Divider(color: AppColors.border)),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text(
-                          'или',
-                          style: TextStyle(
-                            color: AppColors.textHint,
-                            fontSize: 12, fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      const Expanded(child: Divider(color: AppColors.border)),
-                    ],
+                  const SizedBox(height: 8),
+                  Text(
+                    'dev код: 123456',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11, color: AppColors.textHint,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                  const SizedBox(height: 16),
-
-                  Row(
-                    children: [
-                      Expanded(child: _SocialBtn(
-                        label: 'Telegram',
-                        icon: const Icon(Icons.send_rounded,
-                            size: 18, color: Color(0xFF229ED9)),
-                        loading: _isSocialLoading,
-                        onTap: () => _socialLogin(
-                          () => context.read<AuthProvider>().loginWithGoogle(),
-                        ),
-                      )),
-                      const SizedBox(width: 10),
-                      if (_showAppleButton)
-                        Expanded(child: _SocialBtn(
-                          label: 'Apple',
-                          icon: const Icon(Icons.apple, size: 20, color: Colors.white),
-                          loading: _isSocialLoading,
-                          onTap: () => _socialLogin(
-                            () => context.read<AuthProvider>().loginWithApple(),
-                          ),
-                        ))
-                      else
-                        Expanded(child: _SocialBtn(
-                          label: 'Google',
-                          icon: const _GoogleGlyph(),
-                          loading: _isSocialLoading,
-                          onTap: () => _socialLogin(
-                            () => context.read<AuthProvider>().loginWithGoogle(),
-                          ),
-                        )),
-                    ],
-                  ),
+                  ], // end SMS fallback
 
                   const SizedBox(height: 28),
                   Center(
@@ -436,77 +461,57 @@ class _GlassCircleBtn extends StatelessWidget {
   );
 }
 
-class _SocialBtn extends StatelessWidget {
-  final String label;
-  final Widget icon;
+// `_SocialBtn` + `_GoogleGlyph` removed in Phase 15: Telegram is now the
+// only social entry point; the SMS fallback uses the main lime CTA. If we
+// re-introduce Apple/Google in the future the widgets can be lifted from
+// git history.
+
+/// Primary "Войти через Telegram" CTA. Telegram-blue brand colour with the
+/// paper-plane icon. Spinner while the deep-link → poll round-trip runs.
+class _TelegramCta extends StatelessWidget {
   final bool loading;
   final VoidCallback onTap;
-  const _SocialBtn({
-    required this.label, required this.icon,
-    required this.loading, required this.onTap,
-  });
+  const _TelegramCta({required this.loading, required this.onTap});
   @override
-  Widget build(BuildContext context) => Material(
-    color: AppColors.surfaceMuted,
-    borderRadius: BorderRadius.circular(14),
-    child: InkWell(
-      onTap: loading ? null : onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        height: 52,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            loading
-                ? const SizedBox(
-                    width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : icon,
-            const SizedBox(width: 10),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14, fontWeight: FontWeight.w600,
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: loading ? null : onTap,
+        child: Container(
+          height: 56,
+          decoration: BoxDecoration(
+            color: const Color(0xFF229ED9),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF229ED9).withValues(alpha: 0.35),
+                blurRadius: 20,
+                offset: const Offset(0, 6),
               ),
-            ),
-          ],
+            ],
+          ),
+          alignment: Alignment.center,
+          child: loading
+              ? const SizedBox(
+                  width: 22, height: 22,
+                  child: CircularProgressIndicator(
+                    color: Colors.white, strokeWidth: 2.5,
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.send_rounded, size: 22, color: Colors.white),
+                    SizedBox(width: 10),
+                    Text(
+                      'Войти через Telegram',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
+                ),
         ),
-      ),
-    ),
-  );
-}
-
-/// A primary-style button used for the Apple / Google entry points on the
-/// login screen. Renders a leading icon, label, and a small spinner while
-/// the social flow is in progress.
-/// Tiny Google "G" glyph drawn with `Text` to avoid shipping an extra
-/// asset. Falls back to a generic icon if the system font can't render it.
-class _GoogleGlyph extends StatelessWidget {
-  const _GoogleGlyph();
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 22,
-      height: 22,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: AppColors.border),
-      ),
-      child: const Text(
-        'G',
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w900,
-          color: Color(0xFF4285F4),
-        ),
-      ),
-    );
-  }
+      );
 }
