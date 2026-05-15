@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/product_api.dart';
 import '../../theme/app_theme.dart';
@@ -24,7 +25,7 @@ class _ShopProductsImportState extends State<ShopProductsImport> {
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Yuklab olish: $url')));
+        SnackBar(content: Text('Скачайте: $url')));
     }
   }
 
@@ -39,7 +40,7 @@ class _ShopProductsImportState extends State<ShopProductsImport> {
     if (f.bytes == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Faylni o'qib bo'lmadi")));
+        const SnackBar(content: Text("Не удалось прочитать файл")));
       return;
     }
     setState(() {
@@ -69,12 +70,15 @@ class _ShopProductsImportState extends State<ShopProductsImport> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
-        title: const Text('Excel/CSV import'),
+        backgroundColor: AppColors.bg,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Импорт меню', style: TextStyle(color: Colors.white)),
         actions: [
           if (imported)
             TextButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Tayyor'),
+              child: Text('Готово',
+                  style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)),
             ),
         ],
       ),
@@ -84,13 +88,13 @@ class _ShopProductsImportState extends State<ShopProductsImport> {
           // Step 1: template
           _Card(
             step: '1',
-            title: "Shablonni yuklab oling",
+            title: 'Скачайте шаблон',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  "Sarlavhalar: name, nameUz, description, ingredients, "
-                  "price, discountPrice, unit, category, imageUrl, stock",
+                Text(
+                  'Колонки: name, nameUz, description, ingredients, '
+                  'price, discountPrice, unit, category, imageUrl, stock',
                   style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 12),
@@ -121,7 +125,7 @@ class _ShopProductsImportState extends State<ShopProductsImport> {
           // Step 2: import
           _Card(
             step: '2',
-            title: "Faylni yuklang",
+            title: 'Загрузите файл',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -129,14 +133,19 @@ class _ShopProductsImportState extends State<ShopProductsImport> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.bg,
+                      color: AppColors.surfaceMuted,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.insert_drive_file_outlined, size: 18),
+                        Icon(Icons.insert_drive_file_outlined,
+                            size: 18, color: AppColors.textSecondary),
                         const SizedBox(width: 8),
-                        Expanded(child: Text(_filename!, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        Expanded(
+                            child: Text(_filename!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.white))),
                       ],
                     ),
                   ),
@@ -148,21 +157,54 @@ class _ShopProductsImportState extends State<ShopProductsImport> {
                       child: OutlinedButton.icon(
                         onPressed: _busy ? null : () => _pickAndImport(dryRun: true),
                         icon: const Icon(Icons.preview_outlined, size: 18),
-                        label: const Text('Tekshirish'),
+                        label: const Text('Проверить'),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: _busy ? null : () => _pickAndImport(dryRun: false),
-                        style: ElevatedButton.styleFrom(backgroundColor: kShopColor),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: AppColors.bg,
+                        ),
                         icon: _busy
                             ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                             : const Icon(Icons.cloud_upload_outlined, size: 18),
-                        label: const Text('Yuklash', style: TextStyle(color: Colors.white)),
+                        label: const Text('Загрузить',
+                            style: TextStyle(fontWeight: FontWeight.w700)),
                       ),
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Step 3 — pointer to API/integration screen
+          _Card(
+            step: '3',
+            title: 'Или подключите по API',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Если у вас POS-система или 1С — настройте автосинхронизацию '
+                  'меню. Цены и остатки будут лететь к нам по REST API, изменения '
+                  'из админки — обратно вам через webhook.',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: () => context.push('/shop/integration'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.surfaceMuted,
+                    foregroundColor: AppColors.primary,
+                    side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
+                  ),
+                  icon: const Icon(Icons.cloud_sync_outlined, size: 18),
+                  label: const Text('Открыть API и интеграции'),
                 ),
               ],
             ),
@@ -174,13 +216,14 @@ class _ShopProductsImportState extends State<ShopProductsImport> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFEBEE),
+                color: AppColors.error.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.error.withValues(alpha: 0.30)),
               ),
               child: Row(children: [
-                const Icon(Icons.error_outline, color: AppColors.error),
+                Icon(Icons.error_outline, color: AppColors.error),
                 const SizedBox(width: 8),
-                Expanded(child: Text(_error!, style: const TextStyle(color: AppColors.error))),
+                Expanded(child: Text(_error!, style: TextStyle(color: AppColors.error))),
               ]),
             )
           else if (_result != null) ...[
@@ -189,20 +232,22 @@ class _ShopProductsImportState extends State<ShopProductsImport> {
               const SizedBox(height: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: AppColors.surfaceMuted,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Column(
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.all(12),
+                    Padding(
+                      padding: const EdgeInsets.all(12),
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: Text('Xatoliklar', style: TextStyle(fontWeight: FontWeight.w700)),
+                        child: Text('Ошибки',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, color: Colors.white)),
                       ),
                     ),
-                    const Divider(height: 1),
+                    Divider(height: 1, color: AppColors.border),
                     ..._result!.errors.map((e) => ListTile(
                       dense: true,
                       leading: Container(
@@ -211,9 +256,11 @@ class _ShopProductsImportState extends State<ShopProductsImport> {
                           color: AppColors.bg,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Text('${e.row}', style: const TextStyle(fontSize: 12)),
+                        child: Text('${e.row}',
+                            style: const TextStyle(fontSize: 12, color: Colors.white)),
                       ),
-                      title: Text(e.error, style: const TextStyle(fontSize: 13)),
+                      title: Text(e.error,
+                          style: const TextStyle(fontSize: 13, color: Colors.white)),
                     )),
                   ],
                 ),
@@ -237,7 +284,7 @@ class _Card extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AppColors.surfaceMuted,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
       ),
@@ -248,14 +295,18 @@ class _Card extends StatelessWidget {
             Container(
               width: 24, height: 24,
               alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                color: kShopColor,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
                 shape: BoxShape.circle,
               ),
-              child: Text(step, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+              child: Text(step,
+                  style: TextStyle(
+                      color: AppColors.bg, fontWeight: FontWeight.w800, fontSize: 13)),
             ),
             const SizedBox(width: 8),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            Text(title,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w700, fontSize: 16, color: Colors.white)),
           ]),
           const SizedBox(height: 12),
           child,
@@ -290,13 +341,13 @@ class _ResultBanner extends StatelessWidget {
               children: [
                 Text(
                   result.created > 0
-                      ? '${result.created} ta mahsulot qo\'shildi'
-                      : 'Hech nima qo\'shilmadi',
+                      ? '${result.created} товаров добавлено'
+                      : 'Ничего не добавлено',
                   style: TextStyle(fontWeight: FontWeight.w700, color: color),
                 ),
                 Text(
-                  '${result.total} qator, ${result.errors.length} xato',
-                  style: const TextStyle(fontSize: 12),
+                  '${result.total} строк · ${result.errors.length} ошибок',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
               ],
             ),

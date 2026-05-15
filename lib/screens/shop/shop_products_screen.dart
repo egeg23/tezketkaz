@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/product_api.dart';
@@ -28,7 +29,7 @@ class _ShopProductsScreenState extends State<ShopProductsScreen> {
   Future<void> _load() async {
     final shopId = context.read<AuthProvider>().user?.shopId;
     if (shopId == null) {
-      setState(() { _loading = false; _error = "Do'kon ulanmagan"; });
+      setState(() { _loading = false; _error = "Магазин не подключён — выберите его через Сменить роль"; });
       return;
     }
     try {
@@ -63,14 +64,18 @@ class _ShopProductsScreenState extends State<ShopProductsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('"${p.name}" o\'chirilsinmi?'),
-        content: const Text('Mahsulot katalogdan yashiriladi.'),
+        backgroundColor: AppColors.surface,
+        title: Text('Удалить «${p.name}»?',
+            style: const TextStyle(color: Colors.white)),
+        content: Text('Товар будет скрыт из каталога.',
+            style: TextStyle(color: AppColors.textSecondary)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Bekor')),
+          TextButton(onPressed: () => Navigator.pop(context, false),
+              child: const Text('Отмена')),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text("O'chirish"),
+            child: const Text("Удалить"),
           ),
         ],
       ),
@@ -80,7 +85,7 @@ class _ShopProductsScreenState extends State<ShopProductsScreen> {
       await ProductApi.instance.delete(p.id);
       _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Xatolik: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
     }
   }
 
@@ -95,25 +100,33 @@ class _ShopProductsScreenState extends State<ShopProductsScreen> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
-        title: const Text('Mahsulotlar'),
+        backgroundColor: AppColors.bg,
+        title: const Text('Меню', style: TextStyle(color: Colors.white)),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-            icon: const Icon(Icons.upload_file),
-            tooltip: 'Excel/CSV import',
+            icon: Icon(Icons.cloud_sync_outlined, color: AppColors.primary),
+            tooltip: 'API и интеграции',
+            onPressed: () => context.push('/shop/integration'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.upload_file_rounded),
+            tooltip: 'Импорт Excel/CSV',
             onPressed: _openImport,
           ),
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: _load,
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: kShopColor,
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.bg,
         onPressed: () => _openEditor(),
-        icon: const Icon(Icons.add),
-        label: const Text('Yangi mahsulot'),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Новый товар',
+            style: TextStyle(fontWeight: FontWeight.w700)),
       ),
       body: Column(
         children: [
@@ -121,15 +134,26 @@ class _ShopProductsScreenState extends State<ShopProductsScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: TextField(
+              style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search, size: 20),
-                hintText: "Qidirish...",
+                prefixIcon: Icon(Icons.search_rounded,
+                    size: 20, color: AppColors.textSecondary),
+                hintText: "Поиск по товарам…",
+                hintStyle: TextStyle(color: AppColors.textHint),
                 isDense: true,
                 filled: true,
-                fillColor: AppColors.surface,
+                fillColor: AppColors.surfaceMuted,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+                  borderSide: BorderSide(color: AppColors.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: AppColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: AppColors.primary, width: 1.5),
                 ),
               ),
               onChanged: (v) => setState(() => _filter = v),
@@ -141,7 +165,9 @@ class _ShopProductsScreenState extends State<ShopProductsScreen> {
           else if (_error != null)
             Expanded(child: Center(child: Padding(
               padding: const EdgeInsets.all(24),
-              child: Text('Xatolik: $_error', textAlign: TextAlign.center),
+              child: Text(_error!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.textSecondary)),
             )))
           else if (filtered.isEmpty)
             Expanded(child: Center(child: Column(
@@ -150,13 +176,15 @@ class _ShopProductsScreenState extends State<ShopProductsScreen> {
                 const Text('📦', style: TextStyle(fontSize: 64)),
                 const SizedBox(height: 12),
                 Text(
-                  _filter.isEmpty ? 'Mahsulotlar yo\'q' : 'Topilmadi',
-                  style: Theme.of(context).textTheme.headlineMedium,
+                  _filter.isEmpty ? 'Товаров пока нет' : 'Не найдено',
+                  style: const TextStyle(color: Colors.white,
+                      fontSize: 18, fontWeight: FontWeight.w600),
                 ),
                 if (_filter.isEmpty) ...[
                   const SizedBox(height: 8),
-                  const Text(
-                    'Yangi qo\'shing yoki Excel orqali yuklang',
+                  Text(
+                    'Добавьте товар вручную, загрузите Excel или\nподключите интеграцию по API',
+                    textAlign: TextAlign.center,
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
                 ],

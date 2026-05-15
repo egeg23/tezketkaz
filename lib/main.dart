@@ -55,6 +55,7 @@ import 'screens/courier/performance_screen.dart';
 import 'screens/courier/courier_profile_screen.dart';
 import 'screens/shop/shop_shell.dart';
 import 'screens/shop/shop_orders_screen.dart';
+import 'screens/shop/shop_integration_screen.dart';
 import 'screens/shop/shop_other_screens.dart';
 import 'screens/shop/shop_products_screen.dart';
 import 'screens/shop/shop_settings_screen.dart';
@@ -385,6 +386,7 @@ class _TezKetKazAppState extends State<TezKetKazApp> {
           GoRoute(path: '/shop/history', builder: (_, __) => const ShopHistoryScreen()),
           GoRoute(path: '/shop/profile', builder: (_, __) => const ShopProfileScreen()),
           GoRoute(path: '/shop/settings', builder: (_, __) => const ShopSettingsScreen()),
+          GoRoute(path: '/shop/integration', builder: (_, __) => const ShopIntegrationScreen()),
         ],
       ),
     ],

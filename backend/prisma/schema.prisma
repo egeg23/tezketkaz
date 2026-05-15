@@ -252,17 +252,55 @@ model Shop {
   // launch. KZT/KGS activated in Phase 7 when expanding to KZ/KG.
   currency    String   @default("UZS")
 
+  // ──────────────────────────────────────────────────────────────────────
+  // Phase 14 — B2B integrations. A shop generates an API key + webhook on
+  // first opening the Integrations screen; we never auto-create credentials
+  // here in case the shop never plans to integrate. `apiKeyHash` stores a
+  // SHA-256 of the plaintext key so the DB row never contains the secret.
+  // `apiKeyPrefix` is the first 8 chars (visible) used as a UI display + a
+  // lookup index since we can't index a derived hash cheaply on SQLite.
+  apiKeyHash      String?
+  apiKeyPrefix    String?  // "tz_live_" + 4 random chars, visible to user
+  apiKeyCreatedAt DateTime?
+  webhookUrl      String?
+  webhookSecret   String?  // HMAC signing key (returned once, kept hashed)
+  webhookEvents   String?  // CSV of subscribed events, "*" = all
+  lastSyncAt      DateTime? // last successful product sync via API
+
   members     ShopMember[]
   products    Product[]
   orders      Order[]
   zones       DeliveryZone[]
   workingHours ShopWorkingHours[]
+  syncEvents  ShopSyncEvent[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([vertical])
   @@index([isActive])
+  @@index([apiKeyPrefix])
+}
+
+// Phase 14 — append-only audit of every API/webhook attempt for a shop.
+// Surfaced in Flutter so the integrator can debug their POS sync without
+// asking us. Capped at 200 rows per shop (oldest pruned by cron).
+model ShopSyncEvent {
+  id        String   @id @default(uuid())
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId    String
+
+  // "products.upsert" | "products.delete" | "webhook.delivered" |
+  // "webhook.failed" | "credentials.rotated"
+  kind      String
+
+  // 2xx status counted as success; 4xx/5xx + transport errors as failure.
+  ok        Boolean
+  message   String?  // short human label ("upserted 42 items", "401 unauthorized")
+  meta      String?  // JSON blob with counts, endpoint, status code, etc.
+  createdAt DateTime @default(now())
+
+  @@index([shopId, createdAt])
 }
 
 // Phase 6 — working hours per day-of-week. One row per (shop, dayOfWeek).
@@ -460,6 +498,11 @@ model Product {
   isAvailable   Boolean  @default(true)
   stock         Int      @default(100)
 
+  // Phase 14 — external POS / inventory id (iiko, R-Keeper, 1C, Poster, etc.).
+  // When set, the upsert-by-externalId endpoint can refresh price/stock/avail
+  // without the integrator tracking our internal uuid. Unique per shop.
+  externalId    String?
+
   // Quick lowercased copy of name+nameUz+description for LIKE-search on SQLite
   // (and a tsvector-backed column on Postgres later).
   searchText    String?
@@ -470,6 +513,7 @@ model Product {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  @@unique([shopId, externalId])
   @@index([shopId])
   @@index([category])
   @@index([categoryId])

@@ -17,6 +17,8 @@ const redisLib = require('./lib/redis');
 const authRoutes = require('./routes/auth');
 const shopRoutes = require('./routes/shops');
 const productRoutes = require('./routes/products');
+// Phase 14 — B2B integrations (POS sync, webhooks, API keys).
+const integrationRoutes = require('./routes/integration');
 // Phase 11 — multi-shop cart drafts (buyer-side).
 const cartDraftRoutes = require('./routes/cart-drafts');
 const categoryRoutes = require('./routes/categories');
@@ -171,6 +173,10 @@ global.__tkk_io = io;
 // ─── API Routes ─────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+// Phase 14 — owner endpoints at /api/shops/me/integration/…, public B2B
+// API at /api/v1/…. Both share one router file.
+app.use('/api/shops', integrationRoutes);
+app.use('/api', integrationRoutes);
 // Phase 9.1/9.2 — GDPR data export + account deletion. Mounted at /api/users
 // so all endpoints are scoped under /api/users/me/*.
 app.use('/api/users', gdprRoutes);

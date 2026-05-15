@@ -6,14 +6,19 @@ import '../../theme/app_theme.dart';
 import 'shop_shell.dart' show kShopColor;
 
 const _categories = [
-  {'id': 'produce', 'label': 'Sabzavot/meva'},
-  {'id': 'meat', 'label': "Go'sht"},
-  {'id': 'dairy', 'label': 'Sut mahsulotlari'},
-  {'id': 'bakery', 'label': 'Non/non-mahsulot'},
-  {'id': 'drinks', 'label': 'Ichimliklar'},
-  {'id': 'grocery', 'label': 'Bakaleya'},
+  {'id': 'produce', 'label': 'Овощи и фрукты'},
+  {'id': 'meat', 'label': 'Мясо и птица'},
+  {'id': 'dairy', 'label': 'Молочные продукты'},
+  {'id': 'bakery', 'label': 'Хлеб и выпечка'},
+  {'id': 'drinks', 'label': 'Напитки'},
+  {'id': 'grocery', 'label': 'Бакалея'},
+  {'id': 'sushi', 'label': 'Суши'},
+  {'id': 'pizza', 'label': 'Пицца'},
+  {'id': 'burger', 'label': 'Бургеры'},
+  {'id': 'uzbek', 'label': 'Узбекская кухня'},
+  {'id': 'vegan', 'label': 'Веганское'},
 ];
-const _units = ['кг', 'шт', 'л', 'пачка'];
+const _units = ['кг', 'шт', 'л', 'пачка', 'порция'];
 
 class ShopProductEditor extends StatefulWidget {
   final String shopId;
@@ -86,7 +91,7 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _uploading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Yuklashda xatolik: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка загрузки: $e')));
     }
   }
 
@@ -94,7 +99,7 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
     if (!_formKey.currentState!.validate()) return;
     if (_imageUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Rasm kerak')));
+        const SnackBar(content: Text('Добавьте фото товара')));
       return;
     }
     setState(() => _saving = true);
@@ -132,7 +137,7 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Xatolik: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
       }
     }
   }
@@ -142,12 +147,17 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
-        title: Text(_isEdit ? 'Tahrirlash' : 'Yangi mahsulot'),
+        backgroundColor: AppColors.bg,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text(_isEdit ? 'Редактирование' : 'Новый товар',
+            style: const TextStyle(color: Colors.white)),
         actions: [
           if (!_saving)
             TextButton(
               onPressed: _save,
-              child: const Text('Saqlash', style: TextStyle(fontWeight: FontWeight.w700)),
+              child: Text('Сохранить',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700, color: AppColors.primary)),
             )
           else
             const Padding(
@@ -180,7 +190,7 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
                               children: [
                                 Icon(Icons.add_a_photo_outlined, size: 40, color: AppColors.textHint),
                                 SizedBox(height: 8),
-                                Text('Rasm qo\'shish', style: TextStyle(color: AppColors.textHint)),
+                                Text('Добавить фото', style: TextStyle(color: AppColors.textHint)),
                               ],
                             ),
                           )
@@ -192,22 +202,22 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              "Rasmni o'zgartirish uchun bosing",
+            Text(
+              "Нажмите, чтобы изменить фото",
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: AppColors.textHint),
             ),
             const SizedBox(height: 16),
 
-            _field(_name, 'Nomi (RU/EN)', validator: _required),
+            _field(_name, 'Название (рус./англ.)', validator: _required),
             const SizedBox(height: 12),
-            _field(_nameUz, "Nomi (O'zbek)", validator: _required),
+            _field(_nameUz, 'Название на узбекском', validator: _required),
             const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(child: _field(_price, 'Narx (so\'m)', kb: TextInputType.number, validator: _requiredNumber)),
+                Expanded(child: _field(_price, 'Цена, сум', kb: TextInputType.number, validator: _requiredNumber)),
                 const SizedBox(width: 10),
-                Expanded(child: _field(_discountPrice, 'Chegirma narx', kb: TextInputType.number)),
+                Expanded(child: _field(_discountPrice, 'Цена со скидкой', kb: TextInputType.number)),
               ],
             ),
             const SizedBox(height: 12),
@@ -216,42 +226,46 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: _unit,
-                    decoration: _decoration('Birlik'),
+                    decoration: _decoration('Единица'),
+                    dropdownColor: AppColors.surface,
+                    style: const TextStyle(color: Colors.white),
                     items: _units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
                     onChanged: (v) => setState(() => _unit = v ?? 'кг'),
                   ),
                 ),
                 const SizedBox(width: 10),
-                Expanded(child: _field(_stock, 'Zaxira', kb: TextInputType.number)),
+                Expanded(child: _field(_stock, 'Остаток', kb: TextInputType.number)),
               ],
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _category,
-              decoration: _decoration('Kategoriya'),
+              decoration: _decoration('Категория'),
+              dropdownColor: AppColors.surface,
+              style: const TextStyle(color: Colors.white),
               items: _categories
                   .map((c) => DropdownMenuItem(value: c['id'], child: Text(c['label']!)))
                   .toList(),
               onChanged: (v) => setState(() => _category = v ?? 'produce'),
             ),
             const SizedBox(height: 12),
-            _field(_description, 'Tavsif', maxLines: 3),
+            _field(_description, 'Описание', maxLines: 3),
             const SizedBox(height: 12),
-            _field(_ingredients, 'Tarkibi / sostav', maxLines: 2),
+            _field(_ingredients, 'Состав / ингредиенты', maxLines: 2),
             const SizedBox(height: 16),
             SwitchListTile(
-              tileColor: AppColors.surface,
+              tileColor: AppColors.surfaceMuted,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: AppColors.border),
+                side: BorderSide(color: AppColors.border),
               ),
-              title: const Text('Sotuvda'),
+              title: const Text('В продаже', style: TextStyle(color: Colors.white)),
               subtitle: Text(
-                _isAvailable ? 'Mahsulot katalogda ko\'rinadi' : 'Yashirilgan',
-                style: const TextStyle(fontSize: 12),
+                _isAvailable ? 'Виден в каталоге покупателю' : 'Скрыт из каталога',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
               value: _isAvailable,
-              activeThumbColor: kShopColor,
+              activeThumbColor: AppColors.primary,
               onChanged: (v) => setState(() => _isAvailable = v),
             ),
             const SizedBox(height: 32),
@@ -272,6 +286,7 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
       controller: c,
       keyboardType: kb,
       maxLines: maxLines,
+      style: const TextStyle(color: Colors.white),
       decoration: _decoration(label),
       validator: validator,
     );
@@ -279,27 +294,28 @@ class _ShopProductEditorState extends State<ShopProductEditor> {
 
   InputDecoration _decoration(String label) => InputDecoration(
         labelText: label,
+        labelStyle: TextStyle(color: AppColors.textSecondary),
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: AppColors.surfaceMuted,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: kShopColor, width: 2),
+          borderSide: BorderSide(color: AppColors.primary, width: 1.5),
         ),
       );
 
-  String? _required(String? v) => (v == null || v.trim().isEmpty) ? 'Majburiy' : null;
+  String? _required(String? v) => (v == null || v.trim().isEmpty) ? 'Обязательное поле' : null;
   String? _requiredNumber(String? v) {
-    if (v == null || v.trim().isEmpty) return 'Majburiy';
+    if (v == null || v.trim().isEmpty) return 'Обязательное поле';
     final n = double.tryParse(v);
-    if (n == null || n < 0) return 'Raqam';
+    if (n == null || n < 0) return 'Введите число';
     return null;
   }
 }

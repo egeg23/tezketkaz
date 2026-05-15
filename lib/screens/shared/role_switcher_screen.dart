@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../models/models.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/catalog_api.dart';
 import '../../theme/app_theme.dart';
 
 /// ROLE SWITCHER — master.html .role-sw (lines 9298-9398).
@@ -346,10 +347,29 @@ class RoleSwitcherScreen extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  auth.connectShop('shop_korzinka');
+                onPressed: () async {
+                  // Pick the first available shop from the backend instead of
+                  // hard-coding a slug that doesn't exist in the DB. In a real
+                  // launch this becomes an "enter your invite code" or shop
+                  // picker — for demo it's just the first seed shop.
+                  final shops = await CatalogApi.instance.nearbyShops(limit: 1);
+                  final shopId = shops.isNotEmpty ? shops.first.id : null;
+                  if (shopId == null) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('Не нашли активный магазин для подключения')));
+                    }
+                    return;
+                  }
+                  final ok = await auth.connectShop(shopId);
+                  if (!ctx.mounted) return;
                   Navigator.pop(ctx);
-                  ctx.go('/shop');
+                  if (ok) {
+                    ctx.go('/shop');
+                  } else {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('Не удалось подключить магазин')));
+                  }
                 },
                 child: const Text('Подключить'),
               ),
